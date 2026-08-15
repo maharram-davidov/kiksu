@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#E7E5DF;color:#141C24;font-family:-apple-system,'SF Pro Text','Segoe UI',Roboto,'Noto Sans','Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  a{color:#0F7A85;text-decoration:none}
+  a:hover{color:#0B5C64}
+  ::-webkit-scrollbar{height:12px}
+  ::-webkit-scrollbar-thumb{background:#C7C4BB;border-radius:6px;border:3px solid #E7E5DF}
+</style>
+</helmet>
+
+<div style="min-height:100vh;padding:28px 0 40px">
+
+  <div style="padding:0 32px 22px;display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+      <span style="font-size:26px;font-weight:700;letter-spacing:-0.02em">Kiksu</span>
+      <span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono','Roboto Mono',Menlo,monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#6D7580">Mobil UI · 10 ekran · 390×844 · AZ</span>
+    </div>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;font-family:ui-monospace,'SF Mono','Segoe UI Mono','Roboto Mono',Menlo,monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#6D7580">
+      <span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;background:#0F7A85"></span>Şirvan turkuazı</span>
+      <span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;background:#C8952A"></span>Tunc / kart səviyyəsi</span>
+      <span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;background:#B23A2F"></span>Nar / son tarix</span>
+      <span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;background:#141C24"></span>Xəzər mürəkkəbi</span>
+      <span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;background:#F1F0EC;border:1px solid #DEDCD5"></span>Bakı əhəngdaşı</span>
+    </div>
+  </div>
+
+  <div style="overflow-x:auto;overflow-y:hidden;padding:6px 32px 24px">
+   <div style="display:flex;align-items:flex-start;gap:28px;width:max-content">
+
+    <!-- ============ 1. ONBOARDING ============ -->
+    <div style="display:flex;flex-direction:column;gap:10px;flex:0 0 auto">
+      <sc-if value="{{ showLabels }}" hint-placeholder-val="{{ true }}"><div style="display:flex;align-items:baseline;gap:8px;font-family:ui-monospace,'SF Mono','Segoe UI Mono','Roboto Mono',Menlo,monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#6D7580"><span style="color:#0F7A85">01</span><span>Qeydiyyat və doğrulama</span></div></sc-if>
+      <div style="width:390px;height:844px;background:#F1F0EC;border-radius:42px;border:1px solid #D6D3CA;box-shadow:0 20px 44px -22px rgba(20,28,36,.4);overflow:hidden;position:relative;display:flex;flex-direction:column">
+        <div style="height:46px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;font-family:ui-monospace,'SF Mono','Segoe UI Mono','Roboto Mono',Menlo,monospace;font-size:12px;font-weight:600">
+          <span>9:41</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border:1px solid #141C24;border-radius:2px;display:block"></span><span style="letter-spacing:.06em">5G</span></span>
+        </div>
+        <div style="flex:1;overflow:hidden;padding:14px 24px 0;display:flex;flex-direction:column">
+          <div style="font-size:25px;font-weight:700;letter-spacing:-0.025em;line-height:1.1">Universitetini seç</div>
+          
+
+          <div style="margin-top:12px;background:#FFFFFF;border:1px solid #DEDCD5;border-radius:12px;padding:11px 14px;display:flex;align-items:center;gap:10px">
+            <span style="width:13px;height:13px;border:1.5px solid #6D7580;border-radius:50%;display:block"></span>
+            <span style="font-size:14px;color:#8A9099">Universitet axtar…</span>
+          </div>
+
+          <div style="margin-top:10px;flex:0 0 auto;background:#FFFFFF;border:1px solid #DEDCD5;border-radius:14px;overflow:hidden">
+            <div style="padding:13px 14px;display:flex;align-items:center;gap:12px;background:#F0F7F7;border-left:3px solid #0F7A85">
+              <span style="width:34px;height:34px;border-radius:9px;background:#0F7A85;color:#FFF;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:11px;font-weight:700">BDU</span>
+              <span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:600">Bakı Dövlət Universiteti</span><span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;color:#6D7580">BAKI&nbsp;</span></span>
+              <span style="width:18px;height:18px;border-radius:50%;background:#0F7A85;color:#FFF;font-size:11px;display:flex;align-items:center;justify-content:center">✓</span>
+            </div>
+            <div style="padding:11px 17px;display:flex;align-items:center;gap:12px;border-top:1px solid #EDEBE4">
+              <span style="width:34px;height:34px;border-radius:9px;background:#EFEDE6;color:#4A525C;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;font-weight:700">ADA</span>
+              <span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:600">ADA Universiteti</span><span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;color:#6D7580">BAKI&nbsp;</span></span>
+            </div>
+            <div style="padding:11px 17px;display:flex;align-items:center;gap:12px;border-top:1px solid #EDEBE4">
+              <span style="width:34px;height:34px;border-radius:9px;background:#EFEDE6;color:#4A525C;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:9px;font-weight:700">UNEC</span>
+              <span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:600">Azərbaycan Dövlət İqtisad Universiteti</span><span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;color:#6D7580">BAKI&nbsp;</span></span>
+            </div>
+            <div style="padding:11px 17px;display:flex;align-items:center;gap:12px;border-top:1px solid #EDEBE4">
+              <span style="width:34px;height:34px;border-radius:9px;background:#EFEDE6;color:#4A525C;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;font-weight:700">BMU</span>
+              <span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:600">Bakı Mühəndislik Universiteti</span><span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;color:#6D7580">XIRDALAN&nbsp;</span></span>
+            </div>
+          </div>
+
+          <div style="margin-top:14px;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6D7580">Doğrulama üsulu</div>
+          <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
+            <div style="background:#FFFFFF;border:1.5px solid #0F7A85;border-radius:12px;padding:13px 14px;display:flex;align-items:center;gap:12px">
+              <span style="width:26px;height:26px;border-radius:7px;background:#0F7A85;display:flex;align-items:center;justify-content:center;color:#FFF;font-size:13px">✓</span>
+              <span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;font-weight:600">Universitet e-poçtu</span><span style="font-size:12px;color:#5C6470">ad.soyad@std.bsu.edu.az — 2 dəqiqə</span></span>
+              <span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:9px;letter-spacing:.1em;color:#0F7A85;border:1px solid #9ECBCF;border-radius:4px;padding:3px 5px">TÖVSİYƏ</span>
+            </div>
+            <div style="background:#FFFFFF;border:1px solid #DEDCD5;border-radius:12px;padding:13px 14px;display:flex;align-items:center;gap:12px">
+              <span style="width:26px;height:26px;border-radius:7px;background:#FAF3E4;border:1px solid #E4D3AC;display:block"></span>
+              <span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;font-weight:600">Tələbə kartı şəkli</span><span style="font-size:12px;color:#5C6470">Əl ilə yoxlama — 24 saata qədər</span></span>
+            </div>
+            <div style="background:#FFFFFF;border:1px solid #DEDCD5;border-radius:12px;padding:13px 14px;display:flex;align-items:center;gap:12px">
+              <span style="width:26px;height:26px;border-radius:7px;background:#EFEDE6;border:1px solid #DEDCD5;display:block"></span>
+              <span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;font-weight:600">Dəvət kodu</span><span style="font-size:12px;color:#5C6470">Kursdaşından 6 rəqəmli kod</span></span>
+            </div>
+          </div>
+        </div>
+        <div style="padding:14px 24px 26px;background:#F1F0EC;border-top:1px solid #E4E1D9;display:flex;flex-direction:column;gap:10px">
+          <div style="background:#141C24;color:#FFFFFF;border-radius:12px;height:52px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600">Davam et</div>
+          <div style="font-size:11px;line-height:1.5;color:#6D7580;text-align:center">Real adın heç vaxt forumda görünmür. Doğrulama yalnız tələbə statusunu təsdiqləyir.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 2. TODAY ============ -->
+    <div style="display:flex;flex-direction:column;gap:10px;flex:0 0 auto">
+      <sc-if value="{{ showLabels }}" hint-placeholder-val="{{ true }}"><div style="display:flex;align-items:baseline;gap:8px;font-family:ui-monospace,'SF Mono','Segoe UI Mono','Roboto Mono',Menlo,monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#6D7580"><span style="color:#0F7A85">02</span><span>Bu gün · əsas ekran</span></div></sc-if>
+      <div style="width:390px;height:844px;background:#F1F0EC;border-radius:42px;border:1px solid #D6D3CA;box-shadow:0 20px 44px -22px rgba(20,28,36,.4);overflow:hidden;position:relative;display:flex;flex-direction:column">
+        <div style="height:46px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:12px;font-weight:600"><span>13:20</span><span>5G</span></div>
+        <div style="padding:6px 20px 12px;display:flex;align-items:flex-end;justify-content:space-between">
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6D7580">22 OKTYABR · ÇƏRŞƏNBƏ AXŞAMI</span>
+            <span style="font-size:27px;font-weight:700;letter-spacing:-0.025em">Bu gün</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;color:#0F7A85;border:1px solid #9ECBCF;border-radius:5px;padding:4px 6px;background:#F0F7F7">AZ</span>
+            <span style="width:32px;height:32px;border-radius:50%;background:#141C24;color:#FFF;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:11px;display:flex;align-items:center;justify-content:center">37</span>
+          </div>
+        </div>
+        <div style="flex:1;overflow:hidden;padding:0 20px;display:flex;flex-direction:column;gap:11px">
+
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between">
+              <span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6D7580">Qalan dərslər · 2</span>
+              <span style="font-size:12px;color:#0F7A85;font-weight:600">Cədvəl</span>
+            </div>
+            <div style="background:#FFFFFF;border:1px solid #DEDCD5;border-radius:14px;overflow:hidden">
+              <div style="padding:12px 14px;display:flex;gap:12px;align-items:flex-start">
+                <div style="width:4px;align-self:stretch;border-radius:2px;background:#0F7A85"></div>
+                <div style="flex:1;display:flex;flex-direction:column;gap:5px">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span style="font-size:16px;font-weight:600">Verilənlər bazası sistemləri</span>
+                  </div>
+                  <span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:11px;letter-spacing:.05em;color:#5C6470">14:05–15:25 · II KORPUS 312 · DOS. N. ƏLİYEVA</span>
+                  <sc-if value="{{ showCurrentTime }}" hint-placeholder-val="{{ true }}"><span style="align-self:flex-start;margin-top:2px;background:#0F7A85;color:#FFF;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;padding:4px 7px;border-radius:5px">45 DƏQ SONRA</span></sc-if>
+                </div>
+              </div>
+              <div style="padding:12px 14px;display:flex;gap:12px;align-items:flex-start;border-top:1px solid #EDEBE4">
+                <div style="width:4px;align-self:stretch;border-radius:2px;background:#C8952A"></div>
+                <div style="flex:1;display:flex;flex-direction:column;gap:5px">
+                  <span style="font-size:16px;font-weight:600">Diskret riyaziyyat</span>
+                  <span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:11px;letter-spacing:.05em;color:#5C6470">15:40–17:00 · BAŞ KORPUS 205 · PROF. E. MƏMMƏDOV</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6D7580">Yaxın son tarixlər</span>
+            <div style="display:flex;gap:10px">
+              <div style="flex:1;background:#FFFFFF;border:1px solid #DEDCD5;border-top:3px solid #B23A2F;border-radius:12px;padding:11px 12px;display:flex;flex-direction:column;gap:4px">
+                <span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;color:#B23A2F;font-weight:700">SABAH 23:59</span>
+                <span style="font-size:13px;font-weight:600;line-height:1.3">SQL laboratoriya #4</span>
+                <span style="font-size:11px;color:#6D7580">Verilənlər bazası</span>
+              </div>
+              <div style="flex:1;background:#FFFFFF;border:1px solid #DEDCD5;border-top:3px solid #DEDCD5;border-radius:12px;padding:11px 12px;display:flex;flex-direction:column;gap:4px">
+                <span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;color:#6D7580;font-weight:700">27 OKT</span>
+                <span style="font-size:13px;font-weight:600;line-height:1.3">Aralıq imtahan</span>
+                <span style="font-size:11px;color:#6D7580">Diskret riyaziyyat</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between">
+              <span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6D7580">Kampus gündəmi</span>
+              <span style="font-size:12px;color:#0F7A85;font-weight:600">Hamısı</span>
+            </div>
+            <div style="background:#FFFFFF;border:1px solid #DEDCD5;border-radius:14px;overflow:hidden">
+              <div style="padding:10px 14px;display:flex;gap:11px;align-items:flex-start">
+                <span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:11px;font-weight:700;color:#B23A2F;width:30px;text-align:right">324</span>
+                <span style="flex:1;display:flex;flex-direction:column;gap:3px">
+                  <span style="font-size:14px;font-weight:600;line-height:1.35">Kitabxana axşam 22:00-a qədər açıq olacaq — imtahan dövrü</span>
+                  <span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;letter-spacing:.06em;color:#6D7580">SƏRBƏST SÖHBƏT · 48 ŞƏRH</span>
+                </span>
+              </div>
+              <div style="padding:10px 14px;display:flex;gap:11px;align-items:flex-start;border-top:1px solid #EDEBE4">
+                <span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:11px;font-weight:700;color:#B23A2F;width:30px;text-align:right">211</span>
+                <span style="flex:1;display:flex;flex-direction:column;gap:3px">
+                  <span style="font-size:14px;font-weight:600;line-height:1.35">Mikroiqtisadiyyat aralıq imtahanı təxirə salındı?</span>
+                  <span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;letter-spacing:.06em;color:#6D7580">DƏRS VƏ MÜƏLLİM · 62 ŞƏRH</span>
+                </span>
+              </div>
+              <div style="padding:10px 14px;display:flex;gap:11px;align-items:flex-start;border-top:1px solid #EDEBE4">
+                <span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:11px;font-weight:700;color:#6D7580;width:30px;text-align:right">96</span>
+                <span style="flex:1;display:flex;flex-direction:column;gap:3px">
+                  <span style="font-size:14px;font-weight:600;line-height:1.35">Yasamalda kirayə qiymətləri necədir bu il?</span>
+                  <span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;letter-spacing:.06em;color:#6D7580">YATAQXANA VƏ KİRAYƏ · 30 ŞƏRH</span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div style="background:#FAF6EC;border:1px solid #E4D3AC;border-radius:14px;padding:10px 13px;display:flex;gap:12px;align-items:center">
+            <div style="width:42px;height:42px;border-radius:10px;background:#C8952A;color:#FFF;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;line-height:1.1"><span style="font-size:14px;font-weight:700">24</span><span style="font-size:9px">OKT</span></div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+              <span style="font-size:14px;font-weight:600">Karyera günü — IT şirkətləri</span>
+              <span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;letter-spacing:.06em;color:#8A6B21">10:00 · AKT MƏRKƏZİ · 412 İŞTİRAKÇI</span>
+            </div>
+          </div>
+        </div>
+        <div style="height:80px;border-top:1px solid #E0DDD5;background:#FFFFFF;display:flex;align-items:center;padding:0 8px 14px">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border-radius:4px;background:#0F7A85;display:block"></span><span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#0F7A85;font-weight:700">BU GÜN</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border:1.5px solid #8A9099;border-radius:3px;display:block"></span><span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#8A9099">CƏDVƏL</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border:1.5px solid #8A9099;border-radius:50%;display:block"></span><span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#8A9099">FORUM</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border:1.5px solid #8A9099;display:block"></span><span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#8A9099">BAZAR</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border:1.5px solid #8A9099;border-radius:50% 50% 4px 4px;display:block"></span><span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#8A9099">PROFİL</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 3. TIMETABLE ============ -->
+    <div style="display:flex;flex-direction:column;gap:10px;flex:0 0 auto">
+      <sc-if value="{{ showLabels }}" hint-placeholder-val="{{ true }}"><div style="display:flex;align-items:baseline;gap:8px;font-family:ui-monospace,'SF Mono','Segoe UI Mono','Roboto Mono',Menlo,monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#6D7580"><span style="color:#0F7A85">03</span><span>Həftəlik cədvəl</span></div></sc-if>
+      <div style="width:390px;height:844px;background:#FFFFFF;border-radius:42px;border:1px solid #D6D3CA;box-shadow:0 20px 44px -22px rgba(20,28,36,.4);overflow:hidden;position:relative;display:flex;flex-direction:column">
+        <div style="height:46px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:12px;font-weight:600"><span>13:20</span><span>5G</span></div>
+        <div style="padding:4px 20px 10px;display:flex;align-items:flex-end;justify-content:space-between">
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6D7580">2025/26 · PAYIZ SEMESTRİ</span>
+            <span style="font-size:27px;font-weight:700;letter-spacing:-0.025em">Cədvəl</span>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;padding:6px 8px;border-radius:6px;background:#141C24;color:#FFF">HƏFTƏ</span>
+            <span style="font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;padding:6px 8px;border-radius:6px;border:1px solid #DEDCD5;color:#5C6470">GÜN</span>
+          </div>
+        </div>
+
+        <div style="display:flex;padding:0 12px 0 44px;border-bottom:1px solid #E4E1D9">
+          <div style="flex:1;text-align:center;padding:7px 0;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:11px;letter-spacing:.06em;color:#6D7580">B.E</div>
+          <div style="flex:1;text-align:center;padding:7px 0;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:11px;letter-spacing:.06em;color:#141C24;font-weight:700;border-bottom:2px solid #0F7A85">Ç.A</div>
+          <div style="flex:1;text-align:center;padding:7px 0;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:11px;letter-spacing:.06em;color:#6D7580">Ç</div>
+          <div style="flex:1;text-align:center;padding:7px 0;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:11px;letter-spacing:.06em;color:#6D7580">C.A</div>
+          <div style="flex:1;text-align:center;padding:7px 0;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:11px;letter-spacing:.06em;color:#6D7580">C</div>
+        </div>
+
+        <div style="flex:1;position:relative;overflow:hidden">
+          <div style="position:absolute;inset:0;display:flex">
+            <div style="width:44px;position:relative;border-right:1px solid #EDEBE4">
+              <span style="position:absolute;top:2px;right:6px;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;color:#9AA0A8">09</span>
+              <span style="position:absolute;top:72px;right:6px;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;color:#9AA0A8">10</span>
+              <span style="position:absolute;top:142px;right:6px;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;color:#9AA0A8">11</span>
+              <span style="position:absolute;top:212px;right:6px;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;color:#9AA0A8">12</span>
+              <span style="position:absolute;top:282px;right:6px;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;color:#9AA0A8">13</span>
+              <span style="position:absolute;top:352px;right:6px;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;color:#9AA0A8">14</span>
+              <span style="position:absolute;top:422px;right:6px;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;color:#9AA0A8">15</span>
+              <span style="position:absolute;top:492px;right:6px;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;color:#9AA0A8">16</span>
+              <span style="position:absolute;top:562px;right:6px;font-family:ui-monospace,'SF Mono','Segoe UI Mono',Menlo,monospace;font-size:10px;color:#9AA0A8">17</span>
+            </div>
+            <div style="flex:1;position:relative;padding:0 12px 0 0">
+              <div style="position:absolute;left:0;right:12px;top:70px;height:1px;background:#F0EEE7"></div>
+              <div style="position:absolute;left:0;right:12px;top:140px;height:1px;background:#F0EEE7"></div>
+              <div style="position:absolute;left:0;right:12px;top:210px;height:1px;background:#F0EEE7"></div>
+              <div style="position:absolute;left:0;right:12px;top:280px;height:1px;background:#F0EEE7"></div>
+              <div style="position:absolute;left:0;right:12px;top:350px;height:1px;background:#F0EEE7"></div>
+              <div style="position:absolute;left:0;right:12px;top:420px;height:1px;background:#F0EEE7"></div>
+              <div style="position:absolute;left:0;right:12px;top:490px;height:1px;background:#F0EEE7"></div>
+              <div style="position:absolute;left:0;right:12px;top:560px;height:1px;background:#F0EEE7"></div>
+
+              <div style="position:absolute;inset:0;display:flex">
+                <div style="flex:1;position:relative;border-right:1px solid #F5F3EC">
+                  <div style="position:absolute;left:2px;right:2px;top:0;height:92px;background:#E4F0F1;border-left:3px solid #0F7A85;border-radius:5px;padding:6px 5px;overflow:hidden"><div style="font-size:10.5px;font-weight:700;line-height:1.2">Verilənlər bazası</div><div style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:8.5px;color:#0B5C64;margin-top:3px">312</div></div>
+                  <div style="position:absolute;left:2px;right:2px;top:210px;height:92px;background:#EFEFF6;border-left:3px solid #2F5A9E;border-radius:5px;padding:6px 5px;overflow:hidden"><div style="font-size:10.5px;font-weight:700;line-height:1.2">İngilis dili B2</div><div style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:8.5px;color:#2F5A9E;margin-top:3px">108</div></div>
+                </div>
+                <div style="flex:1;position:relative;border-right:1px solid #F5F3EC;background:#FCFBF8">
+                  <div style="position:absolute;left:2px;right:2px;top:70px;height:92px;background:#F6EFDF;border-left:3px solid #C8952A;border-radius:5px;padding:6px 5px;overflow:hidden"><div style="font-size:10.5px;font-weight:700;line-height:1.2">Fəlsəfə</div><div style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:8.5px;color:#8A6B21;margin-top:3px">401</div></div>
+                  <div style="position:absolute;left:2px;right:2px;top:350px;height:92px;background:#E4F0F1;border-left:3px solid #0F7A85;border-radius:5px;padding:6px 5px;overflow:hidden"><div style="font-size:10.5px;font-weight:700;line-height:1.2">Verilənlər bazası</div><div style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:8.5px;color:#0B5C64;margin-top:3px">312</div></div>
+                  <div style="position:absolute;left:2px;right:2px;top:467px;height:92px;background:#F6EFDF;border-left:3px solid #C8952A;border-radius:5px;padding:6px 5px;overflow:hidden"><div style="font-size:10.5px;font-weight:700;line-height:1.2">Diskret riyaziyyat</div><div style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:8.5px;color:#8A6B21;margin-top:3px">205</div></div>
+                </div>
+                <div style="flex:1;position:relative;border-right:1px solid #F5F3EC">
+                  <div style="position:absolute;left:2px;right:2px;top:0;height:92px;background:#F4E7E5;border-left:3px solid #B23A2F;border-radius:5px;padding:6px 5px;overflow:hidden"><div style="font-size:10.5px;font-weight:700;line-height:1.2">Alqoritmlər</div><div style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:8.5px;color:#8C2C23;margin-top:3px">220</div></div>
+                  <div style="position:absolute;left:2px;right:2px;top:280px;height:92px;background:#EFEFF6;border-left:3px solid #2F5A9E;border-radius:5px;padding:6px 5px;overflow:hidden"><div style="font-size:10.5px;font-weight:700;line-height:1.2">Azərbaycan tarixi</div><div style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:8.5px;color:#2F5A9E;margin-top:3px">117</div></div>
+                </div>
+                <div style="flex:1;position:relative;border-right:1px solid #F5F3EC">
+                  <div style="position:absolute;left:2px;right:2px;top:70px;height:92px;background:#F4E7E5;border-left:3px solid #B23A2F;border-radius:5px;padding:6px 5px;overflow:hidden"><div style="font-size:10.5px;font-weight:700;line-height:1.2">Alqoritmlər lab.</div><div style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:8.5px;color:#8C2C23;margin-top:3px">L-3</div></div>
+                  <div style="position:absolute;left:2px;right:2px;top:350px;height:92px;background:#F6EFDF;border-left:3px solid #C8952A;border-radius:5px;padding:6px 5px;overflow:hidden"><div style="font-size:10.5px;font-weight:700;line-height:1.2">Diskret riyaziyyat</div><div style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:8.5px;color:#8A6B21;margin-top:3px">205</div></div>
+                </div>
+                <div style="flex:1;position:relative">
+                  <div style="position:absolute;left:2px;right:2px;top:140px;height:92px;background:#EFEFF6;border-left:3px solid #2F5A9E;border-radius:5px;padding:6px 5px;overflow:hidden"><div style="font-size:10.5px;font-weight:700;line-height:1.2">İngilis dili B2</div><div style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:8.5px;color:#2F5A9E;margin-top:3px">108</div></div>
+                </div>
+              </div>
+
+              <sc-if value="{{ showCurrentTime }}" hint-placeholder-val="{{ true }}">
+                <div style="position:absolute;left:-44px;right:12px;top:303px;height:0;display:flex;align-items:center;pointer-events:none">
+                  <span style="background:#B23A2F;color:#FFF;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.04em;padding:2px 4px;border-radius:3px;margin-right:2px">13:20</span>
+                  <span style="flex:1;height:1.5px;background:#B23A2F;display:block"></span>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+
+        <div style="height:80px;border-top:1px solid #E0DDD5;background:#FFFFFF;display:flex;align-items:center;padding:0 8px 14px">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border:1.5px solid #8A9099;border-radius:4px;display:block"></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#8A9099">BU GÜN</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;background:#0F7A85;border-radius:3px;display:block"></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#0F7A85;font-weight:700">CƏDVƏL</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border:1.5px solid #8A9099;border-radius:50%;display:block"></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#8A9099">FORUM</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border:1.5px solid #8A9099;display:block"></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#8A9099">BAZAR</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border:1.5px solid #8A9099;border-radius:50% 50% 4px 4px;display:block"></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#8A9099">PROFİL</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 4. CLASS DETAIL SHEET ============ -->
+    <div style="display:flex;flex-direction:column;gap:10px;flex:0 0 auto">
+      <sc-if value="{{ showLabels }}" hint-placeholder-val="{{ true }}"><div style="display:flex;align-items:baseline;gap:8px;font-family:ui-monospace,'SF Mono','Segoe UI Mono','Roboto Mono',Menlo,monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#6D7580"><span style="color:#0F7A85">04</span><span>Dərs detalı · alt panel</span></div></sc-if>
+      <div style="width:390px;height:844px;background:#FFFFFF;border-radius:42px;border:1px solid #D6D3CA;box-shadow:0 20px 44px -22px rgba(20,28,36,.4);overflow:hidden;position:relative;display:flex;flex-direction:column">
+        <div style="position:absolute;inset:0;background:#FFFFFF"></div>
+        <div style="position:absolute;inset:0;padding:46px 12px 0 44px;opacity:.5">
+          <div style="position:absolute;left:48px;right:16px;top:120px;height:92px;background:#E4F0F1;border-left:3px solid #0F7A85;border-radius:5px"></div>
+          <div style="position:absolute;left:48px;right:16px;top:250px;height:92px;background:#F6EFDF;border-left:3px solid #C8952A;border-radius:5px"></div>
+        </div>
+        <div style="position:absolute;inset:0;background:rgba(20,28,36,.42)"></div>
+
+        <div style="position:absolute;left:0;right:0;bottom:0;background:#FFFFFF;border-radius:24px 24px 42px 42px;padding:12px 22px 28px;display:flex;flex-direction:column;gap:16px;box-shadow:0 -12px 40px -12px rgba(20,28,36,.35)">
+          <div style="width:38px;height:4px;border-radius:2px;background:#DEDCD5;align-self:center"></div>
+
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.12em;color:#0F7A85;font-weight:700">CS 214 · 6 KREDİT</span>
+            <span style="font-size:24px;font-weight:700;letter-spacing:-0.02em;line-height:1.15">Verilənlər bazası sistemləri</span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:1px;background:#EDEBE4;border:1px solid #E4E1D9;border-radius:12px;overflow:hidden">
+            <div style="background:#FFFFFF;padding:12px 14px;display:flex;justify-content:space-between;align-items:center">
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.1em;color:#6D7580">VAXT</span>
+              <span style="font-size:14px;font-weight:600">Ç.A 14:05–15:25</span>
+            </div>
+            <div style="background:#FFFFFF;padding:12px 14px;display:flex;justify-content:space-between;align-items:center">
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.1em;color:#6D7580">OTAQ</span>
+              <span style="font-size:14px;font-weight:600">II korpus, 312</span>
+            </div>
+            <div style="background:#FFFFFF;padding:12px 14px;display:flex;justify-content:space-between;align-items:center">
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.1em;color:#6D7580">MÜƏLLİM</span>
+              <span style="font-size:14px;font-weight:600;display:flex;align-items:center;gap:7px">dos. Nigar Əliyeva <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;color:#0F7A85;border:1px solid #9ECBCF;border-radius:4px;padding:2px 4px;background:#F0F7F7">4.2 ★</span></span>
+            </div>
+          </div>
+
+          <div style="background:#FAF3F2;border:1px solid #E8C9C4;border-radius:12px;padding:14px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.1em;color:#8C2C23;font-weight:700">DAVAMİYYƏT</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:13px;font-weight:700;color:#B23A2F">4 / 12</span>
+            </div>
+            <div style="margin-top:10px;display:flex;gap:3px">
+              <span style="flex:1;height:7px;border-radius:2px;background:#B23A2F"></span>
+              <span style="flex:1;height:7px;border-radius:2px;background:#B23A2F"></span>
+              <span style="flex:1;height:7px;border-radius:2px;background:#B23A2F"></span>
+              <span style="flex:1;height:7px;border-radius:2px;background:#B23A2F"></span>
+              <span style="flex:1;height:7px;border-radius:2px;background:#E8D9D6"></span>
+              <span style="flex:1;height:7px;border-radius:2px;background:#E8D9D6"></span>
+              <span style="flex:1;height:7px;border-radius:2px;background:#E8D9D6"></span>
+              <span style="flex:1;height:7px;border-radius:2px;background:#E8D9D6"></span>
+              <span style="flex:1;height:7px;border-radius:2px;background:#E8D9D6"></span>
+              <span style="flex:1;height:7px;border-radius:2px;background:#E8D9D6"></span>
+              <span style="flex:1;height:7px;border-radius:2px;background:#E8D9D6"></span>
+              <span style="flex:1;height:7px;border-radius:2px;background:#E8D9D6"></span>
+            </div>
+            <div style="margin-top:9px;font-size:12px;line-height:1.45;color:#5C6470">İcazəli qayıb limitinin 33%-i istifadə olunub. 12 qayıbdan sonra kursdan kənarlaşdırılma.</div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:1px;background:#EDEBE4;border:1px solid #E4E1D9;border-radius:12px;overflow:hidden">
+            <div style="background:#FFFFFF;padding:13px 14px;display:flex;justify-content:space-between;align-items:center">
+              <span style="font-size:14px;font-weight:600">Kurs materialları</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;color:#6D7580">14 fayl ›</span>
+            </div>
+            <div style="background:#FFFFFF;padding:13px 14px;display:flex;justify-content:space-between;align-items:center">
+              <span style="font-size:14px;font-weight:600">Kurs forumu</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;color:#6D7580">38 mövzu ›</span>
+            </div>
+            <div style="background:#FFFFFF;padding:13px 14px;display:flex;justify-content:space-between;align-items:center">
+              <span style="font-size:14px;font-weight:600">Müəllim rəyləri</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;color:#6D7580">61 rəy ›</span>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:10px">
+            <div style="flex:1;height:50px;border-radius:12px;background:#141C24;color:#FFF;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600">Qayıb qeyd et</div>
+            <div style="width:50px;height:50px;border-radius:12px;border:1px solid #DEDCD5;display:flex;align-items:center;justify-content:center;font-size:16px;color:#5C6470">···</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 5. FORUM BOARD ============ -->
+    <div style="display:flex;flex-direction:column;gap:10px;flex:0 0 auto">
+      <sc-if value="{{ showLabels }}" hint-placeholder-val="{{ true }}"><div style="display:flex;align-items:baseline;gap:8px;font-family:ui-monospace,'SF Mono','Segoe UI Mono','Roboto Mono',Menlo,monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#6D7580"><span style="color:#0F7A85">05</span><span>Forum lövhəsi</span></div></sc-if>
+      <div style="width:390px;height:844px;background:#F1F0EC;border-radius:42px;border:1px solid #D6D3CA;box-shadow:0 20px 44px -22px rgba(20,28,36,.4);overflow:hidden;position:relative;display:flex;flex-direction:column">
+        <div style="height:46px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;font-weight:600"><span>13:22</span><span>5G</span></div>
+        <div style="padding:2px 20px 10px;display:flex;align-items:center;gap:12px">
+          <span style="font-size:18px;color:#141C24">‹</span>
+          <div style="flex:1;display:flex;flex-direction:column;gap:2px">
+            <span style="font-size:19px;font-weight:700;letter-spacing:-0.02em">Dərs və müəllim</span>
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;color:#6D7580">BDU · 9 214 İZLƏYİCİ</span>
+          </div>
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;padding:6px 8px;border-radius:6px;border:1px solid #C7C4BB;color:#141C24">İZLƏ</span>
+        </div>
+        <div style="padding:0 20px 10px;display:flex;gap:7px">
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;padding:6px 9px;border-radius:14px;background:#141C24;color:#FFF">POPULYAR</span>
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;padding:6px 9px;border-radius:14px;background:#FFFFFF;border:1px solid #DEDCD5;color:#5C6470">YENİ</span>
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;padding:6px 9px;border-radius:14px;background:#FFFFFF;border:1px solid #DEDCD5;color:#5C6470">SORĞU</span>
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;padding:6px 9px;border-radius:14px;background:#FFFFFF;border:1px solid #DEDCD5;color:#5C6470">CAVABSIZ</span>
+        </div>
+
+        <div style="flex:1;overflow:hidden;display:flex;flex-direction:column;gap:7px;padding:0 20px">
+          <div style="background:#FFFFFF;border:1px solid #DEDCD5;border-radius:14px;padding:13px 14px;display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="width:22px;height:22px;border-radius:6px;background:#EDEBE4;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;font-weight:700;color:#4A525C;display:flex;align-items:center;justify-content:center">A1</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10.5px;letter-spacing:.06em;color:#4A525C">ANONİM</span>
+              <span style="width:11px;height:11px;border-radius:50%;background:#0F7A85;color:#FFF;font-size:7px;display:flex;align-items:center;justify-content:center">✓</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;color:#9AA0A8">· 2 saat</span>
+            </div>
+            <div style="font-size:15.5px;font-weight:600;line-height:1.35">Mikroiqtisadiyyat aralıq imtahanı təxirə salındı, kim eşitdi?</div>
+            <div style="font-size:13.5px;line-height:1.5;color:#4A525C">Dekanlıqdan hələ rəsmi elan yoxdur, ancaq qrup nümayəndəsi cümə axşamına keçirildiyini dedi. Təsdiq edən var?</div>
+            <div style="display:flex;align-items:center;gap:14px;padding-top:3px">
+              <span style="display:flex;align-items:center;gap:6px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;font-weight:700;color:#B23A2F">▲ 211</span>
+              <span style="display:flex;align-items:center;gap:6px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;color:#5C6470">▭ 62</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;color:#9AA0A8">◇ 18</span>
+            </div>
+          </div>
+
+          <div style="background:#FFFFFF;border:1px solid #DEDCD5;border-radius:14px;padding:13px 14px;display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="width:22px;height:22px;border-radius:6px;background:#FAF3E4;border:1px solid #E4D3AC;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;font-weight:700;color:#8A6B21;display:flex;align-items:center;justify-content:center">A7</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10.5px;letter-spacing:.06em;color:#4A525C">ANONİM</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.08em;color:#8A6B21;background:#FAF3E4;border:1px solid #E4D3AC;border-radius:4px;padding:2px 4px">KART</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;color:#9AA0A8">· 5 saat</span>
+            </div>
+            <div style="font-size:15.5px;font-weight:600;line-height:1.35">Seçmə fənn: “Data Mining” yoxsa “Kompilyatorlar”?</div>
+            <div style="display:flex;flex-direction:column;gap:8px;padding:2px 0">
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="font-weight:600">Data Mining</span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;color:#0F7A85;font-weight:700">64%</span></div>
+                <div style="height:8px;border-radius:2px;background:#EDEBE4;overflow:hidden"><div style="width:64%;height:8px;background:#0F7A85"></div></div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <div style="display:flex;justify-content:space-between;font-size:12.5px"><span>Kompilyatorlar</span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;color:#5C6470;font-weight:700">36%</span></div>
+                <div style="height:8px;border-radius:2px;background:#EDEBE4;overflow:hidden"><div style="width:36%;height:8px;background:#A9C7CA"></div></div>
+              </div>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.06em;color:#9AA0A8">428 SƏS · 2 GÜN QALIB</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px">
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;font-weight:700;color:#B23A2F">▲ 88</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;color:#5C6470">▭ 41</span>
+            </div>
+          </div>
+
+          <div style="background:#FFFFFF;border:1px solid #DEDCD5;border-radius:14px;padding:13px 14px;display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="width:22px;height:22px;border-radius:6px;background:#EDEBE4;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;font-weight:700;color:#4A525C;display:flex;align-items:center;justify-content:center">A3</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10.5px;letter-spacing:.06em;color:#4A525C">ANONİM</span>
+              <span style="width:11px;height:11px;border-radius:50%;background:#0F7A85;color:#FFF;font-size:7px;display:flex;align-items:center;justify-content:center">✓</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;color:#9AA0A8">· 7 saat</span>
+            </div>
+            <div style="font-size:15.5px;font-weight:600;line-height:1.35">Alqoritmlər lab. tapşırığının cavab formatı belədirmi?</div>
+            <div style="height:76px;border-radius:10px;border:1px solid #E4E1D9;background:repeating-linear-gradient(135deg,#F4F2EC 0 8px,#EAE7DF 8px 16px);display:flex;align-items:center;justify-content:center">
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.1em;color:#8A9099">TAPŞIRIQ EKRAN ŞƏKLİ</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px">
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;font-weight:700;color:#5C6470">▲ 34</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;color:#5C6470">▭ 12</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="position:absolute;right:20px;bottom:100px;width:54px;height:54px;border-radius:16px;background:#0F7A85;color:#FFF;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:300;box-shadow:0 8px 20px -6px rgba(15,122,133,.7)">+</div>
+
+        <div style="height:80px;border-top:1px solid #E0DDD5;background:#FFFFFF;display:flex;align-items:center;padding:0 8px 14px">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border:1.5px solid #8A9099;border-radius:4px;display:block"></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#8A9099">BU GÜN</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border:1.5px solid #8A9099;border-radius:3px;display:block"></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#8A9099">CƏDVƏL</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border-radius:50%;background:#0F7A85;display:block"></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#0F7A85;font-weight:700">FORUM</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border:1.5px solid #8A9099;display:block"></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#8A9099">BAZAR</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border:1.5px solid #8A9099;border-radius:50% 50% 4px 4px;display:block"></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#8A9099">PROFİL</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 6. POST DETAIL ============ -->
+    <div style="display:flex;flex-direction:column;gap:10px;flex:0 0 auto">
+      <sc-if value="{{ showLabels }}" hint-placeholder-val="{{ true }}"><div style="display:flex;align-items:baseline;gap:8px;font-family:ui-monospace,'SF Mono','Segoe UI Mono','Roboto Mono',Menlo,monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#6D7580"><span style="color:#0F7A85">06</span><span>Post detalı · anonim nömrələmə</span></div></sc-if>
+      <div style="width:390px;height:844px;background:#F1F0EC;border-radius:42px;border:1px solid #D6D3CA;box-shadow:0 20px 44px -22px rgba(20,28,36,.4);overflow:hidden;position:relative;display:flex;flex-direction:column">
+        <div style="height:46px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;font-weight:600"><span>13:24</span><span>5G</span></div>
+        <div style="padding:2px 20px 10px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #E4E1D9">
+          <span style="font-size:18px">‹</span>
+          <span style="flex:1;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#6D7580">Dərs və müəllim</span>
+          <span style="font-size:15px;color:#6D7580">···</span>
+        </div>
+
+        <div style="flex:1;overflow:hidden;display:flex;flex-direction:column">
+          <div style="background:#FFFFFF;padding:15px 20px 13px;display:flex;flex-direction:column;gap:10px;border-bottom:1px solid #E4E1D9">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="width:26px;height:26px;border-radius:7px;background:#141C24;color:#FFF;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center">A1</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;letter-spacing:.06em;color:#141C24;font-weight:700">ANONİM 1</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.08em;color:#141C24;background:#EDEBE4;border-radius:4px;padding:2px 5px">MÜƏLLİF</span>
+              <span style="width:11px;height:11px;border-radius:50%;background:#0F7A85;color:#FFF;font-size:7px;display:flex;align-items:center;justify-content:center">✓</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;color:#9AA0A8">· 2 saat</span>
+            </div>
+            <div style="font-size:19px;font-weight:700;line-height:1.3;letter-spacing:-0.015em">Mikroiqtisadiyyat aralıq imtahanı təxirə salındı, kim eşitdi?</div>
+            <div style="font-size:14px;line-height:1.55;color:#3D444D">Dekanlıqdan hələ rəsmi elan yoxdur, ancaq qrup nümayəndəsi cümə axşamına keçirildiyini dedi. Prof. Quliyeva dərsdə bir şey demədi. Təsdiq edən var?</div>
+            <div style="display:flex;align-items:center;gap:12px;padding-top:2px">
+              <span style="display:flex;align-items:center;gap:8px;border:1px solid #E8C9C4;background:#FAF3F2;border-radius:16px;padding:6px 11px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;font-weight:700;color:#B23A2F">▲ 211 ▼</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;color:#5C6470">▭ 62 ŞƏRH</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;color:#9AA0A8;margin-left:auto">◇ SAXLA</span>
+            </div>
+          </div>
+
+          <div style="padding:10px 20px 0;display:flex;align-items:center;justify-content:space-between">
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#6D7580">62 şərh</span>
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;color:#0F7A85;font-weight:700">POPULYAR ▾</span>
+          </div>
+
+          <div style="flex:1;overflow:hidden;padding:10px 20px 0;display:flex;flex-direction:column;gap:1px">
+            <div style="background:#FFFFFF;border:1px solid #DEDCD5;border-radius:12px 12px 0 0;padding:12px 14px;display:flex;flex-direction:column;gap:7px">
+              <div style="display:flex;align-items:center;gap:7px">
+                <span style="width:22px;height:22px;border-radius:6px;background:#EDEBE4;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;font-weight:700;color:#4A525C;display:flex;align-items:center;justify-content:center">A2</span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10.5px;letter-spacing:.06em;color:#141C24;font-weight:700">ANONİM 2</span>
+                <span style="width:10px;height:10px;border-radius:50%;background:#0F7A85;color:#FFF;font-size:6px;display:flex;align-items:center;justify-content:center">✓</span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;color:#9AA0A8">· 1 saat</span>
+              </div>
+              <div style="font-size:13.5px;line-height:1.5;color:#3D444D">Bizim qrupa da eyni məlumat gəldi. Cümə axşamı 11:00, 205 otaq.</div>
+              <div style="display:flex;gap:14px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10.5px;color:#6D7580"><span style="color:#B23A2F;font-weight:700">▲ 46</span><span>CAVAB VER</span></div>
+            </div>
+
+            <div style="background:#FBFAF7;border:1px solid #DEDCD5;border-top:none;padding:12px 14px 12px 34px;display:flex;flex-direction:column;gap:7px;position:relative">
+              <span style="position:absolute;left:18px;top:12px;bottom:12px;width:2px;background:#DEDCD5"></span>
+              <div style="display:flex;align-items:center;gap:7px">
+                <span style="width:20px;height:20px;border-radius:6px;background:#EDEBE4;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:8.5px;font-weight:700;color:#4A525C;display:flex;align-items:center;justify-content:center">A3</span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.06em;font-weight:700">ANONİM 3</span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;color:#9AA0A8">· 40 dəq</span>
+              </div>
+              <div style="font-size:13.5px;line-height:1.5;color:#3D444D">205 deyil, 207 olacaq. Elan lövhəsində dəyişiklik var.</div>
+              <div style="display:flex;gap:14px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10.5px;color:#6D7580"><span style="color:#B23A2F;font-weight:700">▲ 19</span><span>CAVAB VER</span></div>
+            </div>
+
+            <div style="background:#FFFFFF;border:1px solid #DEDCD5;border-top:none;border-radius:0 0 12px 12px;padding:12px 14px;display:flex;flex-direction:column;gap:7px">
+              <div style="display:flex;align-items:center;gap:7px">
+                <span style="width:22px;height:22px;border-radius:6px;background:#FAF3E4;border:1px solid #E4D3AC;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;font-weight:700;color:#8A6B21;display:flex;align-items:center;justify-content:center">A4</span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10.5px;letter-spacing:.06em;font-weight:700">ANONİM 4</span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.08em;color:#8A6B21;background:#FAF3E4;border:1px solid #E4D3AC;border-radius:4px;padding:2px 4px">KART</span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;color:#9AA0A8">· 25 dəq</span>
+              </div>
+              <div style="font-size:13.5px;line-height:1.5;color:#3D444D">Rəsmi elan gəlməyincə heç nəyə inanmayın, keçən semestr də belə oldu.</div>
+              <div style="display:flex;gap:14px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10.5px;color:#6D7580"><span>▲ 11</span><span>CAVAB VER</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#FFFFFF;border-top:1px solid #E0DDD5;padding:11px 18px 28px;display:flex;flex-direction:column;gap:9px">
+          <div style="display:flex;align-items:center;gap:9px">
+            <div style="flex:1;height:42px;border-radius:21px;border:1px solid #DEDCD5;background:#F7F6F2;display:flex;align-items:center;padding:0 15px;font-size:13.5px;color:#8A9099">Şərh yaz…</div>
+            <div style="width:42px;height:42px;border-radius:21px;background:#141C24;color:#FFF;display:flex;align-items:center;justify-content:center;font-size:15px">↑</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px">
+            <span style="width:34px;height:19px;border-radius:10px;background:#0F7A85;position:relative;display:block"><span style="position:absolute;top:2px;right:2px;width:15px;height:15px;border-radius:50%;background:#FFF;display:block"></span></span>
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;color:#4A525C">ANONİM 5 KİMİ YAZ</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 7. PROFESSOR REVIEW ============ -->
+    <div style="display:flex;flex-direction:column;gap:10px;flex:0 0 auto">
+      <sc-if value="{{ showLabels }}" hint-placeholder-val="{{ true }}"><div style="display:flex;align-items:baseline;gap:8px;font-family:ui-monospace,'SF Mono','Segoe UI Mono','Roboto Mono',Menlo,monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#6D7580"><span style="color:#0F7A85">07</span><span>Müəllim və fənn rəyləri</span></div></sc-if>
+      <div style="width:390px;height:844px;background:#F1F0EC;border-radius:42px;border:1px solid #D6D3CA;box-shadow:0 20px 44px -22px rgba(20,28,36,.4);overflow:hidden;position:relative;display:flex;flex-direction:column">
+        <div style="height:46px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;font-weight:600"><span>13:28</span><span>5G</span></div>
+        <div style="padding:2px 20px 12px;display:flex;align-items:center;gap:12px"><span style="font-size:18px">‹</span><span style="flex:1;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#6D7580">Müəllim profili</span></div>
+
+        <div style="flex:1;overflow:hidden;padding:0 20px;display:flex;flex-direction:column;gap:14px">
+          <div style="background:#FFFFFF;border:1px solid #DEDCD5;border-radius:16px;padding:16px">
+            <div style="display:flex;gap:13px;align-items:flex-start">
+              <span style="width:46px;height:46px;border-radius:12px;background:#141C24;color:#FFF;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center">NƏ</span>
+              <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+                <span style="font-size:19px;font-weight:700;letter-spacing:-0.015em">dos. Nigar Əliyeva</span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;color:#6D7580">İNFORMATİKA KAFEDRASI · BDU</span>
+              </div>
+            </div>
+            <div style="margin-top:15px;display:flex;gap:16px;align-items:center">
+              <div style="display:flex;flex-direction:column;gap:2px">
+                <span style="font-size:34px;font-weight:700;letter-spacing:-0.03em;line-height:1">4.2</span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.08em;color:#6D7580">61 RƏY · 3 FƏNN</span>
+              </div>
+              <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+                <div style="display:flex;align-items:center;gap:7px"><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;color:#6D7580;width:8px">5</span><span style="flex:1;height:6px;border-radius:2px;background:#EDEBE4;overflow:hidden;display:block"><span style="display:block;width:58%;height:6px;background:#0F7A85"></span></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;color:#6D7580;width:18px;text-align:right">35</span></div>
+                <div style="display:flex;align-items:center;gap:7px"><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;color:#6D7580;width:8px">4</span><span style="flex:1;height:6px;border-radius:2px;background:#EDEBE4;overflow:hidden;display:block"><span style="display:block;width:26%;height:6px;background:#0F7A85"></span></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;color:#6D7580;width:18px;text-align:right">16</span></div>
+                <div style="display:flex;align-items:center;gap:7px"><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;color:#6D7580;width:8px">3</span><span style="flex:1;height:6px;border-radius:2px;background:#EDEBE4;overflow:hidden;display:block"><span style="display:block;width:11%;height:6px;background:#C8952A"></span></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;color:#6D7580;width:18px;text-align:right">7</span></div>
+                <div style="display:flex;align-items:center;gap:7px"><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;color:#6D7580;width:8px">2</span><span style="flex:1;height:6px;border-radius:2px;background:#EDEBE4;overflow:hidden;display:block"><span style="display:block;width:5%;height:6px;background:#B23A2F"></span></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;color:#6D7580;width:18px;text-align:right">2</span></div>
+                <div style="display:flex;align-items:center;gap:7px"><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;color:#6D7580;width:8px">1</span><span style="flex:1;height:6px;border-radius:2px;background:#EDEBE4;overflow:hidden;display:block"><span style="display:block;width:3%;height:6px;background:#B23A2F"></span></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;color:#6D7580;width:18px;text-align:right">1</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div style="background:#FFFFFF;border:1px solid #DEDCD5;border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:11px">
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#6D7580">Meyarlar üzrə</span>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <div style="display:flex;align-items:center;gap:10px"><span style="font-size:12.5px;width:118px;color:#3D444D">Dərs keyfiyyəti</span><span style="flex:1;height:7px;border-radius:2px;background:#EDEBE4;display:block;overflow:hidden"><span style="display:block;width:92%;height:7px;background:#0F7A85"></span></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;font-weight:700;width:24px;text-align:right">4.6</span></div>
+              <div style="display:flex;align-items:center;gap:10px"><span style="font-size:12.5px;width:118px;color:#3D444D">Ədalətli qiymət</span><span style="flex:1;height:7px;border-radius:2px;background:#EDEBE4;display:block;overflow:hidden"><span style="display:block;width:80%;height:7px;background:#0F7A85"></span></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;font-weight:700;width:24px;text-align:right">4.0</span></div>
+              <div style="display:flex;align-items:center;gap:10px"><span style="font-size:12.5px;width:118px;color:#3D444D">İş yükü</span><span style="flex:1;height:7px;border-radius:2px;background:#EDEBE4;display:block;overflow:hidden"><span style="display:block;width:70%;height:7px;background:#C8952A"></span></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;font-weight:700;width:24px;text-align:right">3.5</span></div>
+              <div style="display:flex;align-items:center;gap:10px"><span style="font-size:12.5px;width:118px;color:#3D444D">Davamiyyət tələbi</span><span style="flex:1;height:7px;border-radius:2px;background:#EDEBE4;display:block;overflow:hidden"><span style="display:block;width:58%;height:7px;background:#B23A2F"></span></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;font-weight:700;width:24px;text-align:right">2.9</span></div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;padding-top:2px">
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;padding:5px 8px;border-radius:13px;background:#F0F7F7;border:1px solid #9ECBCF;color:#0B5C64">SLAYDLAR AYDIN</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;padding:5px 8px;border-radius:13px;background:#F0F7F7;border:1px solid #9ECBCF;color:#0B5C64">LAB. FAYDALI</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;padding:5px 8px;border-radius:13px;background:#FAF3F2;border:1px solid #E8C9C4;color:#8C2C23">YOXLAMA SIX</span>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between">
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#6D7580">Yazılı rəylər</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;color:#0F7A85;font-weight:700">FƏNN: CS 214 ▾</span>
+            </div>
+            <div style="background:#FFFFFF;border:1px solid #DEDCD5;border-radius:14px;padding:13px 14px;display:flex;flex-direction:column;gap:7px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;font-weight:700;color:#0F7A85">★ 5.0</span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;color:#6D7580">2024/25 YAZ · CS 214</span>
+                <span style="margin-left:auto;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;color:#9AA0A8">ANONİM · DOĞRULANMIŞ</span>
+              </div>
+              <div style="font-size:13.5px;line-height:1.5;color:#3D444D">İzahları çox səlis, normalizasiya mövzusunu lövhədə addım-addım göstərir. Laboratoriya tapşırıqları imtahana birbaşa hazırlayır.</div>
+            </div>
+            <div style="background:#FFFFFF;border:1px solid #DEDCD5;border-radius:14px;padding:13px 14px;display:flex;flex-direction:column;gap:7px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;font-weight:700;color:#C8952A">★ 3.0</span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;color:#6D7580">2024/25 PAYIZ · CS 214</span>
+                <span style="margin-left:auto;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;color:#9AA0A8">ANONİM · DOĞRULANMIŞ</span>
+              </div>
+              <div style="font-size:13.5px;line-height:1.5;color:#3D444D">Dərs güclüdür, amma davamiyyəti çox ciddi tutur. Gecikməyə görə qayıb yazır, buna hazır olun.</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding:12px 20px 28px;background:#F1F0EC;border-top:1px solid #E4E1D9">
+          <div style="height:50px;border-radius:12px;background:#0F7A85;color:#FFF;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600">Rəy yaz — anonim</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 8. MARKETPLACE DETAIL ============ -->
+    <div style="display:flex;flex-direction:column;gap:10px;flex:0 0 auto">
+      <sc-if value="{{ showLabels }}" hint-placeholder-val="{{ true }}"><div style="display:flex;align-items:baseline;gap:8px;font-family:ui-monospace,'SF Mono','Segoe UI Mono','Roboto Mono',Menlo,monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#6D7580"><span style="color:#0F7A85">08</span><span>Bazar · elan detalı</span></div></sc-if>
+      <div style="width:390px;height:844px;background:#F1F0EC;border-radius:42px;border:1px solid #D6D3CA;box-shadow:0 20px 44px -22px rgba(20,28,36,.4);overflow:hidden;position:relative;display:flex;flex-direction:column">
+        <div style="height:46px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;font-weight:600"><span>13:31</span><span>5G</span></div>
+        <div style="padding:2px 20px 10px;display:flex;align-items:center;gap:12px"><span style="font-size:18px">‹</span><span style="flex:1;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#6D7580">Dərslik və qeydlər</span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;color:#6D7580">◇</span></div>
+
+        <div style="flex:1;overflow:hidden;display:flex;flex-direction:column;gap:14px;padding:0 20px">
+          <div style="height:210px;border-radius:14px;border:1px solid #E4E1D9;background:repeating-linear-gradient(135deg,#F4F2EC 0 9px,#E9E6DE 9px 18px);display:flex;align-items:center;justify-content:center;position:relative">
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.12em;color:#8A9099">DƏRSLİK ŞƏKLİ 1 / 3</span>
+            <span style="position:absolute;bottom:10px;right:10px;display:flex;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:#141C24"></span><span style="width:6px;height:6px;border-radius:50%;background:#C7C4BB"></span><span style="width:6px;height:6px;border-radius:50%;background:#C7C4BB"></span></span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="font-size:19px;font-weight:700;line-height:1.3;letter-spacing:-0.015em">Piskunov “Riyazi analiz” I–II cild, rus dilində</div>
+            <div style="display:flex;align-items:baseline;gap:10px">
+              <span style="font-size:26px;font-weight:700;letter-spacing:-0.02em">25 ₼</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;color:#0B5C64;background:#F0F7F7;border:1px solid #9ECBCF;border-radius:5px;padding:3px 6px">RAZILAŞMA OLAR</span>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;padding:5px 8px;border-radius:6px;background:#FFFFFF;border:1px solid #DEDCD5;color:#4A525C">VƏZİYYƏT: YAXŞI</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;padding:5px 8px;border-radius:6px;background:#FFFFFF;border:1px solid #DEDCD5;color:#4A525C">QEYDLƏR VAR</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;padding:5px 8px;border-radius:6px;background:#FFFFFF;border:1px solid #DEDCD5;color:#4A525C">2 KİTAB</span>
+            </div>
+            <div style="font-size:13.5px;line-height:1.55;color:#3D444D">Birinci kursda istifadə etmişəm, cildləri bütövdür. Bəzi səhifələrdə karandaşla qeydlər var. Baş korpusun qarşısında və ya “Elmlər Akademiyası” metrosunda təhvil verə bilərəm.</div>
+          </div>
+
+          <div style="background:#FFFFFF;border:1px solid #DEDCD5;border-radius:14px;padding:14px">
+            <div style="display:flex;align-items:center;gap:12px">
+              <span style="width:40px;height:40px;border-radius:11px;background:#EDEBE4;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;font-weight:700;color:#4A525C;display:flex;align-items:center;justify-content:center">S9</span>
+              <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+                <span style="display:flex;align-items:center;gap:7px"><span style="font-size:14.5px;font-weight:600">quru-püstə-19</span><span style="width:12px;height:12px;border-radius:50%;background:#0F7A85;color:#FFF;font-size:7px;display:flex;align-items:center;justify-content:center">✓</span></span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;color:#6D7580">BDU · İNFORMATİKA · 2-Cİ KURS</span>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:14px;font-weight:700;color:#0F7A85">4.8</span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#6D7580">12 SÖVDƏLƏŞMƏ</span>
+              </div>
+            </div>
+            <div style="margin-top:12px;padding-top:12px;border-top:1px solid #EDEBE4;display:flex;gap:16px">
+              <span style="display:flex;flex-direction:column;gap:2px"><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;font-weight:700">100%</span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#6D7580">CAVAB</span></span>
+              <span style="display:flex;flex-direction:column;gap:2px"><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;font-weight:700">~2 saat</span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#6D7580">CAVAB VAXTI</span></span>
+              <span style="display:flex;flex-direction:column;gap:2px"><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;font-weight:700">0</span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#6D7580">ŞİKAYƏT</span></span>
+            </div>
+          </div>
+
+          <div style="background:#FAF6EC;border:1px solid #E4D3AC;border-radius:12px;padding:11px 13px;font-size:12px;line-height:1.5;color:#6B5518">Ödənişi yalnız görüş zamanı edin. Kiksu köçürmələrə zəmanət vermir.</div>
+        </div>
+
+        <div style="padding:12px 20px 28px;background:#FFFFFF;border-top:1px solid #E0DDD5;display:flex;gap:10px;align-items:center">
+          <div style="width:50px;height:50px;border-radius:12px;border:1px solid #DEDCD5;display:flex;align-items:center;justify-content:center;font-size:16px;color:#5C6470">◇</div>
+          <div style="flex:1;height:50px;border-radius:12px;background:#141C24;color:#FFF;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600">Satıcıya yaz</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 9. VACANCIES ============ -->
+    <div style="display:flex;flex-direction:column;gap:10px;flex:0 0 auto">
+      <sc-if value="{{ showLabels }}" hint-placeholder-val="{{ true }}"><div style="display:flex;align-items:baseline;gap:8px;font-family:ui-monospace,'SF Mono','Segoe UI Mono','Roboto Mono',Menlo,monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#6D7580"><span style="color:#0F7A85">09</span><span>Vakansiya və təcrübə</span></div></sc-if>
+      <div style="width:390px;height:844px;background:#F1F0EC;border-radius:42px;border:1px solid #D6D3CA;box-shadow:0 20px 44px -22px rgba(20,28,36,.4);overflow:hidden;position:relative;display:flex;flex-direction:column">
+        <div style="height:46px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;font-weight:600"><span>13:35</span><span>5G</span></div>
+        <div style="padding:2px 20px 10px;display:flex;align-items:flex-end;justify-content:space-between">
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6D7580">64 AKTİV ELAN · BAKI</span>
+            <span style="font-size:27px;font-weight:700;letter-spacing:-0.025em">Vakansiyalar</span>
+          </div>
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;padding:6px 8px;border-radius:6px;border:1px solid #C7C4BB">FİLTR</span>
+        </div>
+        <div style="padding:0 20px 10px;display:flex;gap:7px">
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;padding:6px 9px;border-radius:14px;background:#141C24;color:#FFF">TƏCRÜBƏ</span>
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;padding:6px 9px;border-radius:14px;background:#FFFFFF;border:1px solid #DEDCD5;color:#5C6470">YARIMŞTAT</span>
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;padding:6px 9px;border-radius:14px;background:#FFFFFF;border:1px solid #DEDCD5;color:#5C6470">UZAQDAN</span>
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;padding:6px 9px;border-radius:14px;background:#FFFFFF;border:1px solid #DEDCD5;color:#5C6470">IT</span>
+        </div>
+
+        <div style="flex:1;overflow:hidden;padding:0 20px;display:flex;flex-direction:column;gap:9px">
+          <div style="background:#FFFFFF;border:1px solid #DEDCD5;border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;gap:12px;align-items:flex-start">
+              <span style="width:38px;height:38px;border-radius:10px;background:#F0F7F7;border:1px solid #9ECBCF;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;font-weight:700;color:#0B5C64;display:flex;align-items:center;justify-content:center">AZC</span>
+              <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+                <span style="font-size:15.5px;font-weight:600;line-height:1.3">Frontend təcrübəçi (React)</span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.06em;color:#6D7580">AZERCELL · BAKI · HİBRİD</span>
+              </div>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.08em;color:#B23A2F;background:#FAF3F2;border:1px solid #E8C9C4;border-radius:5px;padding:3px 5px">3 GÜN</span>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;padding:4px 7px;border-radius:5px;background:#F5F3EC;color:#4A525C">6 AY</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;padding:4px 7px;border-radius:5px;background:#F5F3EC;color:#4A525C">ÖDƏNİŞLİ · 700 ₼</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;padding:4px 7px;border-radius:5px;background:#F5F3EC;color:#4A525C">3–4-CÜ KURS</span>
+            </div>
+          </div>
+
+          <div style="background:#FFFFFF;border:1px solid #DEDCD5;border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;gap:12px;align-items:flex-start">
+              <span style="width:38px;height:38px;border-radius:10px;background:#FAF3E4;border:1px solid #E4D3AC;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;font-weight:700;color:#8A6B21;display:flex;align-items:center;justify-content:center">KB</span>
+              <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+                <span style="font-size:15.5px;font-weight:600;line-height:1.3">Data analitik təcrübə proqramı</span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.06em;color:#6D7580">KAPITAL BANK · BAKI · OFİS</span>
+              </div>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.08em;color:#6D7580;background:#F5F3EC;border-radius:5px;padding:3px 5px">11 GÜN</span>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;padding:4px 7px;border-radius:5px;background:#F5F3EC;color:#4A525C">3 AY</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;padding:4px 7px;border-radius:5px;background:#F5F3EC;color:#4A525C">SQL · PYTHON</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;padding:4px 7px;border-radius:5px;background:#F5F3EC;color:#4A525C">İŞƏ KEÇİD İMKANI</span>
+            </div>
+          </div>
+
+          <div style="background:#FFFFFF;border:1px solid #DEDCD5;border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;gap:12px;align-items:flex-start">
+              <span style="width:38px;height:38px;border-radius:10px;background:#EDEBE4;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;font-weight:700;color:#4A525C;display:flex;align-items:center;justify-content:center">SOCAR</span>
+              <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+                <span style="font-size:15.5px;font-weight:600;line-height:1.3">Yay təcrübə proqramı — mühəndislik</span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.06em;color:#6D7580">SOCAR · SUMQAYIT · OFİS</span>
+              </div>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.08em;color:#6D7580;background:#F5F3EC;border-radius:5px;padding:3px 5px">24 GÜN</span>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;padding:4px 7px;border-radius:5px;background:#F5F3EC;color:#4A525C">2 AY</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;padding:4px 7px;border-radius:5px;background:#F5F3EC;color:#4A525C">NƏQLİYYAT VAR</span>
+            </div>
+          </div>
+
+          <div style="background:#FFFFFF;border:1px solid #DEDCD5;border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;gap:12px;align-items:flex-start">
+              <span style="width:38px;height:38px;border-radius:10px;background:#EFEFF6;border:1px solid #C3CEE4;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;font-weight:700;color:#2F5A9E;display:flex;align-items:center;justify-content:center">PB</span>
+              <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+                <span style="font-size:15.5px;font-weight:600;line-height:1.3">Marketinq üzrə yarımştat assistent</span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.06em;color:#6D7580">PASHA BANK · BAKI · HİBRİD</span>
+              </div>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.08em;color:#6D7580;background:#F5F3EC;border-radius:5px;padding:3px 5px">30 GÜN</span>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;padding:4px 7px;border-radius:5px;background:#F5F3EC;color:#4A525C">20 SAAT / HƏFTƏ</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;padding:4px 7px;border-radius:5px;background:#F5F3EC;color:#4A525C">CƏDVƏLƏ UYĞUN</span>
+            </div>
+          </div>
+
+          <div style="background:#F0F7F7;border:1px solid #9ECBCF;border-radius:12px;padding:11px 13px;display:flex;gap:10px;align-items:center">
+            <span style="width:20px;height:20px;border-radius:50%;background:#0F7A85;color:#FFF;font-size:11px;display:flex;align-items:center;justify-content:center">i</span>
+            <span style="flex:1;font-size:12px;line-height:1.45;color:#0B5C64">Müraciət yalnız <strong>karyera kimliyi</strong> ilə göndərilir — forum ləqəbin işəgötürənə görünmür.</span>
+          </div>
+        </div>
+
+        <div style="height:80px;border-top:1px solid #E0DDD5;background:#FFFFFF;display:flex;align-items:center;padding:0 8px 14px">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border:1.5px solid #8A9099;border-radius:4px;display:block"></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#8A9099">BU GÜN</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border:1.5px solid #8A9099;border-radius:3px;display:block"></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#8A9099">CƏDVƏL</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border:1.5px solid #8A9099;border-radius:50%;display:block"></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#8A9099">FORUM</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;background:#0F7A85;display:block"></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#0F7A85;font-weight:700">İŞ</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border:1.5px solid #8A9099;border-radius:50% 50% 4px 4px;display:block"></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#8A9099">PROFİL</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 10. PROFILE & PRIVACY ============ -->
+    <div style="display:flex;flex-direction:column;gap:10px;flex:0 0 auto">
+      <sc-if value="{{ showLabels }}" hint-placeholder-val="{{ true }}"><div style="display:flex;align-items:baseline;gap:8px;font-family:ui-monospace,'SF Mono','Segoe UI Mono','Roboto Mono',Menlo,monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#6D7580"><span style="color:#0F7A85">10</span><span>Profil və məxfilik</span></div></sc-if>
+      <div style="width:390px;height:844px;background:#F1F0EC;border-radius:42px;border:1px solid #D6D3CA;box-shadow:0 20px 44px -22px rgba(20,28,36,.4);overflow:hidden;position:relative;display:flex;flex-direction:column">
+        <div style="height:46px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;font-weight:600"><span>13:38</span><span>5G</span></div>
+        <div style="padding:2px 20px 12px;display:flex;align-items:flex-end;justify-content:space-between">
+          <span style="font-size:27px;font-weight:700;letter-spacing:-0.025em">Profil</span>
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;color:#6D7580">TƏNZİMLƏMƏ</span>
+        </div>
+
+        <div style="flex:1;overflow:hidden;padding:0 20px;display:flex;flex-direction:column;gap:9px">
+          <div style="background:#FFFFFF;border:1px solid #DEDCD5;border-radius:16px;padding:16px">
+            <div style="display:flex;gap:13px;align-items:center">
+              <span style="width:48px;height:48px;border-radius:13px;background:#141C24;color:#FFF;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">37</span>
+              <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+                <span style="font-size:17px;font-weight:700;letter-spacing:-0.01em">sakit-pərvanə-37</span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;color:#6D7580">FORUM LƏQƏBİ · 14 GÜNDƏN BİR DƏYİŞİLİR</span>
+              </div>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;padding:6px 8px;border-radius:6px;border:1px solid #C7C4BB">DƏYİŞ</span>
+            </div>
+            <div style="margin-top:13px;display:flex;gap:6px;flex-wrap:wrap">
+              <span style="display:flex;align-items:center;gap:5px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;padding:5px 8px;border-radius:6px;background:#F0F7F7;border:1px solid #9ECBCF;color:#0B5C64"><span style="width:11px;height:11px;border-radius:50%;background:#0F7A85;color:#FFF;font-size:7px;display:flex;align-items:center;justify-content:center">✓</span>E-POÇT DOĞRULANDI</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;padding:5px 8px;border-radius:6px;background:#FAF3E4;border:1px solid #E4D3AC;color:#8A6B21">KART: GÖZLƏYİR</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px;letter-spacing:.06em;padding:5px 8px;border-radius:6px;background:#F5F3EC;border:1px solid #DEDCD5;color:#4A525C">BDU · 2-Cİ KURS</span>
+            </div>
+            <div style="margin-top:14px;padding-top:13px;border-top:1px solid #EDEBE4;display:flex">
+              <span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:14px;font-weight:700">312</span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#6D7580">KARMA</span></span>
+              <span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:14px;font-weight:700">28</span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#6D7580">POST</span></span>
+              <span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:14px;font-weight:700">4.8</span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#6D7580">BAZAR REYTİNQİ</span></span>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#6D7580">Məxfilik</span>
+            <div style="background:#FFFFFF;border:1px solid #DEDCD5;border-radius:14px;overflow:hidden">
+              <div style="padding:13px 14px;display:flex;align-items:center;gap:12px">
+                <span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;font-weight:600">Kursumu profildə göstər</span><span style="font-size:11.5px;color:#6D7580">Yalnız kurs və fakültə, ad yox</span></span>
+                <span style="width:36px;height:20px;border-radius:10px;background:#0F7A85;position:relative;display:block;flex:0 0 auto"><span style="position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:#FFF;display:block"></span></span>
+              </div>
+              <div style="padding:13px 14px;display:flex;align-items:center;gap:12px;border-top:1px solid #EDEBE4">
+                <span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;font-weight:600">Cədvəlimi kursdaşlarla paylaş</span><span style="font-size:11.5px;color:#6D7580">Boş vaxt uyğunlaşdırma üçün</span></span>
+                <span style="width:36px;height:20px;border-radius:10px;background:#DEDCD5;position:relative;display:block;flex:0 0 auto"><span style="position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#FFF;display:block"></span></span>
+              </div>
+              <div style="padding:13px 14px;display:flex;align-items:center;gap:12px;border-top:1px solid #EDEBE4">
+                <span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;font-weight:600">Postlarımda universitet nişanı</span><span style="font-size:11.5px;color:#6D7580">Doğrulanmış nişan göstərilir</span></span>
+                <span style="width:36px;height:20px;border-radius:10px;background:#0F7A85;position:relative;display:block;flex:0 0 auto"><span style="position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:#FFF;display:block"></span></span>
+              </div>
+              <div style="padding:13px 14px;display:flex;align-items:center;gap:12px;border-top:1px solid #EDEBE4">
+                <span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;font-weight:600">Bazar profilimə keçid</span><span style="font-size:11.5px;color:#6D7580">Ləqəbimdən elanlarıma keçid olsun</span></span>
+                <span style="width:36px;height:20px;border-radius:10px;background:#DEDCD5;position:relative;display:block;flex:0 0 auto"><span style="position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#FFF;display:block"></span></span>
+              </div>
+              <div style="padding:13px 14px;display:flex;align-items:center;gap:12px;border-top:1px solid #EDEBE4">
+                <span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;font-weight:600">Axtarışda tapılım</span><span style="font-size:11.5px;color:#6D7580">Ləqəb üzrə axtarış</span></span>
+                <span style="width:36px;height:20px;border-radius:10px;background:#DEDCD5;position:relative;display:block;flex:0 0 auto"><span style="position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#FFF;display:block"></span></span>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#6D7580">Karyera kimliyi · ayrıdır</span>
+            <div style="background:#FFFFFF;border:1px solid #DEDCD5;border-left:3px solid #141C24;border-radius:12px;padding:13px 14px;display:flex;flex-direction:column;gap:9px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="flex:1;font-size:14px;font-weight:600">Aysel Rəhimova · CV yüklənib</span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.08em;color:#141C24;background:#EDEBE4;border-radius:4px;padding:3px 5px">GİZLİ</span>
+              </div>
+              <div style="font-size:12px;line-height:1.5;color:#5C6470">Real adın yalnız müraciət göndərdiyin şirkətə açılır. Forum, bazar və rəylərdə heç vaxt görünmür.</div>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;letter-spacing:.08em;color:#0F7A85;font-weight:700">KARYERA KİMLİYİNİ İDARƏ ET ›</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="height:80px;border-top:1px solid #E0DDD5;background:#FFFFFF;display:flex;align-items:center;padding:0 8px 14px">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border:1.5px solid #8A9099;border-radius:4px;display:block"></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#8A9099">BU GÜN</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border:1.5px solid #8A9099;border-radius:3px;display:block"></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#8A9099">CƏDVƏL</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border:1.5px solid #8A9099;border-radius:50%;display:block"></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#8A9099">FORUM</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border:1.5px solid #8A9099;display:block"></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#8A9099">BAZAR</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px"><span style="width:16px;height:16px;border-radius:50% 50% 4px 4px;background:#0F7A85;display:block"></span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9px;letter-spacing:.06em;color:#0F7A85;font-weight:700">PROFİL</span></div>
+        </div>
+      </div>
+    </div>
+
+   </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showLabels&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Qalereya&quot;},&quot;showCurrentTime&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Qalereya&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      showLabels: this.props.showLabels ?? true,
+      showCurrentTime: this.props.showCurrentTime ?? true
+    };
+  }
+}
+</script>
+</body>
+</html>

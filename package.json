@@ -1,0 +1,12 @@
+{
+  "name": "kiksu",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "mobile": "npm run start --workspace @kiksu/mobile",
+    "typecheck": "tsc -b --pretty",
+    "lint": "eslint .",
+    "test": "vitest run"
+  }
+}
