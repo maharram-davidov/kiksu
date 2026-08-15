@@ -207,6 +207,60 @@ same row moved from avatar 1 to avatar 10 when its handle changed.
 - Bucket boundaries land where intended.
 - `avatar_id` changes when the handle changes.
 
+## Cross-document conflicts resolved
+
+The API Contract Author found two places where `01-schema.sql` and
+`02-identity-spec.md` specified opposite behaviour. Both are resolved in the
+schema; neither was a judgement call left open.
+
+### UUIDv7 vs UUIDv4 — resolved in favour of v4 for anything exposed
+
+The schema minted `util.uuid_v7()` as the default primary key on 61 tables,
+justified by index write amplification on append-heavy tables. The identity
+spec (T11, assertion 8) requires all externally visible identifiers to be
+UUIDv4 and *explicitly fails* v7.
+
+**Security wins, and it is not close.** A v7 id embeds a millisecond
+timestamp, so returning one hands the caller the row's exact creation
+instant. That would undo the 60-second timestamp quantisation the API
+contract applies to visible times — an attacker would simply read the
+publication time out of the post id — and it re-opens creation-order
+inference (join cohort, freshman status).
+
+The rule is now a split, enforced by **invariant 9**:
+
+- `public`, `ref`, `career` → `gen_random_uuid()` (v4). 49 tables changed.
+- `internal`, `identity` → `util.uuid_v7()` retained. These are sealed,
+  never exposed, and are where the append-heavy alias and attribution
+  tables actually live, so the performance argument still gets paid.
+
+### Alias free-list reclaim — not a real conflict, a scope mismatch
+
+The spec mandates a free list (P3, "the rendered ordinal sequence has no
+permanent gaps", Absolute). The schema said numbers are never recycled and
+gaps are intentional. Read closely, the two are about different things:
+
+- The schema is protecting **used** ordinals — ones that appear on committed
+  content. Recycling those would make two people share a label in a cached
+  client. It is right, and those rows never leave `internal.thread_alias`.
+- The spec's free list only reclaims ordinals that were **reserved and
+  expired without ever being used**. Nobody ever saw them, so reclaiming
+  them is invisible.
+
+Both hold simultaneously. `internal.allocate_thread_alias` now takes the
+post row lock *first*, then scans for the smallest ordinal at or below the
+high-water mark held by nobody, and only extends the high-water mark when no
+gap exists. Taking the lock before the scan is what stops two allocators
+choosing the same gap.
+
+Why it matters: a permanent gap is itself a privacy signal. A thread whose
+last alias is 47 with six posters announces 41 people who opened the composer
+and thought better of it.
+
+Verified functionally: four participants take 1–4; the holder of 3 abandons;
+the next participant receives **3**, not 5; the sequence stays gapless; and a
+genuinely new participant then correctly receives 5.
+
 ## Open questions
 
 1. ~~Are pseudonymous profiles publicly viewable by handle?~~ **RESOLVED.**

@@ -3,6 +3,10 @@
   "private": true,
   "workspaces": ["apps/*", "packages/*"],
   "engines": { "node": ">=20" },
+  "overrides": {
+    "react": "19.1.0",
+    "react-native": "0.81.5"
+  },
   "scripts": {
     "mobile": "npm run start --workspace @kiksu/mobile",
     "typecheck": "tsc -b --pretty",

@@ -64,8 +64,17 @@
 --          plus identity.app_user_link UNIQUE on both columns.
 --
 -- CONVENTIONS
---   * Every id is uuid v7 (util.uuid_v7) so that primary keys are
---     time-ordered and hot append tables do not shred their btrees.
+--   * ID VERSION IS A SECURITY BOUNDARY, not a performance preference:
+--       - EXPOSED schemas (public, ref, career) use UUIDv4 from
+--         gen_random_uuid(). A v7 id embeds a millisecond timestamp, so
+--         returning one leaks the row's exact creation instant to anyone
+--         holding it. That defeats the coarse-time bucketing the API
+--         applies to visible timestamps, and re-opens threat T11
+--         (creation-order -> join cohort -> freshman status).
+--       - SEALED schemas (internal, identity) keep util.uuid_v7(). They
+--         are never exposed, and they carry the append-heavy alias and
+--         attribution tables where btree locality genuinely matters.
+--     Enforced by invariant 9 in scripts/schema-invariants.sql.
 --   * All wall-clock instants are timestamptz. Academic calendar dates
 --     are date. Class meeting times are `time` interpreted in
 --     ref.university.timezone.
@@ -165,10 +174,14 @@ grant usage on schema moderation to kiksu_moderator, service_role;
 -- =====================================================================
 
 -- --------------------------------------------------------------------
--- 03.1 UUID v7
--- Postgres 17 has no native uuidv7 (that lands in 18). Time-ordered keys
--- matter here: post, comment, chat_message, notification and vote are
--- append-heavy and random v4 keys cause index write amplification.
+-- 03.1 UUID v7 — SEALED SCHEMAS ONLY
+-- Postgres 17 has no native uuidv7 (that lands in 18).
+--
+-- Time-ordered keys reduce index write amplification on append-heavy
+-- tables, which is why this exists. But a v7 id is a timestamp anyone can
+-- read, so it must NEVER back a row whose id is returned to a client. Use
+-- it only in internal.* and identity.*; everything in public/ref/career
+-- uses gen_random_uuid(). See the conventions note above.
 -- --------------------------------------------------------------------
 create or replace function util.uuid_v7() returns uuid
 language sql volatile parallel safe as $$
@@ -382,7 +395,7 @@ comment on function util.locale_text(public.locale_code) is
 -- Screen 01 renders: code badge (BDU), full name, city, selection state.
 -- --------------------------------------------------------------------
 create table ref.university (
-  id                      uuid primary key default util.uuid_v7(),
+  id                      uuid primary key default gen_random_uuid(),
   code                    text not null,                    -- 'BDU', 'ADA', 'UNEC', 'BMU'
   name_az                 text not null,                    -- 'Bakı Dövlət Universiteti'
   name_ru                 text,
@@ -426,7 +439,7 @@ comment on column ref.university.k_anon_min is
 -- Email domains accepted for the `university_email` route.
 -- Design: 'ad.soyad@std.bsu.edu.az'.
 create table ref.university_email_domain (
-  id              uuid primary key default util.uuid_v7(),
+  id              uuid primary key default gen_random_uuid(),
   university_id   uuid not null references ref.university(id) on delete cascade,
   domain          extensions.citext not null,               -- 'std.bsu.edu.az'
   audience        text not null default 'student' check (audience in ('student', 'staff', 'alumni')),
@@ -466,7 +479,7 @@ create unique index university_route_one_recommended_idx
 --   programme  the actual degree track  -> the k-anonymity risk surface
 -- --------------------------------------------------------------------
 create table ref.faculty (
-  id              uuid primary key default util.uuid_v7(),
+  id              uuid primary key default gen_random_uuid(),
   university_id   uuid not null references ref.university(id) on delete cascade,
   code            text,
   name_az         text not null,
@@ -479,7 +492,7 @@ create table ref.faculty (
 create index faculty_university_idx on ref.faculty (university_id) where is_active;
 
 create table ref.department (
-  id              uuid primary key default util.uuid_v7(),
+  id              uuid primary key default gen_random_uuid(),
   university_id   uuid not null references ref.university(id) on delete cascade,
   faculty_id      uuid references ref.faculty(id) on delete set null,
   code            text,
@@ -493,7 +506,7 @@ create table ref.department (
 create index department_faculty_idx on ref.department (faculty_id);
 
 create table ref.program (
-  id              uuid primary key default util.uuid_v7(),
+  id              uuid primary key default gen_random_uuid(),
   university_id   uuid not null references ref.university(id) on delete cascade,
   faculty_id      uuid not null references ref.faculty(id) on delete cascade,
   code            text,
@@ -517,7 +530,7 @@ comment on table ref.program is
 -- Design: "2025/26 · PAYIZ SEMESTRİ", review keys "2024/25 YAZ".
 -- --------------------------------------------------------------------
 create table ref.academic_year (
-  id              uuid primary key default util.uuid_v7(),
+  id              uuid primary key default gen_random_uuid(),
   university_id   uuid not null references ref.university(id) on delete cascade,
   label           text not null,                            -- '2025/26'
   starts_on       date not null,
@@ -527,7 +540,7 @@ create table ref.academic_year (
 );
 
 create table ref.term (
-  id                 uuid primary key default util.uuid_v7(),
+  id                 uuid primary key default gen_random_uuid(),
   university_id      uuid not null references ref.university(id) on delete cascade,
   academic_year_id   uuid not null references ref.academic_year(id) on delete cascade,
   season             public.term_season not null,
@@ -550,7 +563,7 @@ create index term_university_dates_idx on ref.term (university_id, starts_on des
 -- Design: "II KORPUS 312", "BAŞ KORPUS 205", "L-3".
 -- --------------------------------------------------------------------
 create table ref.campus (
-  id              uuid primary key default util.uuid_v7(),
+  id              uuid primary key default gen_random_uuid(),
   university_id   uuid not null references ref.university(id) on delete cascade,
   name_az         text not null,                            -- 'Baş korpus', 'II korpus'
   name_ru         text,
@@ -562,7 +575,7 @@ create table ref.campus (
 );
 
 create table ref.room (
-  id              uuid primary key default util.uuid_v7(),
+  id              uuid primary key default gen_random_uuid(),
   campus_id       uuid not null references ref.campus(id) on delete cascade,
   code            text not null,                            -- '312', 'L-3'
   floor           smallint,
@@ -580,7 +593,7 @@ create index room_campus_idx on ref.room (campus_id);
 -- Design: "dos. Nigar Əliyeva", initials "NƏ", "İNFORMATİKA KAFEDRASI · BDU".
 -- --------------------------------------------------------------------
 create table ref.instructor (
-  id              uuid primary key default util.uuid_v7(),
+  id              uuid primary key default gen_random_uuid(),
   university_id   uuid not null references ref.university(id) on delete cascade,
   department_id   uuid references ref.department(id) on delete set null,
   title_prefix    text,                                     -- 'dos.', 'prof.', 'b/m.'
@@ -611,7 +624,7 @@ create index instructor_trgm_idx       on ref.instructor using gin (name_folded 
 -- Screen 03: a week grid of 80-minute blocks, Mon–Fri, 09:00–17:00.
 -- --------------------------------------------------------------------
 create table ref.course (
-  id              uuid primary key default util.uuid_v7(),
+  id              uuid primary key default gen_random_uuid(),
   university_id   uuid not null references ref.university(id) on delete cascade,
   department_id   uuid references ref.department(id) on delete set null,
   code            text not null,                            -- 'CS 214'
@@ -641,7 +654,7 @@ create index course_code_trgm_idx  on ref.course using gin (code_folded extensio
 -- A concrete offering of a course in one term. Enrollment, absence,
 -- timetable and coursework all hang off the SECTION, not the course.
 create table ref.course_section (
-  id                 uuid primary key default util.uuid_v7(),
+  id                 uuid primary key default gen_random_uuid(),
   course_id          uuid not null references ref.course(id) on delete cascade,
   term_id            uuid not null references ref.term(id) on delete cascade,
   section_code       text not null default '1',             -- 'A', '1', 'lab-3'
@@ -672,7 +685,7 @@ create index section_instructor_instructor_idx on ref.section_instructor (instru
 -- The timetable grid itself. weekday follows ISO-8601: 1 = Monday.
 -- Design shows B.E Ç.A Ç C.A C = 1..5.
 create table ref.section_meeting (
-  id              uuid primary key default util.uuid_v7(),
+  id              uuid primary key default gen_random_uuid(),
   section_id      uuid not null references ref.course_section(id) on delete cascade,
   weekday         smallint not null check (weekday between 1 and 7),
   starts_at       time not null,                            -- 14:05, local to university timezone
@@ -700,7 +713,7 @@ create index section_meeting_room_idx    on ref.section_meeting (room_id, weekda
 
 -- One-off changes: cancelled class, moved room, moved time.
 create table ref.section_meeting_exception (
-  id              uuid primary key default util.uuid_v7(),
+  id              uuid primary key default gen_random_uuid(),
   meeting_id      uuid not null references ref.section_meeting(id) on delete cascade,
   on_date         date not null,
   status          text not null check (status in ('cancelled', 'moved', 'extra')),
@@ -723,7 +736,7 @@ create index section_meeting_exception_date_idx on ref.section_meeting_exception
 --   policy -> ref.university.default_absence_limit
 -- --------------------------------------------------------------------
 create table ref.absence_policy (
-  id                 uuid primary key default util.uuid_v7(),
+  id                 uuid primary key default gen_random_uuid(),
   university_id      uuid not null references ref.university(id) on delete cascade,
   faculty_id         uuid references ref.faculty(id) on delete cascade,
   course_id          uuid references ref.course(id) on delete cascade,
@@ -788,7 +801,7 @@ $$;
 -- 05.8 Grade scale (GPA support)
 -- --------------------------------------------------------------------
 create table ref.grade_scale (
-  id              uuid primary key default util.uuid_v7(),
+  id              uuid primary key default gen_random_uuid(),
   university_id   uuid not null references ref.university(id) on delete cascade,
   letter          text not null,                            -- 'A', 'B', ...
   min_score       numeric(5, 2) not null,
@@ -820,7 +833,7 @@ create table ref.review_tag (
 -- ('sakit-pərvanə-37'). The assignment ALGORITHM belongs to the Identity
 -- Architect; this table is the vocabulary it draws from.
 create table ref.handle_word (
-  id              uuid primary key default util.uuid_v7(),
+  id              uuid primary key default gen_random_uuid(),
   kind            text not null check (kind in ('adjective', 'noun')),
   word            text not null,                            -- 'sakit' / 'pərvanə'
   weight          smallint not null default 1 check (weight > 0),
@@ -833,7 +846,7 @@ create table ref.handle_word (
 create index handle_word_pick_idx on ref.handle_word (kind) where is_active;
 
 create table ref.marketplace_category (
-  id              uuid primary key default util.uuid_v7(),
+  id              uuid primary key default gen_random_uuid(),
   parent_id       uuid references ref.marketplace_category(id) on delete cascade,
   key             text not null unique,                     -- 'textbooks_notes'
   name_az         text not null,                            -- 'Dərslik və qeydlər'
@@ -849,7 +862,7 @@ create table ref.marketplace_category (
 create index marketplace_category_parent_idx on ref.marketplace_category (parent_id, display_order);
 
 create table ref.sector (
-  id              uuid primary key default util.uuid_v7(),
+  id              uuid primary key default gen_random_uuid(),
   key             text not null unique,                     -- 'it'
   name_az         text not null,
   name_ru         text,
@@ -1295,7 +1308,7 @@ comment on view identity.auth_email_leak_check is
 -- =====================================================================
 
 create table public.app_user (
-  id                        uuid primary key default util.uuid_v7(),
+  id                        uuid primary key default gen_random_uuid(),
 
   -- Auth anchor. Safe ONLY because auth.users holds a synthetic address
   -- (see the auth anchor rule in section 06).
@@ -1593,7 +1606,7 @@ comment on view public.app_user_card is
 -- =====================================================================
 
 create table public.enrollment (
-  id                 uuid primary key default util.uuid_v7(),
+  id                 uuid primary key default gen_random_uuid(),
   app_user_id        uuid not null references public.app_user(id) on delete cascade,
   section_id         uuid not null references ref.course_section(id) on delete cascade,
   term_id            uuid not null references ref.term(id) on delete cascade,
@@ -1639,7 +1652,7 @@ create trigger enrollment_touch
 -- room for an official import or an instructor feed later.
 -- --------------------------------------------------------------------
 create table public.absence (
-  id              uuid primary key default util.uuid_v7(),
+  id              uuid primary key default gen_random_uuid(),
   enrollment_id   uuid not null references public.enrollment(id) on delete cascade,
   meeting_id      uuid references ref.section_meeting(id) on delete set null,
   occurred_on     date not null,
@@ -1661,7 +1674,7 @@ create index absence_enrollment_idx on public.absence (enrollment_id, occurred_o
 -- Deadlines can be official, crowdsourced by classmates, or personal.
 -- --------------------------------------------------------------------
 create table public.coursework (
-  id                 uuid primary key default util.uuid_v7(),
+  id                 uuid primary key default gen_random_uuid(),
   section_id         uuid not null references ref.course_section(id) on delete cascade,
   kind               public.coursework_kind not null default 'homework',
   title              text not null,                          -- 'SQL laboratoriya #4'
@@ -1699,7 +1712,7 @@ create index coursework_state_remind_idx on public.coursework_state (remind_at)
 -- reputational act, and the design shows no anonymity affordance for it.
 -- --------------------------------------------------------------------
 create table public.course_material (
-  id                 uuid primary key default util.uuid_v7(),
+  id                 uuid primary key default gen_random_uuid(),
   course_id          uuid not null references ref.course(id) on delete cascade,
   section_id         uuid references ref.course_section(id) on delete set null,
   uploader_id        uuid references public.app_user(id) on delete set null,
@@ -1745,7 +1758,7 @@ comment on column public.course_material.copyright_flagged is
 -- =====================================================================
 
 create table public.board (
-  id                 uuid primary key default util.uuid_v7(),
+  id                 uuid primary key default gen_random_uuid(),
   scope              public.board_scope not null default 'university',
   university_id      uuid references ref.university(id) on delete cascade,
   faculty_id         uuid references ref.faculty(id) on delete cascade,
@@ -1809,7 +1822,7 @@ create index board_follow_user_idx on public.board_follow (app_user_id) where no
 -- 09.1 Post
 -- --------------------------------------------------------------------
 create table public.post (
-  id                    uuid primary key default util.uuid_v7(),
+  id                    uuid primary key default gen_random_uuid(),
   board_id              uuid not null references public.board(id) on delete cascade,
 
   -- Denormalised from board so the campus feed does not join. Kept in
@@ -1911,10 +1924,21 @@ comment on table internal.post_author is
 -- the same number.
 --
 -- The composer needs to show "ANONİM 5 KİMİ YAZ" BEFORE the write, so
--- allocation supports a reservation with a TTL. Expired reservations are
--- deleted but their numbers are NOT recycled: a recycled number would
--- let an observer infer that a participant left, and would make two
--- different people share one label in a cached client.
+-- allocation supports a reservation with a TTL.
+--
+-- RECLAIM RULE (reconciles identity-spec P3 with the concern below):
+--   * An ordinal that was USED — i.e. it appears on committed content — is
+--     never reused. Recycling one would let an observer infer a participant
+--     left, and would make two people share one label in a cached client.
+--     Those rows stay in this table forever, so they are never reclaimable.
+--   * An ordinal that was RESERVED and expired WITHOUT ever being used was
+--     never rendered to anyone, so reclaiming it is invisible and safe.
+--
+-- Reclaiming the second kind is required, not optional: identity-spec P3
+-- ("the rendered sequence has no permanent gaps") is Absolute, because a
+-- permanent gap is itself a privacy signal — it says someone opened the
+-- composer and thought better of it. A thread whose last alias is 47 with
+-- six posters would announce 41 people who nearly spoke.
 -- --------------------------------------------------------------------
 create table internal.thread_alias (
   post_id         uuid not null references public.post(id) on delete cascade,
@@ -1933,7 +1957,7 @@ create index thread_alias_expiry_idx on internal.thread_alias (reserved_until)
   where state = 'reserved';
 
 comment on table internal.thread_alias is
-  'LAYER 3. Alias numbers are per-thread and never reused. Gaps in the numbering are expected and intentional.';
+  'LAYER 3. Per-thread ordinals. USED numbers are never reused. Numbers from reservations that expired unused ARE reclaimed, because a permanent gap signals that someone opened the composer and did not post (identity-spec P3, Absolute).';
 
 -- Allocate (or return the existing) alias for a participant in a thread.
 -- Idempotent: calling it twice for the same (post, user) returns the same
@@ -1947,21 +1971,41 @@ create or replace function internal.allocate_thread_alias(
 language plpgsql security definer set search_path = internal, public, pg_catalog, pg_temp as $$
 declare
   v_alias integer;
+  v_high  integer;
 begin
   select alias_number into v_alias
     from internal.thread_alias
    where post_id = p_post_id and app_user_id = p_app_user_id;
 
   if v_alias is null then
-    -- The UPDATE takes a row lock on the post; concurrent allocators
-    -- serialise behind it. This is the whole race protection.
-    update public.post
-       set alias_high_water = alias_high_water + 1
+    -- Take the row lock BEFORE scanning for a reclaimable ordinal.
+    -- Scanning first would let two concurrent allocators pick the same
+    -- gap and collide on thread_alias_number_uniq. The lock is held to
+    -- end of transaction, so the scan below is serialised.
+    select alias_high_water into v_high
+      from public.post
      where id = p_post_id
-     returning alias_high_water into v_alias;
+       for update;
+
+    if v_high is null then
+      raise exception 'post % does not exist', p_post_id using errcode = 'foreign_key_violation';
+    end if;
+
+    -- Smallest reclaimable ordinal: at or below the high-water mark and
+    -- held by nobody. Only an expired-unused reservation can produce one,
+    -- because used aliases never leave this table. See the RECLAIM RULE
+    -- above; this is what keeps the rendered sequence gapless (P3).
+    select g into v_alias
+      from generate_series(1, v_high) g
+     where not exists (
+             select 1 from internal.thread_alias ta
+              where ta.post_id = p_post_id and ta.alias_number = g)
+     order by g
+     limit 1;
 
     if v_alias is null then
-      raise exception 'post % does not exist', p_post_id using errcode = 'foreign_key_violation';
+      v_alias := v_high + 1;
+      update public.post set alias_high_water = v_alias where id = p_post_id;
     end if;
 
     insert into internal.thread_alias (post_id, app_user_id, alias_number, state, reserved_until, first_used_at)
@@ -1992,7 +2036,7 @@ comment on function internal.allocate_thread_alias(uuid, uuid, interval, boolean
 -- gives threaded ordering from a plain btree and no recursive CTE.
 -- --------------------------------------------------------------------
 create table public.post_comment (
-  id                  uuid primary key default util.uuid_v7(),
+  id                  uuid primary key default gen_random_uuid(),
   post_id             uuid not null references public.post(id) on delete cascade,
   parent_id           uuid references public.post_comment(id) on delete cascade,
 
@@ -2074,7 +2118,7 @@ create table public.poll (
 );
 
 create table public.poll_option (
-  id            uuid primary key default util.uuid_v7(),
+  id            uuid primary key default gen_random_uuid(),
   post_id       uuid not null references public.poll(post_id) on delete cascade,
   position      smallint not null,
   label         text not null,
@@ -2095,7 +2139,7 @@ create table public.poll_vote (
 -- 09.6 Attachments and saves
 -- --------------------------------------------------------------------
 create table public.post_attachment (
-  id            uuid primary key default util.uuid_v7(),
+  id            uuid primary key default gen_random_uuid(),
   post_id       uuid not null references public.post(id) on delete cascade,
   position      smallint not null default 0,
   storage_path  text not null,
@@ -2153,7 +2197,7 @@ comment on table internal.view_delta is
 -- =====================================================================
 
 create table public.review (
-  id                    uuid primary key default util.uuid_v7(),
+  id                    uuid primary key default gen_random_uuid(),
 
   -- The key. All three parts are required: a review of a professor that
   -- does not say which course and which semester is not actionable, and
@@ -2353,7 +2397,7 @@ create table public.review_helpful (
 -- =====================================================================
 
 create table public.listing (
-  id                 uuid primary key default util.uuid_v7(),
+  id                 uuid primary key default gen_random_uuid(),
   seller_id          uuid not null references public.app_user(id) on delete cascade,
   university_id      uuid not null references ref.university(id) on delete cascade,
   category_id        uuid not null references ref.marketplace_category(id) on delete restrict,
@@ -2410,7 +2454,7 @@ create index listing_seller_idx     on public.listing (seller_id, published_at d
 create index listing_course_idx     on public.listing (related_course_id) where related_course_id is not null;
 
 create table public.listing_image (
-  id            uuid primary key default util.uuid_v7(),
+  id            uuid primary key default gen_random_uuid(),
   listing_id    uuid not null references public.listing(id) on delete cascade,
   position      smallint not null default 0,
   storage_path  text not null,
@@ -2434,7 +2478,7 @@ create index listing_save_user_idx on public.listing_save (app_user_id, created_
 -- 11.1 Deals and trade ratings — the source of "12 SÖVDƏLƏŞMƏ" and "4.8"
 -- --------------------------------------------------------------------
 create table public.deal (
-  id                 uuid primary key default util.uuid_v7(),
+  id                 uuid primary key default gen_random_uuid(),
   listing_id         uuid not null references public.listing(id) on delete restrict,
   seller_id          uuid not null references public.app_user(id) on delete restrict,
   buyer_id           uuid not null references public.app_user(id) on delete restrict,
@@ -2455,7 +2499,7 @@ create index deal_seller_idx on public.deal (seller_id, completed_at desc) where
 create index deal_buyer_idx  on public.deal (buyer_id, created_at desc);
 
 create table public.trade_rating (
-  id            uuid primary key default util.uuid_v7(),
+  id            uuid primary key default gen_random_uuid(),
   deal_id       uuid not null references public.deal(id) on delete cascade,
   rater_id      uuid not null references public.app_user(id) on delete cascade,
   ratee_id      uuid not null references public.app_user(id) on delete cascade,
@@ -2472,7 +2516,7 @@ create index trade_rating_ratee_idx on public.trade_rating (ratee_id, created_at
 -- 11.2 Chat — "Satıcıya yaz"
 -- --------------------------------------------------------------------
 create table public.conversation (
-  id                 uuid primary key default util.uuid_v7(),
+  id                 uuid primary key default gen_random_uuid(),
   kind               public.conversation_kind not null default 'listing',
   listing_id         uuid references public.listing(id) on delete set null,
   deal_id            uuid references public.deal(id) on delete set null,
@@ -2503,7 +2547,7 @@ create index conversation_participant_user_idx
   on public.conversation_participant (app_user_id) where left_at is null;
 
 create table public.chat_message (
-  id               uuid primary key default util.uuid_v7(),
+  id               uuid primary key default gen_random_uuid(),
   conversation_id  uuid not null references public.conversation(id) on delete cascade,
   sender_id        uuid not null references public.app_user(id) on delete cascade,
   kind             public.chat_message_kind not null default 'text',
@@ -2547,7 +2591,7 @@ create index seller_inquiry_seller_idx on internal.seller_inquiry (seller_id, fi
 -- =====================================================================
 
 create table public.employer (
-  id                 uuid primary key default util.uuid_v7(),
+  id                 uuid primary key default gen_random_uuid(),
   slug               text not null unique,
   name               text not null,                          -- 'Azercell', 'Kapital Bank'
   sector_id          uuid references ref.sector(id) on delete set null,
@@ -2569,7 +2613,7 @@ create index employer_name_trgm_idx on public.employer using gin (name_folded ex
 -- account is either an app_user or a recruiter, never both — see the
 -- guard trigger in section 18.
 create table public.employer_recruiter (
-  id            uuid primary key default util.uuid_v7(),
+  id            uuid primary key default gen_random_uuid(),
   employer_id   uuid not null references public.employer(id) on delete cascade,
   auth_user_id  uuid not null references auth.users(id) on delete cascade,
   full_name     text not null,
@@ -2581,7 +2625,7 @@ create table public.employer_recruiter (
 );
 
 create table public.vacancy (
-  id                   uuid primary key default util.uuid_v7(),
+  id                   uuid primary key default gen_random_uuid(),
   employer_id          uuid not null references public.employer(id) on delete cascade,
   posted_by            uuid references public.employer_recruiter(id) on delete set null,
 
@@ -2675,7 +2719,7 @@ create index vacancy_save_user_idx on public.vacancy_save (app_user_id, created_
 -- =====================================================================
 
 create table career.career_profile (
-  id                    uuid primary key default util.uuid_v7(),
+  id                    uuid primary key default gen_random_uuid(),
   subject_key           bytea not null,
   key_version           smallint not null default 1,
 
@@ -2717,7 +2761,7 @@ comment on column career.career_profile.subject_key is
   'HMAC(auth uid) under pepper_career. MUST use a different pepper AND a different domain string from identity.subject.subject_key, otherwise the two silos join on equality.';
 
 create table career.career_document (
-  id                 uuid primary key default util.uuid_v7(),
+  id                 uuid primary key default gen_random_uuid(),
   career_profile_id  uuid not null references career.career_profile(id) on delete cascade,
   kind               career.document_kind not null default 'cv',
   storage_path       text not null,                          -- private bucket, signed URLs only
@@ -2734,7 +2778,7 @@ alter table career.career_profile
   foreign key (cv_document_id) references career.career_document(id) on delete set null;
 
 create table career.application (
-  id                 uuid primary key default util.uuid_v7(),
+  id                 uuid primary key default gen_random_uuid(),
   career_profile_id  uuid not null references career.career_profile(id) on delete cascade,
   -- FK to a NON-identity public table. Permitted by the guard: a vacancy
   -- is company data, not user data.
@@ -2756,7 +2800,7 @@ comment on column career.application.vacancy_id is
   'Plain uuid: public.vacancy lives in a schema the guard forbids career from referencing. Integrity is maintained by the career service. Trade-off documented in 01-schema-notes.md.';
 
 create table career.application_event (
-  id             uuid primary key default util.uuid_v7(),
+  id             uuid primary key default gen_random_uuid(),
   application_id uuid not null references career.application(id) on delete cascade,
   state          career.application_state not null,
   actor          text not null check (actor in ('applicant', 'employer', 'system')),
@@ -2773,7 +2817,7 @@ create index application_event_app_idx on career.application_event (application_
 -- =====================================================================
 
 create table public.club (
-  id                 uuid primary key default util.uuid_v7(),
+  id                 uuid primary key default gen_random_uuid(),
   university_id      uuid not null references ref.university(id) on delete cascade,
   slug               text not null,
   name               text not null,
@@ -2803,7 +2847,7 @@ alter table public.board
   add constraint board_club_fk foreign key (club_id) references public.club(id) on delete cascade;
 
 create table public.campus_event (
-  id                 uuid primary key default util.uuid_v7(),
+  id                 uuid primary key default gen_random_uuid(),
   university_id      uuid references ref.university(id) on delete cascade,
   club_id            uuid references public.club(id) on delete set null,
   employer_id        uuid references public.employer(id) on delete set null,
@@ -2858,7 +2902,7 @@ create index event_rsvp_user_idx on public.event_rsvp (app_user_id, created_at d
 -- content types, one reporting UI); integrity is checked in the server
 -- layer and by a nightly orphan sweep.
 create table public.report (
-  id             uuid primary key default util.uuid_v7(),
+  id             uuid primary key default gen_random_uuid(),
   reporter_id    uuid not null references public.app_user(id) on delete cascade,
   target_type    public.report_target_type not null,
   target_id      uuid not null,
@@ -2945,7 +2989,7 @@ create table moderation.appeal (
 -- moderation.action so that "is this user muted right now" is one
 -- indexed lookup instead of an interval calculation over a history.
 create table public.user_sanction (
-  id             uuid primary key default util.uuid_v7(),
+  id             uuid primary key default gen_random_uuid(),
   app_user_id    uuid not null references public.app_user(id) on delete cascade,
   kind           text not null check (kind in ('mute', 'suspend', 'ban', 'shadowban', 'listing_ban', 'review_ban')),
   scope_board_id uuid references public.board(id) on delete cascade,
@@ -2967,7 +3011,7 @@ create index user_sanction_active_idx on public.user_sanction (app_user_id, kind
 -- =====================================================================
 
 create table public.notification (
-  id             uuid primary key default util.uuid_v7(),
+  id             uuid primary key default gen_random_uuid(),
   recipient_id   uuid not null references public.app_user(id) on delete cascade,
   kind_key       text not null references ref.notification_kind(key),
   entity_type    text,
@@ -2999,7 +3043,7 @@ create table public.notification_preference (
 );
 
 create table public.device_token (
-  id             uuid primary key default util.uuid_v7(),
+  id             uuid primary key default gen_random_uuid(),
   app_user_id    uuid not null references public.app_user(id) on delete cascade,
   platform       text not null check (platform in ('ios', 'android')),
   push_token     text not null,

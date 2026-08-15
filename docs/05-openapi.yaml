@@ -1,0 +1,4370 @@
+openapi: 3.1.0
+
+info:
+  title: Kiksu API — Phase 1 spine
+  version: "1.0.0"
+  summary: Onboarding, verification, session, timetable, forum and reviews for Kiksu.
+  description: |
+    Server-layer HTTP contract for Kiksu, the anonymous app for university students in
+    Azerbaijan.
+
+    **Read `docs/05-api-conventions.md` first.** It is binding on every operation here:
+    versioning and app-store rollout (§1), the JWT claim allowlist and the `user_metadata`
+    trap (§2), the closed error code set and the deliberately uniform codes (§3), keyset
+    cursors (§4), rate limits (§5), idempotency (§6), and — most importantly — §8, the
+    field-by-field prohibition on any response that links two identity layers.
+
+    **Scope.** Phase 1 only: onboarding and verification (all three routes), session,
+    profile and privacy, timetable (catalogue, sections, week grid, attendance, deadlines,
+    GPA), forum (boards, feeds, posts, comments, votes, polls, alias preview), and reviews
+    (professor and course profiles, review list, write review, contribution wall).
+    Marketplace, vacancies, careers, events and clubs are Phase 2/3 and are deliberately
+    absent. There are **zero** career-layer fields anywhere in this document, by
+    `02-identity-spec.md` assertion 3.
+
+    **Servability.** Every response field traces to a column, a view or a documented server
+    computation in `docs/01-schema.sql`. Fields that are computed rather than stored say so
+    in their description.
+
+    **The three rules that shape most of these schemas.**
+    1. Forum content carries an *alias*, never an author. `public.post` and
+       `public.post_comment` have no author column by design; authorship lives in
+       `internal.*`, which no read path touches.
+    2. A read of another user returns `PublicProfile` — the six columns of
+       `public.public_profiles` — and nothing else. No karma, no `created_at`, no counts,
+       no card-review state.
+    3. Anonymous content carries a coarse time bucket, never a timestamp.
+  contact:
+    name: Kiksu API
+    url: https://docs.kiksu.az/api
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Kiksu-Proprietary
+
+servers:
+  - url: https://api.kiksu.az/v1
+    description: Production (eu-central-1, Frankfurt)
+  - url: https://staging.api.kiksu.az/v1
+    description: Staging
+
+security:
+  - supabaseJwt: []
+
+tags:
+  - name: meta
+    description: Cold-start configuration. Unauthenticated.
+  - name: onboarding
+    description: University list and the three verification routes.
+  - name: session
+    description: Own account, privacy settings, handle.
+  - name: profiles
+    description: Reading another user. One shape only.
+  - name: catalogue
+    description: Courses, sections and instructors from `ref`.
+  - name: timetable
+    description: Enrollment, the week grid, attendance, deadlines, GPA.
+  - name: forum
+    description: Boards, feeds, posts, comments, votes, polls, alias preview.
+  - name: reviews
+    description: Professor and course profiles, the review list, the contribution wall.
+  - name: safety
+    description: Reports and blocks.
+
+paths:
+
+  # ==================================================================
+  # META
+  # ==================================================================
+
+  /bootstrap:
+    get:
+      tags: [meta]
+      operationId: getBootstrap
+      summary: Cold-start configuration
+      description: |
+        Called on every cold start, before rendering anything that depends on server
+        behaviour. Unauthenticated, cacheable for 300 s.
+
+        This endpoint is how a store-distributed app that cannot be force-upgraded still
+        gets told it is too old (`min_supported_client`), and how server-owned copy reaches
+        it — including the verification SLA labels, which must be able to stop claiming
+        `2 dəqiqə` within two hours of the measured p95 breaching it
+        (`02-identity-spec.md` §2.1 honesty rule).
+
+        If this call fails the client proceeds with bundled defaults. A bootstrap outage
+        must never brick the app.
+      security: []
+      responses:
+        "200":
+          description: Configuration.
+          headers:
+            Cache-Control:
+              schema: { type: string, examples: ["public, max-age=300"] }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Bootstrap" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  # ==================================================================
+  # ONBOARDING AND VERIFICATION
+  # ==================================================================
+
+  /universities:
+    get:
+      tags: [onboarding]
+      operationId: listUniversities
+      summary: Universities offered in the picker
+      description: |
+        Screen 01. Unauthenticated — this runs before any account exists.
+
+        A university appears here only when it is active *and* its email-delivery probe is
+        green (`02-identity-spec.md` §2.1: a university cannot be enabled in the picker
+        until its probe is green). Ordering is `onboarding_order`.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: Universities.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/University" }
+              examples:
+                launch:
+                  summary: The four launch universities
+                  value:
+                    items:
+                      - id: "0193f2c1-9f4e-7a11-bd3c-6a2f0f1e77aa"
+                        code: "BDU"
+                        name: "Bakı Dövlət Universiteti"
+                        city: "Bakı"
+                        brand_color: "#0F7A85"
+                        logo_url: "https://cdn.kiksu.az/u/9f2c1a4b8e0d.png"
+                        email_sample_pattern: "ad.soyad@std.bsu.edu.az"
+                      - id: "0193f2c1-a0b2-7c44-8e21-4f7a1d2b3c55"
+                        code: "ADA"
+                        name: "ADA Universiteti"
+                        city: "Bakı"
+                        brand_color: "#1B3A6B"
+                        logo_url: "https://cdn.kiksu.az/u/3b7e9c0f1a2d.png"
+                        email_sample_pattern: "ad.soyad@ada.edu.az"
+                      - id: "0193f2c1-b1c3-7d55-9f32-5a8b2e3c4d66"
+                        code: "UNEC"
+                        name: "Azərbaycan Dövlət İqtisad Universiteti"
+                        city: "Bakı"
+                        brand_color: "#0F7A85"
+                        logo_url: "https://cdn.kiksu.az/u/7c1d2e3f4a5b.png"
+                        email_sample_pattern: "ad.soyad@unec.edu.az"
+                      - id: "0193f2c1-c2d4-7e66-a043-6b9c3f4d5e77"
+                        code: "BMU"
+                        name: "Bakı Mühəndislik Universiteti"
+                        city: "Xırdalan"
+                        brand_color: "#B23A2F"
+                        logo_url: "https://cdn.kiksu.az/u/5e6f7a8b9c0d.png"
+                        email_sample_pattern: "ad.soyad@std.bmu.edu.az"
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /universities/{university_id}/verification-routes:
+    get:
+      tags: [onboarding]
+      operationId: listVerificationRoutes
+      summary: Verification routes offered by a university, with server-authored SLA copy
+      description: |
+        Screen 01→02. `sla_label` is **server-authored and flag-gated**, not a bundled
+        string: when the measured p95 for this university's mail domain exceeds 120 s for
+        two consecutive hours, this endpoint stops returning `2 dəqiqə` and returns the
+        measured value instead. Same mechanism for the card route's `24 saata qədər`.
+        See `05-api-conventions.md` §1.6.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/UniversityIdPath"
+        - $ref: "#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: Routes, in display order.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/VerificationRoute" }
+              examples:
+                bdu:
+                  summary: BDU — all three routes
+                  value:
+                    items:
+                      - method: "university_email"
+                        is_recommended: true
+                        sla_label: "2 dəqiqə"
+                        note: "Universitet e-poçtuna 6 rəqəmli kod göndəririk."
+                        sample_pattern: "ad.soyad@std.bsu.edu.az"
+                        display_order: 1
+                      - method: "student_card"
+                        is_recommended: false
+                        sla_label: "24 saata qədər"
+                        note: "Tələbə kartının şəklini yüklə. Əl ilə yoxlanılır."
+                        sample_pattern: null
+                        display_order: 2
+                      - method: "invite_code"
+                        is_recommended: false
+                        sla_label: "Dərhal"
+                        note: "Kursdaşından 6 rəqəmli kod."
+                        sample_pattern: null
+                        display_order: 3
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /verification/email/start:
+    post:
+      tags: [onboarding]
+      operationId: startEmailVerification
+      summary: Route A — send the OTP
+      description: |
+        State `A2 address_submitted` → `A3 otp_sent`.
+
+        **The response is identical for a fresh address, an already-registered address and
+        a banned address** — same status, same body, same timing
+        (`02-identity-spec.md` §2.1 anti-enumeration ordering, assertion 59). "Already
+        registered" and "banned" are only ever revealed *after* the OTP succeeds, at which
+        point the caller has proved control of the mailbox and learns nothing they could not
+        learn from it.
+
+        Rate limits: 60 s resend cooldown, 3/address/hour, 10/address/day, 5 distinct
+        addresses/device/day. Exceeding any of them returns `429 rate_limited`, which is
+        itself uniform across the four.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [university_id, email]
+              properties:
+                university_id:
+                  type: string
+                  format: uuid
+                  description: Must be the university the student selected. The domain is checked against this university's allowlist.
+                email:
+                  type: string
+                  format: email
+                  description: |
+                    Normalised server-side with a **locale-invariant** lowercase before
+                    hashing. `02-identity-spec.md` §6.2: an `az-AZ` device lowercasing `I`
+                    yields `ı`, which would produce a different credential hash and let the
+                    same student hold two accounts.
+                  examples: ["ayselr@std.bsu.edu.az"]
+            examples:
+              bdu:
+                value:
+                  university_id: "0193f2c1-9f4e-7a11-bd3c-6a2f0f1e77aa"
+                  email: "ayselr@std.bsu.edu.az"
+      responses:
+        "202":
+          description: |
+            Accepted. Byte-identical for fresh, registered and banned addresses.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OtpChallengeAccepted" }
+              examples:
+                sent:
+                  value:
+                    attempt_id: "0193f2d0-1a2b-7c3d-8e4f-5a6b7c8d9e0f"
+                    expires_at: "2026-08-15T09:22:41Z"
+                    resend_available_at: "2026-08-15T09:13:41Z"
+                    message: "Kod göndərildi. Poçtunu yoxla."
+        "422":
+          description: |
+            `verification_domain_not_allowed` — the address domain is not on this
+            university's allowlist (state `A_domain_reject`). Safe to disclose: it is a
+            property of the university, not of any account.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                wrongDomain:
+                  value:
+                    error:
+                      code: "verification_domain_not_allowed"
+                      message: "Bu ünvan BDU-nun tələbə domenində deyil. Nümunə: ad.soyad@std.bsu.edu.az"
+                      message_key: "err.verification_domain_not_allowed"
+                      action: "none"
+                      action_label: null
+                      details: {}
+                      request_id: "01JAV2H0S8QK5T7ZC9WX3M4B6D"
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /verification/email/verify:
+    post:
+      tags: [onboarding]
+      operationId: verifyEmailOtp
+      summary: Route A — submit the OTP
+      description: |
+        State `A3` → `A4 otp_verified` → `A5 granted`. On success the grant transaction runs
+        in one transaction with no external calls: seal the identity record, bind the
+        credential hash under a uniqueness guarantee, recompute tier, increment
+        `identity_epoch`, mint a fresh session.
+
+        The client **must refresh its access token** after a `200` here: the tier claim in
+        the current token is stale and the epoch has moved, so the next call would return
+        `401 token_stale` anyway.
+
+        Failure modes are deliberately merged:
+        `verification_challenge_invalid` covers wrong *and* expired codes;
+        `credential_unavailable` covers "already bound to a live account" *and* "in the ban
+        set" with a byte-identical body (assertions 31, 49).
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [attempt_id, code]
+              properties:
+                attempt_id: { type: string, format: uuid }
+                code:
+                  type: string
+                  pattern: "^[0-9]{6}$"
+                  examples: ["481902"]
+      responses:
+        "200":
+          description: Verified and granted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VerificationGranted" }
+              examples:
+                granted:
+                  value:
+                    tier: "email"
+                    verification_status: "email"
+                    handle: "sakit-pərvanə-37"
+                    token_refresh_required: true
+                    message: "E-poçt doğrulandı."
+        "400":
+          description: "`verification_challenge_invalid` — wrong or expired code."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                wrong:
+                  value:
+                    error:
+                      code: "verification_challenge_invalid"
+                      message: "Kod düzgün deyil. 3 cəhdin qalıb."
+                      message_key: "err.verification_challenge_invalid"
+                      action: "retry"
+                      action_label: "Yenidən cəhd et"
+                      details: { attempts_remaining: 3 }
+                      request_id: "01JAV2H1T9RM6U8ZD0XY4N5C7E"
+        "409":
+          description: |
+            `credential_unavailable`. **Uniform** across "already bound" and "banned".
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                unavailable:
+                  value:
+                    error:
+                      code: "credential_unavailable"
+                      message: "Bu ünvanla davam edə bilmirik. Dəstəklə əlaqə saxla."
+                      message_key: "err.credential_unavailable"
+                      action: "contact_support"
+                      action_label: "Dəstəyə yaz"
+                      details: {}
+                      request_id: "01JAV2H2U0SN7V9ZE1YZ5P6D8F"
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /verification/card/upload-target:
+    post:
+      tags: [onboarding]
+      operationId: createCardUploadTarget
+      summary: Route B — one-shot signed upload target for the card photo
+      description: |
+        The image goes **straight to a private quarantine bucket**, never through this API
+        and never into any bucket a client can read. The returned key is ≥128 bits of
+        randomness in a flat namespace with no user, thread or prefix component
+        (`02-identity-spec.md` T7, assertion 28).
+
+        The raw image is deleted within 24 h of the verification decision (30-day cap for
+        appeals). What is retained is the decision, reason codes, reviewer id, a perceptual
+        hash and the keyed student-ID hash — never the photograph (assertion 63).
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content_type, byte_size]
+              properties:
+                content_type: { type: string, enum: ["image/jpeg", "image/png", "image/heic"] }
+                byte_size: { type: integer, minimum: 1, maximum: 12000000 }
+      responses:
+        "201":
+          description: Upload target.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UploadTarget" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /verification/card/submissions:
+    post:
+      tags: [onboarding]
+      operationId: submitCardVerification
+      summary: Route B — submit the uploaded card for manual review
+      description: |
+        States `B2 uploaded` → `B3 auto_screen` → `B4 queued`. The SLA clock starts at `B4`.
+
+        Max 3 submissions per 30 days, then appeal only (`card_submission_limit_reached`).
+
+        Auto-screen rejections that indicate suspected forgery return the **generic**
+        `"doğrulaya bilmədik"` message with no specific reason — specific feedback teaches
+        forgers what to fix (`02-identity-spec.md` §2.2).
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [upload_id, university_id]
+              properties:
+                upload_id: { type: string, format: uuid }
+                university_id: { type: string, format: uuid }
+      responses:
+        "202":
+          description: Queued for review.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CardSubmissionAccepted" }
+              examples:
+                queued:
+                  value:
+                    attempt_id: "0193f2e1-2b3c-7d4e-9f50-6a7b8c9d0e1f"
+                    state: "pending"
+                    sla_due_at: "2026-08-16T09:20:00Z"
+                    sla_label: "24 saata qədər"
+                    message: "Kart yoxlamaya göndərildi."
+        "409":
+          description: "`card_review_pending` — a submission is already queued or in review."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /verification/invite/redeem:
+    post:
+      tags: [onboarding]
+      operationId: redeemInviteCode
+      summary: Route C — redeem a 6-digit invite code
+      description: |
+        States `C1` → `C2 code_valid` → `C3 provisional`.
+
+        **Every failure returns the single code `invite_code_invalid`** — wrong, expired,
+        already consumed, and wrong-university are indistinguishable in body and in timing
+        (`02-identity-spec.md` T13, assertion 60). Anything finer turns the 10⁶ code space
+        into an oracle.
+
+        The provisional tier is a **7-day funnel, not a destination**: no badge, 3 posts a
+        day, no reviews, no invites, and it reverts to read-only unless a real verification
+        completes.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [university_id, code]
+              properties:
+                university_id:
+                  type: string
+                  format: uuid
+                  description: Codes are scoped to the inviter's university; a mismatch fails as `invite_code_invalid`.
+                code: { type: string, pattern: "^[0-9]{6}$", examples: ["704318"] }
+      responses:
+        "200":
+          description: Provisional grant.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VerificationGranted" }
+              examples:
+                provisional:
+                  value:
+                    tier: "provisional"
+                    verification_status: "none"
+                    handle: "quru-püstə-19"
+                    token_refresh_required: true
+                    provisional_expires_at: "2026-08-22T09:20:00Z"
+                    message: "Müvəqqəti giriş açıldı. 7 gün ərzində e-poçtunu doğrula."
+        "400":
+          description: "`invite_code_invalid`. Uniform across all four causes."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                invalid:
+                  value:
+                    error:
+                      code: "invite_code_invalid"
+                      message: "Kod işləmir. Kursdaşından yeni kod istə."
+                      message_key: "err.invite_code_invalid"
+                      action: "none"
+                      action_label: null
+                      details: {}
+                      request_id: "01JAV2H3V1TP8W0AF2Z06Q7E9G"
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /verification/status:
+    get:
+      tags: [onboarding]
+      operationId: getVerificationStatus
+      summary: Own verification state across all routes
+      description: |
+        Screen 10 renders `✓ E-POÇT DOĞRULANDI` and `KART: GÖZLƏYİR` at the same time, so
+        this returns **one entry per route**, not a single state. Own-account only; there is
+        no form of this call for another user, and `card_review_state` is never in
+        `PublicProfile` because a pending card review is a real-world event with a knowable
+        timestamp.
+      responses:
+        "200":
+          description: Per-route state plus the resulting tier.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VerificationStatus" }
+              examples:
+                emailDoneCardPending:
+                  value:
+                    tier: "email"
+                    verification_status: "email"
+                    routes:
+                      - method: "university_email"
+                        state: "verified"
+                        label: "E-poçt doğrulandı"
+                        valid_until: "2027-08-15T00:00:00Z"
+                        reverification_due: false
+                      - method: "student_card"
+                        state: "in_review"
+                        label: "Kart: gözləyir"
+                        sla_due_at: "2026-08-16T09:20:00Z"
+                      - method: "invite_code"
+                        state: "none"
+                        label: "İstifadə olunmayıb"
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /invites:
+    get:
+      tags: [onboarding]
+      operationId: listOwnInvites
+      summary: Own live invite codes
+      description: |
+        The caller's own codes only, so the client can enforce the 3-live-code cap.
+
+        **Returns nothing about redeemers.** The invite edge (inviter → invitee) lives in
+        the sealed layer, is access-logged, is never used for recommendations or
+        notifications, and is aggregated away after 30 days
+        (`02-identity-spec.md` T12, assertion 64).
+
+        Whether even the per-code `state` should be visible is an open question — see
+        `05-api-conventions.md` Open question 9.
+      responses:
+        "200":
+          description: Live codes.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, remaining_issuable]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/InviteCode" }
+                  remaining_issuable: { type: integer, minimum: 0, maximum: 3 }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    post:
+      tags: [onboarding]
+      operationId: issueInviteCode
+      summary: Issue an invite code
+      description: |
+        Requires tier `email` or `card`, account age ≥ 14 days and karma ≥ 20 (all tunable,
+        all flagged in the identity spec). Max 3 live codes, 72-hour TTL, single use, drawn
+        uniformly at random from the unallocated space **within the issuer's university
+        namespace**.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          description: Code issued. This is the only time the plaintext code is returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InviteCodeIssued" }
+              examples:
+                issued:
+                  value:
+                    id: "0193f2f2-3c4d-7e5f-a061-7b8c9d0e1f2a"
+                    code: "704318"
+                    expires_at: "2026-08-18T09:20:00Z"
+                    university_code: "BDU"
+        "403":
+          description: "`invite_not_permitted` or `verification_required`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: "`invite_quota_exhausted` — three live codes already."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  # ==================================================================
+  # SESSION AND PROFILE
+  # ==================================================================
+
+  /session:
+    get:
+      tags: [session]
+      operationId: getSession
+      summary: The signed-in student's own account
+      description: |
+        Served from `public.app_user_card`, which is `security_invoker = on` and therefore
+        RLS-confined to the caller's own row. Exact `karma` and `created_at` appear here and
+        **only** here: they are the caller's own. They appear in no cross-user surface, which
+        is what closes the karma-delta oracle (`02-identity-spec.md` T5).
+
+        `display_study_year` and `display_faculty_label` have already passed the k-anonymity
+        floor before they reach this response; when the cohort was too small they are simply
+        absent, with no indication that suppression occurred and no count.
+      responses:
+        "200":
+          description: Own account.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SessionUser" }
+              examples:
+                bduStudent:
+                  value:
+                    id: "0193f301-4d5e-7f60-b172-8c9d0e1f2a3b"
+                    handle: "sakit-pərvanə-37"
+                    handle_number: 37
+                    avatar_id: 7
+                    verification_tier: "email_verified"
+                    verification_status: "email"
+                    contributor_level: 2
+                    university:
+                      id: "0193f2c1-9f4e-7a11-bd3c-6a2f0f1e77aa"
+                      code: "BDU"
+                      name: "Bakı Dövlət Universiteti"
+                    display_study_year: 2
+                    display_faculty_label: null
+                    karma: 312
+                    post_count: 28
+                    comment_count: 141
+                    review_count: 3
+                    locale: "az"
+                    feed_languages: ["az", "ru"]
+                    status: "active"
+                    created_at: "2025-09-02T11:04:00Z"
+                    handle_change_allowed_at: "2026-08-24T11:04:00Z"
+                    privacy:
+                      show_year: true
+                      share_timetable: false
+                      show_uni_badge: true
+                      link_listings: false
+                      discoverable: false
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /me/privacy:
+    patch:
+      tags: [session]
+      operationId: updatePrivacySettings
+      summary: Update the five privacy toggles
+      description: |
+        Screen 10. Every field is optional; omitted fields are unchanged.
+
+        `show_year` interacts with the k-anonymity floor rather than overriding it: turning
+        it on does not reveal the year if the cohort is below the floor, and the response
+        reflects the *effective* state, not the requested one. The cohort count behind that
+        decision is never returned (assertion 35).
+
+        `discoverable` controls exact-handle lookup only. Prefix, substring and fuzzy search
+        do not exist at any setting (`02-identity-spec.md` T11, assertion 41).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PrivacySettings" }
+            examples:
+              hideYear:
+                value: { show_year: false }
+      responses:
+        "200":
+          description: Effective settings after the update.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PrivacySettings" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /me/preferences:
+    patch:
+      tags: [session]
+      operationId: updatePreferences
+      summary: Locale and feed languages
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                locale: { $ref: "#/components/schemas/LocaleCode" }
+                feed_languages:
+                  type: array
+                  minItems: 1
+                  items: { $ref: "#/components/schemas/LocaleCode" }
+            examples:
+              azRu:
+                value: { locale: "az", feed_languages: ["az", "ru"] }
+      responses:
+        "200":
+          description: Updated preferences.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  locale: { $ref: "#/components/schemas/LocaleCode" }
+                  feed_languages:
+                    type: array
+                    items: { $ref: "#/components/schemas/LocaleCode" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /me/handle:
+    post:
+      tags: [session]
+      operationId: regenerateHandle
+      summary: Draw a new generated handle
+      description: |
+        Handles are **generated, never chosen** — `adjective-noun-NN` from the curated
+        Azerbaijani wordlist in `ref.handle_word`, drawn from a CSPRNG. There is no request
+        body: the client cannot propose a handle, which is what removes the
+        adversarial-crafting problem entirely (`02-identity-spec.md` §4.3).
+
+        The 14-day cooldown is enforced **server-side** on `handle_changed_at`, not by
+        disabling the button (assertion 47). A direct call inside the window is refused with
+        `handle_cooldown_active`.
+
+        `avatar_id` is derived from the folded handle and therefore **changes with it**. An
+        avatar that survived a rename would link the old handle to the new one and defeat
+        the point of renaming.
+
+        The rename is never announced: no notification, no "formerly known as", no rename
+        history on any surface, ever (T20).
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: New handle.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [handle, handle_number, avatar_id, handle_change_allowed_at]
+                properties:
+                  handle: { type: string, examples: ["quru-püstə-19"] }
+                  handle_number: { type: integer, examples: [19] }
+                  avatar_id: { type: integer, minimum: 0, maximum: 11, examples: [3] }
+                  handle_change_allowed_at: { type: string, format: date-time }
+        "409":
+          description: "`handle_cooldown_active`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                cooldown:
+                  value:
+                    error:
+                      code: "handle_cooldown_active"
+                      message: "Ləqəb 14 gündən bir dəyişilir. 24 avqustdan sonra yenidən dəyişə bilərsən."
+                      message_key: "err.handle_cooldown_active"
+                      action: "wait_cooldown"
+                      action_label: null
+                      details: { available_at: "2026-08-24T11:04:00Z" }
+                      request_id: "01JAV2H4W2UQ9X1BG3A17R8F0H"
+        "503":
+          description: "`handle_space_exhausted` — generator failure, pages on-call."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /me/posts:
+    get:
+      tags: [session]
+      operationId: listOwnPosts
+      summary: The caller's own posts
+      description: |
+        "My posts" cannot be a filter on the feed, because `public.post` has no author
+        column. It is served here by reading `internal.post_author` **server-side, scoped to
+        the token**. There is no `?author=` parameter anywhere in this API
+        (`05-api-conventions.md` §8.2 P12).
+
+        Because the subject is the caller, this response may carry each post's own alias
+        ordinal — the caller already knows it.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Own posts, newest first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PostPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /profiles/{app_user_id}:
+    get:
+      tags: [profiles]
+      operationId: getPublicProfile
+      summary: Read another user
+      description: |
+        **The only cross-user read of another person in the product.** It returns
+        `public.public_profiles` whole: six columns, no more. There is no expanded variant,
+        no `?include=`, and no second endpoint that returns more.
+
+        Not returned, at any tier, for anyone but yourself: karma, post/comment/review
+        counts, `created_at` (account age correlates with cohort), `last_active_at`,
+        `card_review_state`, complaint count, privacy toggles, or the fine-grained
+        `verification_tier`. Adding a field here is a security change and is reviewed as one.
+      parameters:
+        - name: app_user_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Public profile.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicProfile" }
+              examples:
+                seller:
+                  value:
+                    id: "0193f310-5e6f-7a71-c283-9d0e1f2a3b4c"
+                    handle: "quru-püstə-19"
+                    avatar_id: 3
+                    university_id: "0193f2c1-9f4e-7a11-bd3c-6a2f0f1e77aa"
+                    verification_status: "card"
+                    contributor_level: 1
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /profiles/by-handle/{handle}:
+    get:
+      tags: [profiles]
+      operationId: getProfileByHandle
+      summary: Exact-handle lookup
+      description: |
+        **Exact full-handle matches only.** No prefix, no substring, no fuzzy, no wildcard —
+        those would let an attacker walk the adjective × noun space and enumerate the entire
+        user base together with each user's rendered university badge
+        (`02-identity-spec.md` T11).
+
+        The lookup only resolves when the target has `discoverable` on, which is **off by
+        default**. The response for "no such handle", "exists but not discoverable" and
+        "quarantined former handle" is a byte-identical `404` with an equalised response
+        time (assertion 41). A quarantined handle never resolves to anything, including "this
+        handle has changed".
+
+        Rate limited to 10/hour and **the limit does not scale with tier or account age** —
+        a card-verified third-year is exactly the attacker the threat model assumes.
+      parameters:
+        - name: handle
+          in: path
+          required: true
+          schema: { type: string, examples: ["sakit-pərvanə-37"] }
+      responses:
+        "200":
+          description: Public profile.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicProfile" }
+        "404":
+          description: Uniform not-found. Covers all three causes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /blocks:
+    get:
+      tags: [safety]
+      operationId: listBlocks
+      summary: The caller's block list
+      description: |
+        Renders the blocked user's handle **as it was at block time** — a stored display
+        snapshot, never resolved live. A live resolution would turn the block list into a
+        rename oracle: block many people, watch your own list, and learn the entire rename
+        mapping (`02-identity-spec.md` §4.6, assertion 46).
+
+        Enforcement uses the immutable id; unblocking is by `block_id`, never by handle.
+      responses:
+        "200":
+          description: Blocks.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/BlockEntry" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    post:
+      tags: [safety]
+      operationId: createBlock
+      summary: Block a user
+      description: |
+        Blocks are stored against the immutable `app_user_id` but their **visible effects are
+        surface-scoped**. A block placed from a forum thread (`scope: "forum"`) suppresses
+        forum content only. A **global** block may only be initiated from a handle-bearing
+        surface, where the caller already knows the handle and therefore learns nothing new.
+
+        This closes the cross-surface oracle of `02-identity-spec.md` T8: block `ANONİM 3`,
+        watch whether a suspected marketplace listing disappears, confirm the hypothesis in
+        one action.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scope]
+              properties:
+                scope:
+                  type: string
+                  enum: [forum, global]
+                  description: "`global` is rejected unless `app_user_id` is supplied, i.e. unless the block originates from a handle-bearing surface."
+                app_user_id:
+                  type: string
+                  format: uuid
+                  description: Required for `global`. Never accepted together with `comment_id`/`post_id`.
+                post_id: { type: string, format: uuid, description: "Forum-scoped block on the author of this post." }
+                comment_id: { type: string, format: uuid, description: "Forum-scoped block on the author of this comment." }
+      responses:
+        "201":
+          description: Block created. Uniform whether or not a block already existed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BlockEntry" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /blocks/{block_id}:
+    delete:
+      tags: [safety]
+      operationId: deleteBlock
+      summary: Unblock, by list-entry id
+      parameters:
+        - name: block_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Unblocked. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /reports:
+    post:
+      tags: [safety]
+      operationId: createReport
+      summary: Report content
+      description: |
+        **Always succeeds with `202`**, whether or not the caller has already reported this
+        target. The schema's `report_once_per_target` unique constraint is absorbed
+        server-side and must never surface as `409`: "you have already reported this user"
+        is a confirmation oracle (`02-identity-spec.md` T8, assertion 25).
+
+        The response body is byte-identical for a first report and a duplicate.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target_type, target_id, reason_key]
+              properties:
+                target_type:
+                  type: string
+                  enum: [post, comment, review, app_user]
+                  description: Phase 1 subset of `public.report_target_type`.
+                target_id: { type: string, format: uuid }
+                reason_key:
+                  type: string
+                  description: A key from `ref.report_reason`.
+                  examples: ["harassment"]
+                details: { type: string, maxLength: 1000 }
+            examples:
+              harassment:
+                value:
+                  target_type: "comment"
+                  target_id: "0193f330-7a8b-7c9d-e4a5-1f2a3b4c5d6e"
+                  reason_key: "harassment"
+                  details: "Şəxsi təhqir."
+      responses:
+        "202":
+          description: Recorded. Identical for a duplicate report.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message: { type: string, examples: ["Qeydə alındı."] }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  # ==================================================================
+  # CATALOGUE
+  # ==================================================================
+
+  /terms:
+    get:
+      tags: [catalogue]
+      operationId: listTerms
+      summary: Academic terms for the caller's university
+      description: Design renders `2025/26 · PAYIZ SEMESTRİ`. Exactly one term is `is_current`.
+      responses:
+        "200":
+          description: Terms, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Term" }
+              examples:
+                bdu:
+                  value:
+                    items:
+                      - id: "0193f340-8b9c-7d0e-f5b6-2a3b4c5d6e7f"
+                        label: "2025/26 Payız"
+                        season: "payiz"
+                        starts_on: "2025-09-15"
+                        ends_on: "2026-01-24"
+                        add_drop_ends_on: "2025-09-29"
+                        exams_start_on: "2026-01-05"
+                        is_current: true
+                      - id: "0193f341-9c0d-7e1f-a6c7-3b4c5d6e7f80"
+                        label: "2024/25 Yaz"
+                        season: "yaz"
+                        starts_on: "2025-02-03"
+                        ends_on: "2025-06-14"
+                        add_drop_ends_on: "2025-02-17"
+                        exams_start_on: "2025-05-26"
+                        is_current: false
+
+  /catalogue/courses:
+    get:
+      tags: [catalogue]
+      operationId: searchCourses
+      summary: Course catalogue search
+      description: |
+        Full-text plus trigram over the folded title and code. Folding maps
+        `ə→e ğ→g ı→i ö→o ş→s ü→u ç→c`, so `"verilenler"` matches
+        `"Verilənlər bazası sistemləri"` and `"Eliyeva"` matches `"Əliyeva"`. The query is
+        folded identically to the index — folding one side only is the classic way to break
+        Azerbaijani search.
+
+        Scoped to the caller's university.
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string, minLength: 2, examples: ["verilenler"] }
+        - name: department_id
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Courses.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CoursePage" }
+              examples:
+                cs214:
+                  value:
+                    items:
+                      - id: "0193f350-a0b1-7c2d-e3f4-5a6b7c8d9e0f"
+                        code: "CS 214"
+                        title: "Verilənlər bazası sistemləri"
+                        short_title: "Verilənlər bazası"
+                        credits: 6
+                        level: 2
+                        department_name: "İnformatika kafedrası"
+                        review_summary:
+                          review_count: 61
+                          rating_avg: 4.2
+                    page_info: { next_cursor: null, has_more: false }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /catalogue/courses/{course_id}:
+    get:
+      tags: [catalogue]
+      operationId: getCourse
+      summary: One course
+      parameters:
+        - $ref: "#/components/parameters/CourseIdPath"
+      responses:
+        "200":
+          description: Course.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Course" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /catalogue/courses/{course_id}/sections:
+    get:
+      tags: [catalogue]
+      operationId: listCourseSections
+      summary: Sections of a course in a term
+      description: |
+        Enrollment, absence, timetable and coursework all hang off the **section**, not the
+        course. Each section carries its meetings so the client can show a preview of the
+        week impact before enrolling.
+      parameters:
+        - $ref: "#/components/parameters/CourseIdPath"
+        - name: term_id
+          in: query
+          schema: { type: string, format: uuid }
+          description: Defaults to the caller's current term.
+      responses:
+        "200":
+          description: Sections.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/CourseSection" }
+              examples:
+                cs214:
+                  value:
+                    items:
+                      - id: "0193f360-b1c2-7d3e-f4a5-6b7c8d9e0f1a"
+                        section_code: "1"
+                        lang: "az"
+                        capacity: 40
+                        enrolled_count: 38
+                        primary_instructor:
+                          id: "0193f370-c2d3-7e4f-a5b6-7c8d9e0f1a2b"
+                          full_name: "Nigar Əliyeva"
+                          title_prefix: "dos."
+                          initials: "NƏ"
+                          department_name: "İnformatika kafedrası"
+                        meetings:
+                          - id: "0193f380-d3e4-7f50-b6c7-8d9e0f1a2b3c"
+                            weekday: 2
+                            weekday_label: "Ç.A"
+                            starts_at: "14:05"
+                            ends_at: "15:25"
+                            kind: "lecture"
+                            parity: "every"
+                            room: { code: "312", campus_name: "II korpus" }
+                          - id: "0193f381-e4f5-7a61-c7d8-9e0f1a2b3c4d"
+                            weekday: 4
+                            weekday_label: "C.A"
+                            starts_at: "09:00"
+                            ends_at: "10:20"
+                            kind: "lab"
+                            parity: "every"
+                            room: { code: "L-3", campus_name: "Baş korpus" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /catalogue/instructors:
+    get:
+      tags: [catalogue]
+      operationId: searchInstructors
+      summary: Instructor search
+      description: |
+        Instructor names are **real and public** — this is a professor-review product.
+        Instructors are not `app_user`s and are never linked to one. This endpoint has no
+        relationship to handle search and no relationship to the k-anonymity floor.
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string, minLength: 2, examples: ["Eliyeva"] }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Instructors.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstructorPage" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  # ==================================================================
+  # TIMETABLE
+  # ==================================================================
+
+  /enrollments:
+    get:
+      tags: [timetable]
+      operationId: listEnrollments
+      summary: The caller's enrollments, with attendance
+      description: |
+        Own rows only, by RLS. Each entry embeds the attendance state that screen 04 renders
+        as the `4 / 12` ring.
+      parameters:
+        - name: term_id
+          in: query
+          schema: { type: string, format: uuid }
+          description: Defaults to the current term.
+        - name: state
+          in: query
+          schema: { type: string, enum: [enrolled, dropped, completed, failed] }
+      responses:
+        "200":
+          description: Enrollments.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Enrollment" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    post:
+      tags: [timetable]
+      operationId: createEnrollment
+      summary: Enroll in a section
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [section_id]
+              properties:
+                section_id: { type: string, format: uuid }
+                color: { $ref: "#/components/schemas/AccentColor" }
+      responses:
+        "201":
+          description: Enrolled.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Enrollment" }
+        "409":
+          description: "`already_enrolled`, `section_full` or `term_closed`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /enrollments/{enrollment_id}:
+    patch:
+      tags: [timetable]
+      operationId: updateEnrollment
+      summary: Change colour, order, state or recorded grade
+      description: |
+        `color` is the student's own choice and is why it lives on the enrollment rather
+        than the course — two students may colour the same section differently.
+
+        `final_letter` is validated against this university's `ref.grade_scale`; the server
+        derives `gpa_points` from the scale rather than accepting them from the client.
+      parameters:
+        - name: enrollment_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                color: { $ref: "#/components/schemas/AccentColor" }
+                display_order: { type: integer }
+                state: { type: string, enum: [enrolled, dropped, completed, failed] }
+                final_score: { type: number, minimum: 0, maximum: 100 }
+                final_letter: { type: string, examples: ["A"] }
+            examples:
+              recolour:
+                value: { color: "pomegranate" }
+              grade:
+                value: { final_letter: "A", final_score: 92 }
+      responses:
+        "200":
+          description: Updated enrollment.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Enrollment" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: "`validation_failed` or `grade_scale_unknown`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    delete:
+      tags: [timetable]
+      operationId: deleteEnrollment
+      summary: Remove an enrollment
+      parameters:
+        - name: enrollment_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Removed. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`term_closed`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /timetable/week:
+    get:
+      tags: [timetable]
+      operationId: getWeekTimetable
+      summary: The week grid
+      description: |
+        Screen 03: Mon–Fri (`B.E Ç.A Ç C.A C`), 80-minute blocks. One join —
+        `enrollment(app_user_id, state)` → `section_meeting(section_id, weekday)` — with no
+        per-cell lookup.
+
+        Exceptions (`cancelled`, `moved`, `extra`) are already applied and are reported as
+        `status` plus, where relevant, the replacement room and times. Odd/even-week parity
+        is resolved server-side against the university's calendar so the client never
+        computes week numbers.
+
+        **This endpoint is own-timetable only.** Sharing a timetable with classmates is a
+        separate, free/busy-only surface: a set of six course sections is very close to a
+        primary key for a student (`02-identity-spec.md` T10), so course ids, codes, rooms
+        and instructors are never shared. That surface is not in the Phase 1 scope.
+      parameters:
+        - name: week_of
+          in: query
+          required: true
+          schema: { type: string, format: date, examples: ["2025-10-27"] }
+          description: Any date in the wanted week; the server snaps to Monday in the university's timezone.
+      responses:
+        "200":
+          description: The week.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WeekTimetable" }
+              examples:
+                week:
+                  value:
+                    week_start: "2025-10-27"
+                    week_end: "2025-10-31"
+                    term: { id: "0193f340-8b9c-7d0e-f5b6-2a3b4c5d6e7f", label: "2025/26 Payız" }
+                    days:
+                      - date: "2025-10-27"
+                        weekday: 1
+                        weekday_label: "B.E"
+                        meetings: []
+                      - date: "2025-10-28"
+                        weekday: 2
+                        weekday_label: "Ç.A"
+                        meetings:
+                          - meeting_id: "0193f380-d3e4-7f50-b6c7-8d9e0f1a2b3c"
+                            section_id: "0193f360-b1c2-7d3e-f4a5-6b7c8d9e0f1a"
+                            enrollment_id: "0193f390-e5f6-7a71-c8d9-0f1a2b3c4d5e"
+                            course_code: "CS 214"
+                            course_short_title: "Verilənlər bazası"
+                            starts_at: "14:05"
+                            ends_at: "15:25"
+                            kind: "lecture"
+                            room: { code: "312", campus_name: "II korpus" }
+                            instructor_name: "dos. Nigar Əliyeva"
+                            color: "turquoise"
+                            status: "scheduled"
+                            note: null
+                      - date: "2025-10-29"
+                        weekday: 3
+                        weekday_label: "Ç"
+                        meetings:
+                          - meeting_id: "0193f382-f5a6-7b72-d8e9-1a2b3c4d5e6f"
+                            section_id: "0193f361-c2d3-7e4f-a5b6-7c8d9e0f1a2b"
+                            enrollment_id: "0193f391-f6a7-7b82-d9e0-1a2b3c4d5e6f"
+                            course_code: "MATH 201"
+                            course_short_title: "Diskret riyaziyyat"
+                            starts_at: "09:00"
+                            ends_at: "10:20"
+                            kind: "lecture"
+                            room: { code: "205", campus_name: "Baş korpus" }
+                            instructor_name: "prof. Elçin Məmmədov"
+                            color: "indigo"
+                            status: "cancelled"
+                            note: "Dərs ləğv edildi."
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /attendance:
+    get:
+      tags: [timetable]
+      operationId: getAttendance
+      summary: Absence counters against the resolved limit
+      description: |
+        Screen 04: `4 / 12`, "İcazəli qayıb limitinin 33%-i istifadə olunub", and expulsion
+        at the limit.
+
+        The limit is **never a constant in the client**. It is resolved server-side by
+        `ref.effective_absence_limit(section_id)` along
+        `section override → course policy → faculty policy → university policy →
+        university default`, and `late_counts_as` (default 0.5) is what makes `absence_units`
+        differ from `absence_count`. The ring renders `absence_units`.
+      parameters:
+        - name: term_id
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Attendance per enrolled section.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Attendance" }
+              examples:
+                cs214:
+                  value:
+                    items:
+                      - enrollment_id: "0193f390-e5f6-7a71-c8d9-0f1a2b3c4d5e"
+                        section_id: "0193f360-b1c2-7d3e-f4a5-6b7c8d9e0f1a"
+                        course_code: "CS 214"
+                        course_title: "Verilənlər bazası sistemləri"
+                        absence_count: 4
+                        absence_units: 4
+                        absence_limit: 12
+                        expulsion_at: 12
+                        used_ratio_pct: 33
+                        warn_at_ratio_pct: 50
+                        late_counts_as: 0.5
+                        state: "ok"
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /absences:
+    post:
+      tags: [timetable]
+      operationId: recordAbsence
+      summary: "Record an absence (\"Qayıb qeyd et\")"
+      description: |
+        Self-reported by default. One record per class occurrence — a repeat for the same
+        `(enrollment, date, meeting)` returns `409 absence_already_recorded` rather than
+        double-counting.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enrollment_id, occurred_on]
+              properties:
+                enrollment_id: { type: string, format: uuid }
+                meeting_id: { type: string, format: uuid }
+                occurred_on: { type: string, format: date }
+                kind: { $ref: "#/components/schemas/AbsenceKind" }
+                excuse_note: { type: string, maxLength: 500 }
+            examples:
+              missed:
+                value:
+                  enrollment_id: "0193f390-e5f6-7a71-c8d9-0f1a2b3c4d5e"
+                  meeting_id: "0193f380-d3e4-7f50-b6c7-8d9e0f1a2b3c"
+                  occurred_on: "2025-10-28"
+                  kind: "absent"
+      responses:
+        "201":
+          description: Recorded, with the refreshed attendance state.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [absence, attendance]
+                properties:
+                  absence: { $ref: "#/components/schemas/Absence" }
+                  attendance: { $ref: "#/components/schemas/Attendance" }
+        "409":
+          description: "`absence_already_recorded`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /absences/{absence_id}:
+    delete:
+      tags: [timetable]
+      operationId: deleteAbsence
+      summary: Undo a recorded absence
+      parameters:
+        - name: absence_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Removed, with the refreshed attendance state.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [attendance]
+                properties:
+                  attendance: { $ref: "#/components/schemas/Attendance" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /deadlines:
+    get:
+      tags: [timetable]
+      operationId: listDeadlines
+      summary: "Upcoming deadlines (\"Yaxın son tarixlər\")"
+      description: |
+        Screen 02. Coursework across the caller's enrolled sections, with the caller's own
+        per-item state merged in. Sorted by `due_at` ascending.
+
+        Deadlines can be `official`, `crowdsourced` by classmates, or `personal`.
+        Crowdsourced items are attributable **by handle**, not by alias — adding a deadline
+        is a reputational act and the design shows no anonymity affordance for it. This is
+        one of the few surfaces where forum-style anonymity does not apply, and it therefore
+        carries a `PublicProfile` and no alias fields.
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: include_done
+          in: query
+          schema: { type: boolean, default: false }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Deadlines.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeadlinePage" }
+              examples:
+                twoItems:
+                  value:
+                    items:
+                      - id: "0193f3a0-a6b7-7c83-e0f1-2a3b4c5d6e7f"
+                        section_id: "0193f360-b1c2-7d3e-f4a5-6b7c8d9e0f1a"
+                        course_code: "CS 214"
+                        course_short_title: "Verilənlər bazası"
+                        kind: "lab"
+                        title: "SQL laboratoriya #4"
+                        description: null
+                        due_at: "2026-08-16T23:59:00+04:00"
+                        due_label: "Sabah 23:59"
+                        weight_pct: 10
+                        origin: "crowdsourced"
+                        created_by:
+                          id: "0193f310-5e6f-7a71-c283-9d0e1f2a3b4c"
+                          handle: "quru-püstə-19"
+                          avatar_id: 3
+                          university_id: "0193f2c1-9f4e-7a11-bd3c-6a2f0f1e77aa"
+                          verification_status: "card"
+                          contributor_level: 1
+                        confirm_count: 12
+                        dispute_count: 0
+                        is_verified: true
+                        my_state: "todo"
+                      - id: "0193f3a1-b7c8-7d94-f1a2-3b4c5d6e7f80"
+                        section_id: "0193f361-c2d3-7e4f-a5b6-7c8d9e0f1a2b"
+                        course_code: "MATH 201"
+                        course_short_title: "Diskret riyaziyyat"
+                        kind: "midterm"
+                        title: "Aralıq imtahan"
+                        description: null
+                        due_at: "2025-10-27T10:00:00+04:00"
+                        due_label: "27 okt"
+                        weight_pct: 30
+                        origin: "official"
+                        created_by: null
+                        confirm_count: 0
+                        dispute_count: 0
+                        is_verified: true
+                        my_state: "todo"
+                    page_info: { next_cursor: null, has_more: false }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /coursework:
+    post:
+      tags: [timetable]
+      operationId: createCoursework
+      summary: Add a crowdsourced or personal deadline
+      description: |
+        Requires enrollment in the section (`403 not_enrolled`). `origin: "crowdsourced"`
+        is attributed to the caller's handle so vandalism has an owner and corrections have
+        a subject; `origin: "personal"` is private to the caller and is never returned to
+        anyone else.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [section_id, title, origin]
+              properties:
+                section_id: { type: string, format: uuid }
+                kind: { $ref: "#/components/schemas/CourseworkKind" }
+                title: { type: string, minLength: 1, maxLength: 200, examples: ["SQL laboratoriya #4"] }
+                description: { type: string, maxLength: 2000 }
+                due_at: { type: string, format: date-time }
+                weight_pct: { type: number, minimum: 0, maximum: 100 }
+                origin: { type: string, enum: [crowdsourced, personal] }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Deadline" }
+        "403":
+          description: "`not_enrolled`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /coursework/{coursework_id}/state:
+    put:
+      tags: [timetable]
+      operationId: setCourseworkState
+      summary: Set the caller's own state for a deadline
+      description: Idempotent by construction; takes no `Idempotency-Key`.
+      parameters:
+        - name: coursework_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [state]
+              properties:
+                state: { type: string, enum: [todo, in_progress, done, skipped] }
+                remind_at: { type: string, format: date-time }
+      responses:
+        "200":
+          description: State set.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  coursework_id: { type: string, format: uuid }
+                  state: { type: string, enum: [todo, in_progress, done, skipped] }
+                  remind_at: { type: [string, "null"], format: date-time }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /gpa:
+    get:
+      tags: [timetable]
+      operationId: getGpa
+      summary: Term and cumulative GPA
+      description: |
+        **Computed, not stored.** There is no GPA column anywhere in the schema. The server
+        computes it from `public.enrollment.gpa_points` weighted by `ref.course.credits`,
+        over enrollments in a passing or failing terminal state, using this university's
+        `ref.grade_scale` for the maximum point value.
+
+        Own data only. GPA is never comparable, never ranked, and never exposed for another
+        user at any tier — a ranked GPA on a small programme is a de-anonymiser.
+      parameters:
+        - name: term_id
+          in: query
+          schema: { type: string, format: uuid }
+          description: When present, `term` is that term; when absent, the current term.
+      responses:
+        "200":
+          description: GPA summary.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GpaSummary" }
+              examples:
+                autumn:
+                  value:
+                    scale_max: 4
+                    term:
+                      term_id: "0193f341-9c0d-7e1f-a6c7-3b4c5d6e7f80"
+                      term_label: "2024/25 Yaz"
+                      gpa: 3.62
+                      credits_attempted: 30
+                      credits_earned: 30
+                      courses:
+                        - section_id: "0193f362-d3e4-7f50-b6c7-8d9e0f1a2b3c"
+                          course_code: "CS 214"
+                          course_title: "Verilənlər bazası sistemləri"
+                          credits: 6
+                          final_letter: "A"
+                          gpa_points: 4
+                        - section_id: "0193f363-e4f5-7a61-c7d8-9e0f1a2b3c4d"
+                          course_code: "MATH 201"
+                          course_title: "Diskret riyaziyyat"
+                          credits: 5
+                          final_letter: "B"
+                          gpa_points: 3
+                    cumulative:
+                      gpa: 3.48
+                      credits_attempted: 96
+                      credits_earned: 93
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  # ==================================================================
+  # FORUM
+  # ==================================================================
+
+  /boards:
+    get:
+      tags: [forum]
+      operationId: listBoards
+      summary: Boards visible to the caller
+      description: |
+        University boards plus national boards (`university_id` null). Filtered by the
+        caller's `feed_languages` unless `lang` is given.
+
+        `follower_count` is returned **only above 1,000** (the design's `9 214` qualifies).
+        Below that the field is absent — not rounded, because a rounded count still moves,
+        and a board's eligible membership is a cohort (`02-identity-spec.md` §5.4).
+      parameters:
+        - name: scope
+          in: query
+          schema: { type: string, enum: [national, university, faculty, course, club] }
+        - name: lang
+          in: query
+          schema: { $ref: "#/components/schemas/LocaleCode" }
+        - name: followed
+          in: query
+          schema: { type: boolean }
+          description: When true, only boards the caller follows.
+      responses:
+        "200":
+          description: Boards.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Board" }
+              examples:
+                bdu:
+                  value:
+                    items:
+                      - id: "0193f3b0-c8d9-7e05-a2b3-4c5d6e7f8091"
+                        slug: "ders-ve-muellim"
+                        name: "Dərs və müəllim"
+                        description: "Fənlər, müəllimlər, imtahanlar."
+                        scope: "university"
+                        university_id: "0193f2c1-9f4e-7a11-bd3c-6a2f0f1e77aa"
+                        university_code: "BDU"
+                        lang: "az"
+                        follower_count: 9214
+                        post_count: 38
+                        min_tier_to_post: "email_verified"
+                        allows_poll: true
+                        allows_image: true
+                        is_following: true
+                        is_archived: false
+                      - id: "0193f3b1-d9e0-7f16-b3c4-5d6e7f809102"
+                        slug: "sarbest-movzu"
+                        name: "Sərbəst mövzu"
+                        description: null
+                        scope: "national"
+                        university_id: null
+                        university_code: null
+                        lang: "az"
+                        post_count: 412
+                        min_tier_to_post: "email_verified"
+                        allows_poll: true
+                        allows_image: true
+                        is_following: false
+                        is_archived: false
+
+  /boards/{board_id}:
+    get:
+      tags: [forum]
+      operationId: getBoard
+      summary: One board
+      parameters:
+        - $ref: "#/components/parameters/BoardIdPath"
+      responses:
+        "200":
+          description: Board.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Board" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /boards/{board_id}/follow:
+    put:
+      tags: [forum]
+      operationId: followBoard
+      summary: Follow a board
+      description: Idempotent; takes no `Idempotency-Key`.
+      parameters:
+        - $ref: "#/components/parameters/BoardIdPath"
+      responses:
+        "204": { description: Following. }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [forum]
+      operationId: unfollowBoard
+      summary: Unfollow a board
+      parameters:
+        - $ref: "#/components/parameters/BoardIdPath"
+      responses:
+        "204": { description: Not following. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /boards/{board_id}/posts:
+    get:
+      tags: [forum]
+      operationId: listBoardPosts
+      summary: Board feed
+      description: |
+        The four tabs of screen 05. Each maps to a dedicated partial index, so the feed is
+        an index scan with no aggregation at read time:
+
+        | `tab` | Order | Design label |
+        |---|---|---|
+        | `hot` | `hot_rank desc` | `POPULYAR` |
+        | `new` | `created_at desc` | `YENİ` |
+        | `poll` | `created_at desc`, polls only | `SORĞU` |
+        | `unanswered` | `created_at desc`, `comment_count = 0` | `CAVABSIZ` |
+
+        Served from a cache with **TTL ≥ 60 s** and a **60-second-quantised cursor**
+        (`02-identity-spec.md` T9(ii)): continuous polling cannot recover sub-minute
+        ordering, which is what makes the timing-correlation attack against a class end time
+        much weaker. A `304` does not consume a rate-limit token.
+
+        Pinned posts are returned ahead of the ordered page and are excluded from the cursor.
+      parameters:
+        - $ref: "#/components/parameters/BoardIdPath"
+        - name: tab
+          in: query
+          schema: { type: string, enum: [hot, new, poll, unanswered], default: hot }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Feed page.
+          headers:
+            Cache-Control:
+              schema: { type: string, examples: ["private, max-age=60"] }
+            ETag:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PostPage" }
+              examples:
+                hot:
+                  value:
+                    pinned: []
+                    items:
+                      - id: "0193f3c0-e0f1-7a27-c4d5-6e7f80910213"
+                        board_id: "0193f3b0-c8d9-7e05-a2b3-4c5d6e7f8091"
+                        board_name: "Dərs və müəllim"
+                        kind: "text"
+                        title: "Aralıq imtahanı təxirə salındı, kim eşitdi?"
+                        excerpt: "Dekanlıqdan elan gəldi deyirlər, amma qrupda heç kim dəqiq bilmir."
+                        author:
+                          display_mode: "alias"
+                          alias_number: 1
+                          alias_label: "ANONİM 1"
+                          tier_badge: "email"
+                          is_op: true
+                        time_bucket: "min_30"
+                        time_label: "~30 dəq"
+                        score: 211
+                        comment_count: 62
+                        save_count: 18
+                        view_count: 1904
+                        attachment_count: 1
+                        has_poll: false
+                        is_pinned: false
+                        is_locked: false
+                        moderation_state: "visible"
+                        my_vote: 1
+                        is_saved: false
+                      - id: "0193f3c1-f1a2-7b38-d5e6-7f8091021324"
+                        board_id: "0193f3b0-c8d9-7e05-a2b3-4c5d6e7f8091"
+                        board_name: "Dərs və müəllim"
+                        kind: "poll"
+                        title: "CS 214 üçün hansı gün konsultasiya olsun?"
+                        excerpt: null
+                        author:
+                          display_mode: "alias"
+                          alias_number: 1
+                          alias_label: "ANONİM 1"
+                          tier_badge: "card"
+                          is_op: true
+                        time_bucket: "hours_n"
+                        time_label: "5 saat"
+                        score: 34
+                        comment_count: 9
+                        save_count: 2
+                        view_count: 611
+                        attachment_count: 0
+                        has_poll: true
+                        is_pinned: false
+                        is_locked: false
+                        moderation_state: "visible"
+                        my_vote: 0
+                        is_saved: true
+                    page_info:
+                      next_cursor: "eyJ2IjoxLCJxIjoiYjNhMWMwIiwiayI6WyIyMDI2LTA4LTE1VDA4OjAwOjAwWiIsIjAxOTNmM2MxLWYxYTItN2IzOC1kNWU2LTdmODA5MTAyMTMyNCJdfQ.9tKq3m1s"
+                      has_more: true
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /feed/campus:
+    get:
+      tags: [forum]
+      operationId: getCampusFeed
+      summary: "Campus feed (\"Kampus gündəmi\")"
+      description: |
+        Hot posts across every board of the caller's university, from
+        `post(university_id, hot_rank desc)`. Same ≥ 60 s cache and quantised cursor as a
+        board feed.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Feed page.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PostPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /posts:
+    post:
+      tags: [forum]
+      operationId: createPost
+      summary: Create a thread
+      description: |
+        **The author always receives alias ordinal 1** — the counter starts at 0 and
+        allocation runs for the author first, inside the same transaction as the content
+        insert (`02-identity-spec.md` §3.4, assertion 15). The client does not send an
+        ordinal and cannot influence it.
+
+        `attachment_upload_ids` reference objects already uploaded through a signed target
+        and already **re-encoded server-side with all metadata destroyed** — a re-encode,
+        not a tag strip, because thumbnails embedded in EXIF survive naive stripping
+        (T7, assertion 29). A post cannot reference an attachment that has not finished
+        processing.
+
+        Rate limited by `forum.post.create`, which scales by tier *and* account age: a
+        provisional account gets 3/day, and an account under 24 hours old gets a quarter of
+        its tier's allowance.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [board_id, title]
+              properties:
+                board_id: { type: string, format: uuid }
+                kind: { $ref: "#/components/schemas/PostKind" }
+                title: { type: string, minLength: 1, maxLength: 200 }
+                body: { type: string, maxLength: 20000 }
+                lang: { $ref: "#/components/schemas/LocaleCode" }
+                attachment_upload_ids:
+                  type: array
+                  maxItems: 4
+                  items: { type: string, format: uuid }
+                poll: { $ref: "#/components/schemas/PollInput" }
+            examples:
+              text:
+                value:
+                  board_id: "0193f3b0-c8d9-7e05-a2b3-4c5d6e7f8091"
+                  kind: "text"
+                  title: "Aralıq imtahanı təxirə salındı, kim eşitdi?"
+                  body: "Dekanlıqdan elan gəldi deyirlər, amma qrupda heç kim dəqiq bilmir."
+                  lang: "az"
+              poll:
+                value:
+                  board_id: "0193f3b0-c8d9-7e05-a2b3-4c5d6e7f8091"
+                  kind: "poll"
+                  title: "CS 214 üçün hansı gün konsultasiya olsun?"
+                  lang: "az"
+                  poll:
+                    question: "Hansı gün?"
+                    is_multi_choice: false
+                    max_choices: 1
+                    closes_at: "2026-08-17T20:00:00+04:00"
+                    options: ["Çərşənbə axşamı", "Cümə axşamı", "Şənbə"]
+      responses:
+        "201":
+          description: Created. `author.alias_number` is always 1.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PostDetail" }
+        "403":
+          description: "`verification_required`, `tier_insufficient`, `sanction_active` or `board_archived`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429":
+          description: "`daily_post_quota` or `rate_limited`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                quota:
+                  value:
+                    error:
+                      code: "daily_post_quota"
+                      message: "Bu gün üçün post limitinə çatdın. Sabah yenidən yaza bilərsən."
+                      message_key: "err.daily_post_quota"
+                      action: "wait_cooldown"
+                      action_label: null
+                      details: {}
+                      request_id: "01JAV2H5X3VR0Y2CH4B28S9G1J"
+
+  /posts/{post_id}:
+    get:
+      tags: [forum]
+      operationId: getPost
+      summary: Post detail
+      description: |
+        Screen 06. The OP renders as `ANONİM 1` with the `MÜƏLLİF` marker.
+
+        The response is a projection of the content row alone. It touches no table that
+        knows who wrote what: `public.post` has no author column, and
+        `internal.thread_alias` — the table that could unmask a whole thread — is not on any
+        read path.
+      parameters:
+        - $ref: "#/components/parameters/PostIdPath"
+      responses:
+        "200":
+          description: Post.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PostDetail" }
+              examples:
+                detail:
+                  value:
+                    id: "0193f3c0-e0f1-7a27-c4d5-6e7f80910213"
+                    board_id: "0193f3b0-c8d9-7e05-a2b3-4c5d6e7f8091"
+                    board_name: "Dərs və müəllim"
+                    kind: "text"
+                    title: "Aralıq imtahanı təxirə salındı, kim eşitdi?"
+                    body: "Dekanlıqdan elan gəldi deyirlər, amma qrupda heç kim dəqiq bilmir. Prof. Quliyeva dərsdə bir şey demədi."
+                    lang: "az"
+                    author:
+                      display_mode: "alias"
+                      alias_number: 1
+                      alias_label: "ANONİM 1"
+                      tier_badge: "email"
+                      is_op: true
+                    time_bucket: "min_30"
+                    time_label: "~30 dəq"
+                    edited: false
+                    score: 211
+                    comment_count: 62
+                    save_count: 18
+                    view_count: 1904
+                    is_pinned: false
+                    is_locked: false
+                    moderation_state: "visible"
+                    my_vote: 1
+                    is_saved: false
+                    is_mine: false
+                    attachments:
+                      - id: "0193f3d0-a2b3-7c49-e6f7-8091021324a5"
+                        url: "https://cdn.kiksu.az/p/8f3a1c9d2e4b6a70.jpg"
+                        mime_type: "image/jpeg"
+                        width: 1170
+                        height: 2532
+                        blurhash: "LEHV6nWB2yk8pyo0adR*.7kCMdnj"
+                        caption: "Tapşırıq ekran şəkli"
+                    poll: null
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "410":
+          description: "`content_removed`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /posts/{post_id}/comments:
+    get:
+      tags: [forum]
+      operationId: listComments
+      summary: Comment thread
+      description: |
+        One level of nesting with a rail, ordered by the materialised `path` — a plain btree
+        scan, already sorted, with no recursive CTE.
+
+        **Deleted comments are returned in place**, keeping their ordinal, with
+        `moderation_state: "removed"`, a `deleted_label` of `silinib` and no body. Ordinals
+        are never renumbered. Removing them would turn `1, 2, 4, 5` into evidence that
+        participant 3 said something removable, and would let anyone who saw the original
+        attribute it (`02-identity-spec.md` T16, assertion 46).
+
+        **Gaps in the ordinal sequence are normal** and carry no meaning the client should
+        render: an ordinal may be held by an open composer and appear later, out of
+        chronological order.
+      parameters:
+        - $ref: "#/components/parameters/PostIdPath"
+        - name: sort
+          in: query
+          schema: { type: string, enum: [thread, top], default: thread }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Comments.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommentPage" }
+              examples:
+                thread:
+                  value:
+                    items:
+                      - id: "0193f3e0-b3c4-7d5a-f708-91021324a5b6"
+                        post_id: "0193f3c0-e0f1-7a27-c4d5-6e7f80910213"
+                        parent_id: null
+                        depth: 0
+                        path: [1]
+                        author:
+                          display_mode: "alias"
+                          alias_number: 2
+                          alias_label: "ANONİM 2"
+                          tier_badge: "card"
+                          is_op: false
+                        body: "Qrup nümayəndəsi dedi ki, dekanlıq təsdiqləyib. Rəsmi elan sabah olacaq."
+                        time_bucket: "min_30"
+                        time_label: "~30 dəq"
+                        score: 41
+                        reply_count: 2
+                        moderation_state: "visible"
+                        my_vote: 0
+                        is_mine: false
+                      - id: "0193f3e1-c4d5-7e6b-a819-021324a5b6c7"
+                        post_id: "0193f3c0-e0f1-7a27-c4d5-6e7f80910213"
+                        parent_id: "0193f3e0-b3c4-7d5a-f708-91021324a5b6"
+                        depth: 1
+                        path: [1, 2]
+                        author:
+                          display_mode: "alias"
+                          alias_number: 3
+                          alias_label: "ANONİM 3"
+                          tier_badge: "none"
+                          is_op: false
+                        body: "Mənə də elə dedilər."
+                        time_bucket: "min_30"
+                        time_label: "~30 dəq"
+                        score: 4
+                        reply_count: 0
+                        moderation_state: "visible"
+                        my_vote: 0
+                        is_mine: false
+                      - id: "0193f3e2-d5e6-7f7c-b92a-1324a5b6c7d8"
+                        post_id: "0193f3c0-e0f1-7a27-c4d5-6e7f80910213"
+                        parent_id: null
+                        depth: 0
+                        path: [4]
+                        author:
+                          display_mode: "alias"
+                          alias_number: 4
+                          alias_label: "ANONİM 4"
+                          tier_badge: "email"
+                          is_op: false
+                        body: null
+                        deleted_label: "silinib"
+                        time_bucket: "hour_1"
+                        time_label: "1 saat"
+                        score: 0
+                        reply_count: 0
+                        moderation_state: "removed"
+                        my_vote: 0
+                        is_mine: false
+                    page_info: { next_cursor: null, has_more: false }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [forum]
+      operationId: createComment
+      summary: Comment on a thread
+      description: |
+        Alias allocation happens **inside the same transaction as the content insert**. A
+        rolled-back insert frees the ordinal, so there is no such thing as an orphaned
+        allocation.
+
+        If the caller holds a live reservation from `alias-preview`, that ordinal is used and
+        the promise the composer made is kept. If the reservation lapsed, the write **still
+        succeeds** with a freshly allocated ordinal and the response carries the actual
+        `author.alias_number` — the client renders what the response says, not what it
+        previewed.
+
+        A retried request with the same `Idempotency-Key` does not allocate a second
+        ordinal; neither does one that slips past the idempotency record, because
+        `internal.thread_alias`'s `(post_id, app_user_id)` key returns the existing ordinal.
+      parameters:
+        - $ref: "#/components/parameters/PostIdPath"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string, minLength: 1, maxLength: 10000 }
+                parent_id: { type: string, format: uuid }
+            examples:
+              reply:
+                value:
+                  body: "Mən də eşitmişəm, amma rəsmi elan görmədim."
+                  parent_id: "0193f3e0-b3c4-7d5a-f708-91021324a5b6"
+      responses:
+        "201":
+          description: Created, with the ordinal actually assigned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Comment" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: "`post_locked`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /posts/{post_id}/alias-preview:
+    post:
+      tags: [forum]
+      operationId: reserveAliasPreview
+      summary: "Reserve the alias the composer will use (\"ANONİM 5 KİMİ YAZ\")"
+      description: |
+        Implements `02-identity-spec.md` §3.3. The composer footer makes a **promise before
+        the write**, so this is a reservation, not a prediction.
+
+        - **Takes no user parameter.** The caller is bound from the token inside a privileged
+          function. There is no form of this call that answers "what ordinal does someone
+          *else* have".
+        - **Consumes an ordinal**, with a TTL. That is what makes the promise real.
+        - **Idempotent.** Re-calling it for the same thread extends the existing reservation
+          rather than consuming another ordinal, so the composer can re-issue it on app
+          resume and on typing heartbeats. The client should treat `expires_at` as
+          authoritative and re-issue before it lapses.
+        - If the caller has **already commented** in this thread, it returns that ordinal
+          with `is_existing: true` and `expires_at: null`. Nothing is consumed and nothing is
+          held: a person maps to exactly one ordinal per thread, forever.
+        - `composer_cta` is returned **already localised**, because `ANONİM 5 KİMİ YAZ` is
+          grammar, not concatenation.
+
+        Rate limited per thread (`forum.alias_preview`) because preview is one of only two
+        readers of the alias map, and access-logged for the same reason.
+
+        A lapsed reservation leaves **no permanent gap**: the ordinal returns to the thread's
+        pool. A reader may briefly see `1, 2, 3, 4, 6` while 5 is held. This is expected, is
+        not an error, and is a small privacy gain — it breaks the strict correspondence
+        between ordinal and arrival order.
+      parameters:
+        - $ref: "#/components/parameters/PostIdPath"
+      responses:
+        "200":
+          description: Reserved (or the caller's existing ordinal).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AliasPreview" }
+              examples:
+                fresh:
+                  summary: A new participant reserves ordinal 5
+                  value:
+                    post_id: "0193f3c0-e0f1-7a27-c4d5-6e7f80910213"
+                    alias_number: 5
+                    alias_label: "ANONİM 5"
+                    composer_cta: "ANONİM 5 KİMİ YAZ"
+                    state: "reserved"
+                    is_existing: false
+                    expires_at: "2026-08-15T09:25:00Z"
+                existing:
+                  summary: Already commented — ordinal 2, nothing consumed
+                  value:
+                    post_id: "0193f3c0-e0f1-7a27-c4d5-6e7f80910213"
+                    alias_number: 2
+                    alias_label: "ANONİM 2"
+                    composer_cta: "ANONİM 2 KİMİ YAZ"
+                    state: "active"
+                    is_existing: true
+                    expires_at: null
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`post_locked`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      tags: [forum]
+      operationId: releaseAliasPreview
+      summary: Release the reservation when the composer is dismissed
+      description: |
+        Optional — the background sweep reclaims abandoned holds every minute. Calling it is
+        good citizenship: it returns the ordinal immediately instead of after the TTL.
+
+        Releasing an ordinal that has already been used by a published comment is a no-op.
+      parameters:
+        - $ref: "#/components/parameters/PostIdPath"
+      responses:
+        "204": { description: Released, or nothing was held. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /posts/{post_id}/vote:
+    put:
+      tags: [forum]
+      operationId: votePost
+      summary: Upvote or downvote
+      description: |
+        Idempotent by construction — `PUT` twice is one vote — so it takes no
+        `Idempotency-Key`. Vote state is per-caller and is read from the caller's own row;
+        there is no endpoint that reveals who voted on anything.
+      parameters:
+        - $ref: "#/components/parameters/PostIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value: { type: integer, enum: [-1, 1] }
+      responses:
+        "200":
+          description: New tallies.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VoteResult" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      tags: [forum]
+      operationId: unvotePost
+      summary: Remove a vote
+      parameters:
+        - $ref: "#/components/parameters/PostIdPath"
+      responses:
+        "200":
+          description: New tallies.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VoteResult" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /comments/{comment_id}/vote:
+    put:
+      tags: [forum]
+      operationId: voteComment
+      summary: Vote on a comment
+      parameters:
+        - $ref: "#/components/parameters/CommentIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value: { type: integer, enum: [-1, 1] }
+      responses:
+        "200":
+          description: New tallies.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VoteResult" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      tags: [forum]
+      operationId: unvoteComment
+      summary: Remove a comment vote
+      parameters:
+        - $ref: "#/components/parameters/CommentIdPath"
+      responses:
+        "200":
+          description: New tallies.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VoteResult" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /posts/{post_id}/save:
+    put:
+      tags: [forum]
+      operationId: savePost
+      summary: Save a post
+      parameters:
+        - $ref: "#/components/parameters/PostIdPath"
+      responses:
+        "200":
+          description: Saved.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  is_saved: { type: boolean }
+                  save_count: { type: integer }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [forum]
+      operationId: unsavePost
+      summary: Unsave a post
+      parameters:
+        - $ref: "#/components/parameters/PostIdPath"
+      responses:
+        "200":
+          description: Unsaved.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  is_saved: { type: boolean }
+                  save_count: { type: integer }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /posts/{post_id}/poll/votes:
+    put:
+      tags: [forum]
+      operationId: votePoll
+      summary: Cast or change a poll vote
+      description: |
+        Replaces the caller's whole selection, so it is idempotent and takes no
+        `Idempotency-Key`.
+
+        Results refresh on a **≥ 60 s cache** with no per-option live delta
+        (`02-identity-spec.md` T19). There is no "who voted" endpoint at any privilege level
+        below the legal-request service, and none may be added.
+      parameters:
+        - $ref: "#/components/parameters/PostIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [option_ids]
+              properties:
+                option_ids:
+                  type: array
+                  minItems: 1
+                  items: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Poll with the caller's selection applied.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Poll" }
+        "409":
+          description: "`poll_closed`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: "`poll_choice_limit` or `validation_failed`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  # ==================================================================
+  # REVIEWS
+  # ==================================================================
+
+  /review-tags:
+    get:
+      tags: [reviews]
+      operationId: listReviewTags
+      summary: The review tag vocabulary
+      description: |
+        `ref.review_tag`. Polarity drives colour in the design: positive tags render in
+        Şirvan turkuazı, negative in Nar.
+      parameters:
+        - name: applies_to
+          in: query
+          schema: { type: string, enum: [instructor, course, both] }
+      responses:
+        "200":
+          description: Tags.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/ReviewTag" }
+              examples:
+                az:
+                  value:
+                    items:
+                      - key: "slides_clear"
+                        label: "Slaydlar aydın"
+                        polarity: "positive"
+                        applies_to: "instructor"
+                      - key: "labs_useful"
+                        label: "Lab. faydalı"
+                        polarity: "positive"
+                        applies_to: "course"
+                      - key: "attendance_strict"
+                        label: "Yoxlama sıx"
+                        polarity: "negative"
+                        applies_to: "instructor"
+
+  /instructors/{instructor_id}:
+    get:
+      tags: [reviews]
+      operationId: getInstructorProfile
+      summary: Professor profile with aggregate ratings
+      description: |
+        Screen 07. Aggregates come from `public.instructor_review_summary`, which is
+        trigger-maintained — the review list never aggregates at read time.
+
+        **Aggregates are never walled.** They are readable by every authenticated caller, so
+        walling them here would be a lie the client could route around. Only the list of
+        *written* reviews is subject to the contribution wall.
+      parameters:
+        - name: instructor_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: course_id
+          in: query
+          schema: { type: string, format: uuid }
+          description: "When present, the summary is the course × instructor pair (design: `FƏNN: CS 214 ▾`)."
+      responses:
+        "200":
+          description: Instructor profile.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstructorProfile" }
+              examples:
+                aliyeva:
+                  value:
+                    instructor:
+                      id: "0193f370-c2d3-7e4f-a5b6-7c8d9e0f1a2b"
+                      full_name: "Nigar Əliyeva"
+                      title_prefix: "dos."
+                      initials: "NƏ"
+                      department_name: "İnformatika kafedrası"
+                      university_code: "BDU"
+                      is_claimed: false
+                    summary:
+                      review_count: 61
+                      course_count: 3
+                      rating_avg: 4.2
+                      histogram: { "1": 2, "2": 3, "3": 9, "4": 21, "5": 26 }
+                      criteria:
+                        quality: { label: "Dərs keyfiyyəti", avg: 4.4 }
+                        fairness: { label: "Ədalətli qiymət", avg: 4.1 }
+                        workload: { label: "İş yükü", avg: 3.6 }
+                        attendance_strictness: { label: "Davamiyyət tələbi", avg: 4.8 }
+                      top_tags:
+                        - { key: "slides_clear", label: "Slaydlar aydın", polarity: "positive", count: 34 }
+                        - { key: "labs_useful", label: "Lab. faydalı", polarity: "positive", count: 22 }
+                        - { key: "attendance_strict", label: "Yoxlama sıx", polarity: "negative", count: 19 }
+                    courses:
+                      - { id: "0193f350-a0b1-7c2d-e3f4-5a6b7c8d9e0f", code: "CS 214", title: "Verilənlər bazası sistemləri", review_count: 41, rating_avg: 4.3 }
+                      - { id: "0193f351-b1c2-7d3e-f4a5-6b7c8d9e0f1a", code: "CS 101", title: "Proqramlaşdırmaya giriş", review_count: 15, rating_avg: 4.0 }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /courses/{course_id}/review-summary:
+    get:
+      tags: [reviews]
+      operationId: getCourseReviewSummary
+      summary: Aggregate ratings for a course
+      description: From `public.course_review_summary`. Never walled.
+      parameters:
+        - $ref: "#/components/parameters/CourseIdPath"
+      responses:
+        "200":
+          description: Summary.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReviewSummary" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /reviews/access:
+    get:
+      tags: [reviews]
+      operationId: getReviewAccess
+      summary: The contribution wall, as queryable state
+      description: |
+        **The wall is a state the client can ask for, not a 403 it discovers.**
+
+        Deciding whether a student has contributed this semester requires
+        `internal.review_author`, which RLS may not touch, so the wall is a server-layer
+        rule (`01-schema-notes.md`). A server-layer rule surfaced only as an error becomes a
+        surprise; surfaced as state, it becomes a product feature — the client can render
+        the contribution prompt, with the caller's own reviewable sections already listed,
+        before they ever tap a walled surface.
+
+        `state` is a closed enum:
+        - `granted` — written reviews are readable.
+        - `walled` — the caller has not contributed this term. Aggregates remain readable.
+        - `blocked` — a `review_ban` sanction is in force. **Contributing does not lift it.**
+
+        `reviewable_sections` is derived from the caller's own enrollments and is therefore
+        own-data, not a cohort. No count of other people appears anywhere in this response.
+      responses:
+        "200":
+          description: Access state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReviewAccess" }
+              examples:
+                walled:
+                  value:
+                    state: "walled"
+                    term: { id: "0193f340-8b9c-7d0e-f5b6-2a3b4c5d6e7f", label: "2025/26 Payız" }
+                    required_contributions: 1
+                    written_contributions: 0
+                    unlocked_until: null
+                    message: "Rəyləri oxumaq üçün bu semestr bir rəy yaz."
+                    reviewable_sections:
+                      - section_id: "0193f360-b1c2-7d3e-f4a5-6b7c8d9e0f1a"
+                        course_id: "0193f350-a0b1-7c2d-e3f4-5a6b7c8d9e0f"
+                        course_code: "CS 214"
+                        course_title: "Verilənlər bazası sistemləri"
+                        instructor_id: "0193f370-c2d3-7e4f-a5b6-7c8d9e0f1a2b"
+                        instructor_name: "dos. Nigar Əliyeva"
+                        term_label: "2025/26 Payız"
+                        already_written: false
+                granted:
+                  value:
+                    state: "granted"
+                    term: { id: "0193f340-8b9c-7d0e-f5b6-2a3b4c5d6e7f", label: "2025/26 Payız" }
+                    required_contributions: 1
+                    written_contributions: 1
+                    unlocked_until: "2026-01-24T23:59:59+04:00"
+                    message: null
+                    reviewable_sections: []
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /reviews:
+    get:
+      tags: [reviews]
+      operationId: listReviews
+      summary: Written reviews for an instructor or a course
+      description: |
+        **Returns `200` even when the caller is walled** — with `items: []` and the same
+        `access` object `GET /reviews/access` would return, so the client renders the
+        contribution prompt from a response it already has, with no error path and no extra
+        round trip. It does **not** return `403`.
+
+        **Reviews carry no author field at all** — not `null`, not `"anonymous"`, absent.
+        The design renders `ANONİM · DOĞRULANMIŞ` and nothing else. Reviews are the one
+        surface that renders neither an alias nor a handle.
+
+        `is_enrollment_verified` is gated: it can only be `true` when the section cohort at
+        write time met the university's k-anonymity floor. On a small section an enrolled
+        verified reviewer *is* identifiable, so the badge is suppressed and `false` is
+        returned with no indication that suppression occurred.
+
+        `term` may be absent on an individual review for the same reason (review cohort
+        smallness). Its threshold, `k_review`, is unresolved — see
+        `05-api-conventions.md` Open question 6.
+      parameters:
+        - name: instructor_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: course_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [recent, helpful], default: recent }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Reviews, or the wall state with an empty list.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReviewPage" }
+              examples:
+                granted:
+                  summary: Access granted
+                  value:
+                    access:
+                      state: "granted"
+                      term: { id: "0193f340-8b9c-7d0e-f5b6-2a3b4c5d6e7f", label: "2025/26 Payız" }
+                      required_contributions: 1
+                      written_contributions: 1
+                      unlocked_until: "2026-01-24T23:59:59+04:00"
+                      message: null
+                      reviewable_sections: []
+                    items:
+                      - id: "0193f3f0-d6e7-7a8d-c03b-24a5b6c7d8e9"
+                        course: { id: "0193f350-a0b1-7c2d-e3f4-5a6b7c8d9e0f", code: "CS 214", title: "Verilənlər bazası sistemləri" }
+                        instructor: { id: "0193f370-c2d3-7e4f-a5b6-7c8d9e0f1a2b", full_name: "Nigar Əliyeva", title_prefix: "dos." }
+                        term: { id: "0193f341-9c0d-7e1f-a6c7-3b4c5d6e7f80", label: "2024/25 Yaz" }
+                        overall_rating: 4
+                        quality: 5
+                        fairness: 4
+                        workload: 3
+                        attendance_strictness: 5
+                        tags:
+                          - { key: "slides_clear", label: "Slaydlar aydın", polarity: "positive" }
+                          - { key: "attendance_strict", label: "Yoxlama sıx", polarity: "negative" }
+                        body: "Slaydlar çox aydındır, laboratoriyalar imtahana birbaşa kömək edir. Davamiyyəti sərt yoxlayır, gec gəlməyin."
+                        lang: "az"
+                        is_enrollment_verified: true
+                        helpful_count: 23
+                        my_helpful: false
+                        time_bucket: "days_n"
+                        time_label: "3 gün"
+                        moderation_state: "visible"
+                    page_info: { next_cursor: null, has_more: false }
+                walled:
+                  summary: Walled — 200 with an empty list, never 403
+                  value:
+                    access:
+                      state: "walled"
+                      term: { id: "0193f340-8b9c-7d0e-f5b6-2a3b4c5d6e7f", label: "2025/26 Payız" }
+                      required_contributions: 1
+                      written_contributions: 0
+                      unlocked_until: null
+                      message: "Rəyləri oxumaq üçün bu semestr bir rəy yaz."
+                      reviewable_sections:
+                        - section_id: "0193f360-b1c2-7d3e-f4a5-6b7c8d9e0f1a"
+                          course_id: "0193f350-a0b1-7c2d-e3f4-5a6b7c8d9e0f"
+                          course_code: "CS 214"
+                          course_title: "Verilənlər bazası sistemləri"
+                          instructor_id: "0193f370-c2d3-7e4f-a5b6-7c8d9e0f1a2b"
+                          instructor_name: "dos. Nigar Əliyeva"
+                          term_label: "2025/26 Payız"
+                          already_written: false
+                    items: []
+                    page_info: { next_cursor: null, has_more: false }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    post:
+      tags: [reviews]
+      operationId: createReview
+      summary: Write a review
+      description: |
+        Keyed `course × instructor × semester`, with the four fixed criteria the design
+        renders as four labelled bars. One review per student per key, enforced by
+        `internal.review_author`'s unique constraint — a second attempt is
+        `409 review_already_written`.
+
+        This is the **only** reviews endpoint that returns `403 review_wall_active`, and only
+        as a backstop for a client that ignored `GET /reviews/access`.
+
+        The response carries the refreshed `access` object, so a client that was walled
+        before this call renders as unwalled immediately afterwards without a second request.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReviewInput" }
+            examples:
+              cs214:
+                value:
+                  course_id: "0193f350-a0b1-7c2d-e3f4-5a6b7c8d9e0f"
+                  instructor_id: "0193f370-c2d3-7e4f-a5b6-7c8d9e0f1a2b"
+                  term_id: "0193f341-9c0d-7e1f-a6c7-3b4c5d6e7f80"
+                  overall_rating: 4
+                  quality: 5
+                  fairness: 4
+                  workload: 3
+                  attendance_strictness: 5
+                  tag_keys: ["slides_clear", "attendance_strict"]
+                  body: "Slaydlar çox aydındır, laboratoriyalar imtahana birbaşa kömək edir."
+                  lang: "az"
+      responses:
+        "201":
+          description: Created, with the refreshed wall state.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [review, access]
+                properties:
+                  review: { $ref: "#/components/schemas/Review" }
+                  access: { $ref: "#/components/schemas/ReviewAccess" }
+        "403":
+          description: "`review_wall_active`, `verification_required` or `sanction_active`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: "`review_already_written` or `review_term_not_reviewable`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                already:
+                  value:
+                    error:
+                      code: "review_already_written"
+                      message: "Bu fənn və müəllim üçün bu semestrdə artıq rəy yazmısan."
+                      message_key: "err.review_already_written"
+                      action: "none"
+                      action_label: null
+                      details: {}
+                      request_id: "01JAV2H6Y4WS1Z3DJ5C39T0H2K"
+        "422":
+          description: "`validation_failed` or `review_tag_unknown`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /reviews/{review_id}/helpful:
+    put:
+      tags: [reviews]
+      operationId: markReviewHelpful
+      summary: Mark a review helpful
+      description: Idempotent; takes no `Idempotency-Key`. Own row only, by RLS.
+      parameters:
+        - $ref: "#/components/parameters/ReviewIdPath"
+      responses:
+        "200":
+          description: Marked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  my_helpful: { type: boolean }
+                  helpful_count: { type: integer }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [reviews]
+      operationId: unmarkReviewHelpful
+      summary: Remove a helpful mark
+      parameters:
+        - $ref: "#/components/parameters/ReviewIdPath"
+      responses:
+        "200":
+          description: Unmarked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  my_helpful: { type: boolean }
+                  helpful_count: { type: integer }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+
+  securitySchemes:
+    supabaseJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Supabase-issued access token, RS256, 900 s TTL, refresh-token rotation with reuse
+        detection.
+
+        **Trusted claims** (`05-api-conventions.md` §2.2): `sub`, and from `app_metadata`
+        only — `app_user_id`, `tier`, `role`, `univ_id`, `epoch`, `sid`.
+
+        **Never trusted:** `user_metadata` / `raw_user_meta_data` in any form. It is
+        **client-writable** through the standard Supabase update-user call and it lands in
+        the JWT correctly signed. A policy that trusts `user_metadata.tier` grants every user
+        the ability to award themselves the `ANONİM KART` badge. Also never trusted: `email`,
+        `phone`, or any claim naming faculty, entry year, study year, handle, karma or a
+        career reference.
+
+        Never present the token in a URL.
+
+  parameters:
+
+    AcceptLanguage:
+      name: Accept-Language
+      in: header
+      required: false
+      schema: { type: string, enum: ["az", "ru", "en"], default: "az" }
+      description: Negotiates localised strings and error messages. Default `az`.
+
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+      description: |
+        Client-generated UUIDv4, one per logical user intent — generated when the composer
+        opens, not when the request fires, so a retry after a network failure reuses it.
+        Scoped to `(app_user_id, method, path, key)`, retained 24 h. A replay returns the
+        stored response with `Idempotency-Replayed: true`.
+
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      description: Clamped, never rejected.
+
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string }
+      description: |
+        **Opaque.** Present it back exactly as received. It is an HMAC-signed keyset tuple
+        bound to the endpoint and to every sort/filter parameter; a modified or hand-crafted
+        cursor returns `400 cursor_invalid`, which is what stops cursor-crafting being used
+        as a scan primitive against forum publication times. Passing `cursor` together with a
+        changed `tab`/`sort`/`q`/filter is also `cursor_invalid`. Cursors expire after
+        15 minutes. Never parse it.
+
+    UniversityIdPath:
+      name: university_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+    CourseIdPath:
+      name: course_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+    BoardIdPath:
+      name: board_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+    PostIdPath:
+      name: post_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+    CommentIdPath:
+      name: comment_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+    ReviewIdPath:
+      name: review_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  headers:
+    RateLimitLimit:
+      description: Requests permitted in the current window for the scarcest applicable bucket.
+      schema: { type: integer }
+    RateLimitRemaining:
+      description: Requests remaining in that bucket.
+      schema: { type: integer }
+    RateLimitReset:
+      description: Seconds until that bucket resets. A delta, never an absolute time.
+      schema: { type: integer }
+    RateLimitPolicy:
+      description: Named policy, e.g. `"forum-write";q=15;w=86400`. Names the bucket, never the principal.
+      schema: { type: string }
+    RetryAfter:
+      description: Seconds to wait. Clients must honour it and must not busy-retry.
+      schema: { type: integer }
+    IdempotencyReplayed:
+      description: Present and `true` when this response was replayed from a stored idempotency record.
+      schema: { type: boolean }
+    RequestId:
+      description: Echoes `error.request_id`. The support path.
+      schema: { type: string }
+
+  responses:
+
+    Unauthenticated:
+      description: "`unauthenticated`, `token_stale` or `token_invalid`. On `token_stale` the client refreshes and retries once, silently."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            stale:
+              value:
+                error:
+                  code: "token_stale"
+                  message: "Sessiya yeniləndi. Yenidən cəhd edirik."
+                  message_key: "err.token_stale"
+                  action: "refresh_token"
+                  action_label: null
+                  details: {}
+                  request_id: "01JAV2H7Z5XT2A4EK6D4AU1J3M"
+
+    Forbidden:
+      description: |
+        `forbidden`, `verification_required`, `verification_expired`, `tier_insufficient`,
+        `sanction_active`, `account_suspended`, `account_banned` or `not_campus_member`.
+        `forbidden` is deliberately uninformative; where the *existence* of a resource is
+        sensitive the API returns `404` instead.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            needsVerification:
+              value:
+                error:
+                  code: "verification_required"
+                  message: "Bunun üçün tələbə doğrulaması lazımdır."
+                  message_key: "err.verification_required"
+                  action: "verify_email"
+                  action_label: "E-poçtu doğrula"
+                  details: {}
+                  request_id: "01JAV2H806YU3B5FL7E5BV2K4N"
+
+    NotFound:
+      description: |
+        `not_found`. Also returned where a `403` would be an existence oracle — another
+        user's saved post, another user's enrollment, a non-discoverable or quarantined
+        handle.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+    Conflict:
+      description: "`conflict` or a domain-specific 409 from the closed code set."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+    ValidationFailed:
+      description: "`validation_failed`, with `details.fields`."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            range:
+              value:
+                error:
+                  code: "validation_failed"
+                  message: "Qiymətləndirmə 1 ilə 5 arasında olmalıdır."
+                  message_key: "err.validation_failed"
+                  action: "none"
+                  action_label: null
+                  details:
+                    fields:
+                      - { path: "overall_rating", rule: "range", min: 1, max: 5 }
+                  request_id: "01JAV2H917ZV4C6GM8F6CW3L5P"
+
+    RateLimited:
+      description: "`rate_limited` and its domain-specific siblings. Honour `Retry-After`."
+      headers:
+        Retry-After: { $ref: "#/components/headers/RetryAfter" }
+        RateLimit-Limit: { $ref: "#/components/headers/RateLimitLimit" }
+        RateLimit-Remaining: { $ref: "#/components/headers/RateLimitRemaining" }
+        RateLimit-Reset: { $ref: "#/components/headers/RateLimitReset" }
+        RateLimit-Policy: { $ref: "#/components/headers/RateLimitPolicy" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            slowDown:
+              value:
+                error:
+                  code: "rate_limited"
+                  message: "Çox sürətli göndərirsən. 3 dəqiqədən sonra yenidən cəhd et."
+                  message_key: "err.rate_limited"
+                  action: "retry_after"
+                  action_label: null
+                  details: {}
+                  request_id: "01JAV2HA280W5D7HN9G7DX4M6Q"
+
+    PayloadTooLarge:
+      description: "`payload_too_large`, with `details.max_bytes`."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+    UnsupportedMediaType:
+      description: "`unsupported_media_type`."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+    InternalError:
+      description: "`internal_error`, `service_unavailable` or `dependency_timeout`. Never names the failing dependency."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+
+    # ---------- primitives ----------
+
+    LocaleCode:
+      type: string
+      enum: [az, ru, en]
+      description: Default `az`.
+
+    AccentColor:
+      type: string
+      enum: [turquoise, bronze, pomegranate, indigo, ink, moss, plum]
+      description: Timetable block colour, chosen by the student per enrollment.
+      x-kiksu-enum: open
+
+    PostKind:
+      type: string
+      enum: [text, image, link, poll]
+      x-kiksu-enum: open
+
+    AbsenceKind:
+      type: string
+      enum: [absent, late, excused]
+      x-kiksu-enum: open
+
+    CourseworkKind:
+      type: string
+      enum: [homework, lab, project, quiz, midterm, final, presentation, other]
+      x-kiksu-enum: open
+
+    MeetingKind:
+      type: string
+      enum: [lecture, seminar, lab, exam, consultation]
+      x-kiksu-enum: open
+
+    ModerationState:
+      type: string
+      enum: [visible, pending_review, limited, removed]
+      x-kiksu-enum: open
+
+    VerificationStatusCoarse:
+      type: string
+      enum: [card, email, none]
+      description: |
+        The **only** verification value that may cross between users. Coarse by design:
+        `public.public_profiles` maps `card_verified` → `card`, `email_verified` → `email`,
+        everything else → `none`. The fine-grained `verification_tier` and
+        `card_review_state` never cross — a pending card review is a real-world event with a
+        knowable timestamp.
+
+    TimeBucket:
+      type: string
+      enum: [just_now, min_30, hour_1, hours_n, days_n, date]
+      description: |
+        Coarse age of anonymous content. **Anonymous content never carries a raw timestamp.**
+        A post naming an instructor, rendered at 5-minute resolution, is timeable to the class
+        that just ended and therefore narrows the author to the ~30 people who attended
+        (`02-identity-spec.md` T9).
+      x-kiksu-enum: open
+
+    PageInfo:
+      type: object
+      required: [next_cursor, has_more]
+      properties:
+        next_cursor:
+          type: [string, "null"]
+          description: Opaque. `null` exactly when `has_more` is false.
+        has_more:
+          type: boolean
+          description: |
+            The loop condition. Never infer the end from an empty `items` array — a page can
+            legitimately come back short after moderation filtering.
+      description: No `total_count` exists anywhere in this API. A total is an expensive scan, and on people-shaped collections it is a cohort count.
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, message_key, request_id]
+          properties:
+            code:
+              type: string
+              description: From the closed set in `05-api-conventions.md` §3.3. Safe to `switch` on.
+            message:
+              type: string
+              description: Localised, student-facing, actionable. Never a stack trace, a constraint name, an internal service name or an identifier.
+            message_key:
+              type: string
+              description: Stable key into the client's own catalogue. The client prefers its own string when it knows the key, which is what makes adding a code non-breaking for old builds.
+            action:
+              type: [string, "null"]
+              enum: [none, retry, retry_after, sign_in, refresh_token, verify_email, verify_card, upgrade_app, open_settings, wait_cooldown, contact_support, null]
+            action_label: { type: [string, "null"] }
+            details:
+              type: object
+              additionalProperties: true
+              description: |
+                Code-specific. **Never contains a count of people** — not a cohort size, not a
+                follower count below 1,000, not a "you are one of N" hint
+                (`02-identity-spec.md` assertion 35).
+            request_id: { type: string }
+            store_url:
+              type: [string, "null"]
+              description: Present only on `client_version_unsupported`, whose shape is frozen forever.
+
+    # ---------- meta ----------
+
+    Bootstrap:
+      type: object
+      required: [min_supported_client, recommended_client, api_versions, locales]
+      properties:
+        min_supported_client:
+          type: object
+          properties:
+            ios: { type: string, examples: ["1.2.0"] }
+            android: { type: string, examples: ["1.2.0"] }
+        recommended_client:
+          type: object
+          properties:
+            ios: { type: string, examples: ["1.4.2"] }
+            android: { type: string, examples: ["1.4.2"] }
+        api_versions:
+          type: array
+          items:
+            type: object
+            properties:
+              version: { type: string, examples: ["v1"] }
+              sunset_at: { type: [string, "null"], format: date-time }
+        store_urls:
+          type: object
+          properties:
+            ios: { type: string }
+            android: { type: string }
+        locales:
+          type: object
+          properties:
+            supported:
+              type: array
+              items: { $ref: "#/components/schemas/LocaleCode" }
+            default: { $ref: "#/components/schemas/LocaleCode" }
+        flags:
+          type: object
+          additionalProperties: true
+          description: Server-owned feature flags. Never contains anything user-specific.
+        copy_overrides:
+          type: object
+          additionalProperties: { type: string }
+          description: |
+            Strings the client must prefer over its bundled copy. This is how the
+            verification SLA claim can stop saying `2 dəqiqə` within two hours of the
+            measured p95 breaching it, without an app-store release.
+
+    # ---------- onboarding ----------
+
+    University:
+      type: object
+      required: [id, code, name, city]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string, examples: ["BDU"] }
+        name: { type: string, examples: ["Bakı Dövlət Universiteti"] }
+        city: { type: string, examples: ["Bakı"] }
+        brand_color: { type: [string, "null"], examples: ["#0F7A85"] }
+        logo_url: { type: [string, "null"] }
+        email_sample_pattern:
+          type: [string, "null"]
+          examples: ["ad.soyad@std.bsu.edu.az"]
+          description: From `ref.university_email_domain.sample_pattern`, shown as a hint in the address field.
+
+    VerificationRoute:
+      type: object
+      required: [method, is_recommended, sla_label, display_order]
+      properties:
+        method: { type: string, enum: [university_email, student_card, invite_code] }
+        is_recommended:
+          type: boolean
+          description: At most one per university — the design's `TÖVSİYƏ` badge.
+        sla_label:
+          type: string
+          description: |
+            **Server-authored and flag-gated.** Reverts from `2 dəqiqə` / `24 saata qədər`
+            to the measured value when the SLA is being missed. The client renders what it
+            is given (`02-identity-spec.md` §2.1, §2.2 honesty rules).
+          examples: ["2 dəqiqə"]
+        note: { type: [string, "null"] }
+        sample_pattern: { type: [string, "null"] }
+        display_order: { type: integer }
+
+    OtpChallengeAccepted:
+      type: object
+      required: [attempt_id, expires_at, message]
+      properties:
+        attempt_id: { type: string, format: uuid }
+        expires_at:
+          type: string
+          format: date-time
+          description: 10-minute TTL.
+        resend_available_at:
+          type: string
+          format: date-time
+          description: 60-second cooldown.
+        message: { type: string, examples: ["Kod göndərildi. Poçtunu yoxla."] }
+      description: |
+        Byte-identical for a fresh address, an already-registered address and a banned
+        address. Before the caller has proved control of the mailbox, every response is the
+        same one.
+
+    VerificationGranted:
+      type: object
+      required: [tier, verification_status, token_refresh_required]
+      properties:
+        tier: { type: string, enum: [provisional, email, card] }
+        verification_status: { $ref: "#/components/schemas/VerificationStatusCoarse" }
+        handle:
+          type: [string, "null"]
+          description: Generated on first grant. Never chosen by the client.
+          examples: ["sakit-pərvanə-37"]
+        token_refresh_required:
+          type: boolean
+          description: |
+            Always `true`. The grant transaction increments the identity epoch, so the
+            caller's current token is stale and the next request would return
+            `401 token_stale` regardless.
+        provisional_expires_at:
+          type: [string, "null"]
+          format: date-time
+          description: Route C only. Seven days, after which the account reverts to read-only unless a real verification completes.
+        message: { type: [string, "null"] }
+
+    CardSubmissionAccepted:
+      type: object
+      required: [attempt_id, state, sla_label]
+      properties:
+        attempt_id: { type: string, format: uuid }
+        state: { type: string, enum: [pending, in_review, rejected, verified] }
+        sla_due_at: { type: [string, "null"], format: date-time }
+        sla_label: { type: string, examples: ["24 saata qədər"] }
+        message: { type: [string, "null"] }
+
+    VerificationStatus:
+      type: object
+      required: [tier, verification_status, routes]
+      properties:
+        tier: { type: string, enum: [provisional, email, card, expired, suspended] }
+        verification_status: { $ref: "#/components/schemas/VerificationStatusCoarse" }
+        routes:
+          type: array
+          description: One entry per route. Screen 10 renders several simultaneously.
+          items:
+            type: object
+            required: [method, state, label]
+            properties:
+              method: { type: string, enum: [university_email, student_card, invite_code] }
+              state: { type: string, enum: [none, pending, in_review, verified, rejected, expired, revoked] }
+              label:
+                type: string
+                description: "Localised, e.g. `E-poçt doğrulandı`, `Kart: gözləyir`."
+              valid_until: { type: [string, "null"], format: date-time }
+              reverification_due:
+                type: [boolean, "null"]
+                description: Cosmetic banner in the 30 days before expiry. No functional change.
+              sla_due_at: { type: [string, "null"], format: date-time }
+              reject_reason:
+                type: [string, "null"]
+                description: |
+                  Localised. Suspected-forgery rejections return the **generic**
+                  "doğrulaya bilmədik" — specific feedback teaches forgers what to fix.
+
+    UploadTarget:
+      type: object
+      required: [upload_id, url, method, expires_at]
+      properties:
+        upload_id: { type: string, format: uuid }
+        url:
+          type: string
+          description: |
+            One-shot signed URL into a private bucket. The object key is ≥128 bits of
+            randomness in a flat namespace — no user id, no thread id, no shared prefix
+            between two uploads by the same person.
+        method: { type: string, enum: [PUT, POST] }
+        headers:
+          type: object
+          additionalProperties: { type: string }
+        expires_at: { type: string, format: date-time }
+
+    InviteCode:
+      type: object
+      required: [id, expires_at, state]
+      properties:
+        id: { type: string, format: uuid }
+        expires_at: { type: string, format: date-time }
+        state: { type: string, enum: [live, consumed, expired] }
+        university_code: { type: string, examples: ["BDU"] }
+      description: |
+        Carries **nothing about the redeemer**. The invite edge is sealed, access-logged,
+        never used for recommendations or notifications, and aggregated away after 30 days.
+
+    InviteCodeIssued:
+      allOf:
+        - $ref: "#/components/schemas/InviteCode"
+        - type: object
+          required: [code]
+          properties:
+            code:
+              type: string
+              pattern: "^[0-9]{6}$"
+              description: Returned exactly once, at issuance. Stored only as a keyed hash.
+              examples: ["704318"]
+
+    # ---------- session and profile ----------
+
+    PublicProfile:
+      type: object
+      required: [id, handle, avatar_id, verification_status, contributor_level]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        handle:
+          type: string
+          description: Generated `adjective-noun-NN` from the curated Azerbaijani wordlist. Never chosen.
+          examples: ["quru-püstə-19"]
+        avatar_id:
+          type: integer
+          minimum: 0
+          maximum: 11
+          description: |
+            Derived from the folded handle, never stored independently — so it **rotates with
+            the handle**. An avatar that survived a rename would link the old handle to the
+            new one and defeat the point of renaming.
+        university_id:
+          type: [string, "null"]
+          format: uuid
+          description: |
+            Present only when the user opted in **and** their cohort is ≥ 20. Otherwise
+            `null`, with no indication that suppression occurred and no count.
+        verification_status: { $ref: "#/components/schemas/VerificationStatusCoarse" }
+        contributor_level:
+          type: integer
+          minimum: 0
+          maximum: 4
+          description: |
+            Coarse, super-linear buckets (50 / 250 / 1000 / 5000), **materialised and
+            refreshed on a delay**, never within 24 h of the karma change that caused it.
+            This replaces exact karma across users: an exact karma readable on demand lets an
+            attacker poll a handle before and after a post appears and link that stable
+            pseudonym to that anonymous post with certainty (`02-identity-spec.md` T5,
+            assertions 22–23). The delay is the security control.
+      description: |
+        `public.public_profiles`, whole. **The only cross-user read of another person.**
+        `additionalProperties: false` is load-bearing: adding a field here is a security
+        change and must be reviewed as one.
+
+    SessionUser:
+      type: object
+      required: [id, handle, avatar_id, verification_tier, status]
+      properties:
+        id: { type: string, format: uuid }
+        handle: { type: string, examples: ["sakit-pərvanə-37"] }
+        handle_number: { type: [integer, "null"], examples: [37] }
+        avatar_id: { type: integer, minimum: 0, maximum: 11 }
+        verification_tier: { type: string, enum: [unverified, email_verified, card_verified] }
+        verification_status: { $ref: "#/components/schemas/VerificationStatusCoarse" }
+        contributor_level: { type: integer, minimum: 0, maximum: 4 }
+        university:
+          type: [object, "null"]
+          properties:
+            id: { type: string, format: uuid }
+            code: { type: string }
+            name: { type: string }
+        display_study_year:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 8
+          description: Absent when the privacy toggle is off **or** the cohort is below the floor. The two cases are indistinguishable, deliberately.
+        display_faculty_label:
+          type: [string, "null"]
+          description: |
+            A pre-rendered, already-generalised label. **Never a faculty id and never a
+            programme.** Null when the (university, faculty, year) cohort did not meet the
+            floor.
+        karma:
+          type: integer
+          description: |
+            Exact, and **own-row only** — from `public.app_user_card`, which is
+            `security_invoker = on`. It appears in no cross-user surface at any tier.
+        post_count: { type: integer, description: Own-row only. Never public — a +1 at time T narrows to the posts made at time T. }
+        comment_count: { type: integer, description: Own-row only. }
+        review_count: { type: integer, description: Own-row only. }
+        locale: { $ref: "#/components/schemas/LocaleCode" }
+        feed_languages:
+          type: array
+          items: { $ref: "#/components/schemas/LocaleCode" }
+        status: { type: string, enum: [pending, active, muted, suspended, deactivated] }
+        created_at:
+          type: string
+          format: date-time
+          description: Own-row only. Never cross-user — account age correlates with join cohort.
+        handle_change_allowed_at:
+          type: string
+          format: date-time
+          description: The 14-day cooldown, enforced server-side. The client control is advisory.
+        privacy: { $ref: "#/components/schemas/PrivacySettings" }
+
+    PrivacySettings:
+      type: object
+      properties:
+        show_year: { type: boolean, description: "`Kursumu profildə göstər`. Applied on top of the k-anonymity floor, never instead of it." }
+        share_timetable: { type: boolean, description: "`Cədvəlimi kursdaşlarla paylaş`. Sharing is free/busy only on a ≥30-minute grid; course identities are never shared." }
+        show_uni_badge: { type: boolean, description: "`Postlarımda universitet nişanı`." }
+        link_listings: { type: boolean, description: "`Bazar profilimə keçid`." }
+        discoverable: { type: boolean, description: "`Axtarışda tapılım`. Exact-handle lookup only, off by default." }
+
+    BlockEntry:
+      type: object
+      required: [block_id, handle_at_block_time, scope, created_at]
+      properties:
+        block_id: { type: string, format: uuid }
+        handle_at_block_time:
+          type: string
+          description: |
+            A **snapshot**, never resolved live. Resolving live would turn the block list into
+            a rename oracle: block many people, watch the list, learn the whole rename map.
+          examples: ["quru-püstə-19"]
+        scope: { type: string, enum: [forum, global] }
+        created_at: { type: string, format: date-time }
+
+    # ---------- catalogue ----------
+
+    Term:
+      type: object
+      required: [id, label, season, starts_on, ends_on, is_current]
+      properties:
+        id: { type: string, format: uuid }
+        label: { type: string, examples: ["2025/26 Payız"] }
+        season: { type: string, enum: [payiz, yaz, yay] }
+        starts_on: { type: string, format: date }
+        ends_on: { type: string, format: date }
+        add_drop_ends_on: { type: [string, "null"], format: date }
+        exams_start_on: { type: [string, "null"], format: date }
+        is_current: { type: boolean }
+
+    Course:
+      type: object
+      required: [id, code, title]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string, examples: ["CS 214"] }
+        title: { type: string, examples: ["Verilənlər bazası sistemləri"] }
+        short_title: { type: [string, "null"], examples: ["Verilənlər bazası"], description: The grid label. }
+        credits: { type: [number, "null"], examples: [6] }
+        level: { type: [integer, "null"] }
+        description: { type: [string, "null"] }
+        department_name: { type: [string, "null"], examples: ["İnformatika kafedrası"] }
+        review_summary:
+          type: [object, "null"]
+          description: From `public.course_review_summary`. Never walled.
+          properties:
+            review_count: { type: integer }
+            rating_avg: { type: [number, "null"] }
+
+    CoursePage:
+      type: object
+      required: [items, page_info]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Course" }
+        page_info: { $ref: "#/components/schemas/PageInfo" }
+
+    Instructor:
+      type: object
+      required: [id, full_name]
+      properties:
+        id: { type: string, format: uuid }
+        full_name:
+          type: string
+          examples: ["Nigar Əliyeva"]
+          description: Real and public. Instructors are not `app_user`s and are never linked to one.
+        title_prefix: { type: [string, "null"], examples: ["dos."] }
+        initials: { type: [string, "null"], examples: ["NƏ"], description: Rendered avatar. }
+        department_name: { type: [string, "null"], examples: ["İnformatika kafedrası"] }
+        university_code: { type: [string, "null"], examples: ["BDU"] }
+        is_claimed: { type: boolean }
+        rating_avg: { type: [number, "null"] }
+        review_count: { type: [integer, "null"] }
+
+    InstructorPage:
+      type: object
+      required: [items, page_info]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Instructor" }
+        page_info: { $ref: "#/components/schemas/PageInfo" }
+
+    Room:
+      type: object
+      properties:
+        code: { type: string, examples: ["312"] }
+        campus_name: { type: [string, "null"], examples: ["II korpus"] }
+
+    SectionMeeting:
+      type: object
+      required: [id, weekday, starts_at, ends_at, kind]
+      properties:
+        id: { type: string, format: uuid }
+        weekday:
+          type: integer
+          minimum: 1
+          maximum: 7
+          description: ISO-8601. 1 = Monday.
+        weekday_label: { type: string, examples: ["Ç.A"], description: "`B.E Ç.A Ç C.A C` for Mon–Fri." }
+        starts_at: { type: string, examples: ["14:05"], description: Local to the university timezone. }
+        ends_at: { type: string, examples: ["15:25"] }
+        kind: { $ref: "#/components/schemas/MeetingKind" }
+        parity: { type: string, enum: [every, odd, even] }
+        room: { $ref: "#/components/schemas/Room" }
+
+    CourseSection:
+      type: object
+      required: [id, section_code]
+      properties:
+        id: { type: string, format: uuid }
+        section_code: { type: string, examples: ["1"] }
+        lang: { $ref: "#/components/schemas/LocaleCode" }
+        capacity: { type: [integer, "null"] }
+        enrolled_count: { type: integer, description: Counter cache, not a live COUNT(*). }
+        primary_instructor: { $ref: "#/components/schemas/Instructor" }
+        meetings:
+          type: array
+          items: { $ref: "#/components/schemas/SectionMeeting" }
+
+    # ---------- timetable ----------
+
+    Enrollment:
+      type: object
+      required: [id, section_id, state]
+      properties:
+        id: { type: string, format: uuid }
+        section_id: { type: string, format: uuid }
+        term_id: { type: string, format: uuid }
+        state: { type: string, enum: [enrolled, dropped, completed, failed] }
+        color: { $ref: "#/components/schemas/AccentColor" }
+        display_order: { type: [integer, "null"] }
+        course:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            code: { type: string, examples: ["CS 214"] }
+            title: { type: string, examples: ["Verilənlər bazası sistemləri"] }
+            short_title: { type: [string, "null"] }
+            credits: { type: [number, "null"] }
+        instructor_name: { type: [string, "null"], examples: ["dos. Nigar Əliyeva"] }
+        attendance: { $ref: "#/components/schemas/Attendance" }
+        final_letter: { type: [string, "null"] }
+        gpa_points: { type: [number, "null"] }
+
+    Attendance:
+      type: object
+      required: [enrollment_id, absence_count, absence_units, absence_limit, state]
+      properties:
+        enrollment_id: { type: string, format: uuid }
+        section_id: { type: string, format: uuid }
+        course_code: { type: string, examples: ["CS 214"] }
+        course_title: { type: [string, "null"] }
+        absence_count: { type: integer, description: Raw count of recorded absences. }
+        absence_units:
+          type: number
+          description: |
+            Weighted total — a `late` contributes `late_counts_as` (default 0.5). This is
+            what the `4 / 12` ring renders.
+        absence_limit:
+          type: integer
+          description: |
+            **Resolved server-side, never a client constant.**
+            `section override → course policy → faculty policy → university policy →
+            university default`.
+          examples: [12]
+        expulsion_at: { type: integer, description: Expulsion threshold. Usually equal to `absence_limit`. }
+        used_ratio_pct: { type: integer, examples: [33], description: "Design: `İcazəli qayıb limitinin 33%-i istifadə olunub`." }
+        warn_at_ratio_pct: { type: integer, examples: [50] }
+        late_counts_as: { type: number, examples: [0.5] }
+        state:
+          type: string
+          enum: [ok, warning, at_limit, over_limit]
+          description: Derived from `absence_units` against `warn_at_ratio` and `expulsion_at`.
+
+    Absence:
+      type: object
+      required: [id, enrollment_id, occurred_on, kind]
+      properties:
+        id: { type: string, format: uuid }
+        enrollment_id: { type: string, format: uuid }
+        meeting_id: { type: [string, "null"], format: uuid }
+        occurred_on: { type: string, format: date }
+        kind: { $ref: "#/components/schemas/AbsenceKind" }
+        source: { type: string, enum: [self_reported, instructor, import] }
+        excuse_state: { type: [string, "null"], enum: [none, requested, approved, rejected, null] }
+
+    WeekTimetable:
+      type: object
+      required: [week_start, week_end, days]
+      properties:
+        week_start: { type: string, format: date }
+        week_end: { type: string, format: date }
+        term:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            label: { type: string, examples: ["2025/26 Payız"] }
+        days:
+          type: array
+          items:
+            type: object
+            required: [date, weekday, meetings]
+            properties:
+              date: { type: string, format: date }
+              weekday: { type: integer, minimum: 1, maximum: 7 }
+              weekday_label: { type: string, examples: ["Ç.A"] }
+              meetings:
+                type: array
+                items:
+                  type: object
+                  required: [meeting_id, section_id, starts_at, ends_at, status]
+                  properties:
+                    meeting_id: { type: string, format: uuid }
+                    section_id: { type: string, format: uuid }
+                    enrollment_id: { type: string, format: uuid }
+                    course_code: { type: string, examples: ["CS 214"] }
+                    course_short_title: { type: [string, "null"], examples: ["Verilənlər bazası"] }
+                    starts_at: { type: string, examples: ["14:05"] }
+                    ends_at: { type: string, examples: ["15:25"] }
+                    kind: { $ref: "#/components/schemas/MeetingKind" }
+                    room: { $ref: "#/components/schemas/Room" }
+                    instructor_name: { type: [string, "null"], examples: ["dos. Nigar Əliyeva"] }
+                    color: { $ref: "#/components/schemas/AccentColor" }
+                    status:
+                      type: string
+                      enum: [scheduled, cancelled, moved, extra]
+                      description: Exceptions are already applied server-side; parity is already resolved.
+                    note: { type: [string, "null"], examples: ["Dərs ləğv edildi."] }
+
+    Deadline:
+      type: object
+      required: [id, section_id, kind, title, origin]
+      properties:
+        id: { type: string, format: uuid }
+        section_id: { type: string, format: uuid }
+        course_code: { type: string, examples: ["CS 214"] }
+        course_short_title: { type: [string, "null"] }
+        kind: { $ref: "#/components/schemas/CourseworkKind" }
+        title: { type: string, examples: ["SQL laboratoriya #4"] }
+        description: { type: [string, "null"] }
+        due_at: { type: [string, "null"], format: date-time }
+        due_label:
+          type: [string, "null"]
+          examples: ["Sabah 23:59"]
+          description: |
+            Localised. A raw `due_at` is also returned: a deadline is a property of a
+            scheduled thing, not of a person's activity, so it is not subject to the coarse
+            time rule.
+        weight_pct: { type: [number, "null"] }
+        origin: { type: string, enum: [official, crowdsourced, personal] }
+        created_by:
+          oneOf:
+            - $ref: "#/components/schemas/PublicProfile"
+            - type: "null"
+          description: |
+            Crowdsourced deadlines are attributed **by handle**, not by alias — adding a
+            deadline is a reputational act and the design shows no anonymity affordance for
+            it. Consequently this object carries no alias fields, ever.
+        confirm_count: { type: integer }
+        dispute_count: { type: integer }
+        is_verified: { type: boolean }
+        my_state: { type: string, enum: [todo, in_progress, done, skipped] }
+
+    DeadlinePage:
+      type: object
+      required: [items, page_info]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Deadline" }
+        page_info: { $ref: "#/components/schemas/PageInfo" }
+
+    GpaSummary:
+      type: object
+      required: [scale_max, term, cumulative]
+      properties:
+        scale_max: { type: number, examples: [4], description: Maximum `gpa_points` in this university's `ref.grade_scale`. }
+        term:
+          type: object
+          properties:
+            term_id: { type: string, format: uuid }
+            term_label: { type: string, examples: ["2024/25 Yaz"] }
+            gpa: { type: [number, "null"] }
+            credits_attempted: { type: number }
+            credits_earned: { type: number }
+            courses:
+              type: array
+              items:
+                type: object
+                properties:
+                  section_id: { type: string, format: uuid }
+                  course_code: { type: string }
+                  course_title: { type: string }
+                  credits: { type: [number, "null"] }
+                  final_letter: { type: [string, "null"] }
+                  gpa_points: { type: [number, "null"] }
+        cumulative:
+          type: object
+          properties:
+            gpa: { type: [number, "null"] }
+            credits_attempted: { type: number }
+            credits_earned: { type: number }
+      description: |
+        Computed server-side from `enrollment.gpa_points` weighted by `ref.course.credits`.
+        No GPA column exists in the schema. Own data only — never comparable, never ranked,
+        never returned for another user at any tier.
+
+    # ---------- forum ----------
+
+    Board:
+      type: object
+      required: [id, slug, name, scope, lang]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string, examples: ["ders-ve-muellim"] }
+        name: { type: string, examples: ["Dərs və müəllim"] }
+        description: { type: [string, "null"] }
+        scope: { type: string, enum: [national, university, faculty, course, club], x-kiksu-enum: open }
+        university_id: { type: [string, "null"], format: uuid }
+        university_code: { type: [string, "null"], examples: ["BDU"] }
+        lang: { $ref: "#/components/schemas/LocaleCode" }
+        follower_count:
+          type: [integer, "null"]
+          examples: [9214]
+          description: |
+            Returned **only above 1,000**. Below that the field is absent — not rounded,
+            because a rounded count still moves, and a board's eligible membership is a
+            cohort (`02-identity-spec.md` §5.4).
+        post_count: { type: integer }
+        min_tier_to_post: { type: string, enum: [unverified, email_verified, card_verified] }
+        allows_poll: { type: boolean }
+        allows_image: { type: boolean }
+        is_following: { type: boolean, description: The caller's own row. }
+        is_archived: { type: boolean }
+
+    AliasAuthor:
+      type: object
+      required: [display_mode]
+      additionalProperties: false
+      properties:
+        display_mode:
+          type: string
+          enum: [alias, handle, staff]
+          description: |
+            `alias` is the default and the design's only shown case. `handle` and `staff`
+            appear on deliberately identified content (staff notices, club announcements),
+            and in that case `profile` is present and every alias field is absent.
+        alias_number: { type: [integer, "null"], minimum: 1, examples: [5] }
+        alias_label: { type: [string, "null"], examples: ["ANONİM 5"], description: Localised. }
+        tier_badge:
+          type: [string, "null"]
+          enum: [card, email, none, null]
+          description: |
+            **Frozen at write time.** A student who upgrades from `✓` to `KART` does not
+            retroactively re-badge their old posts: retroactive badges leak the upgrade event
+            and correlate a user's posts across threads.
+
+            Subject to the scope-wide k-anonymity substitution: when a rendered scope has
+            fewer than 20 card-verified users, `card` is replaced by neutral verification for
+            **the whole scope**, never per user — a per-user suppression would itself be the
+            signal (`02-identity-spec.md` §5.4, assertion 37). The client cannot tell that a
+            substitution happened.
+        is_op: { type: boolean, description: "The `MÜƏLLİF` marker. The thread author always holds ordinal 1." }
+        profile:
+          oneOf:
+            - $ref: "#/components/schemas/PublicProfile"
+            - type: "null"
+          description: |
+            Present **only** when `display_mode` is `handle` or `staff`. When it is present,
+            every alias field above is absent, and vice versa. No response ever carries both
+            (`02-identity-spec.md` rule S-1, assertion 21).
+      description: |
+        The rendered identity of forum content. **Not authorship.** `public.post` and
+        `public.post_comment` carry no author column: authorship lives in `internal.*`, which
+        no read path touches. `additionalProperties: false` is load-bearing — a `handle`,
+        `app_user_id` or `avatar_id` appearing here alongside an alias would collapse layers 2
+        and 3.
+
+    PostListItem:
+      type: object
+      required: [id, board_id, kind, title, author, time_bucket, time_label, score, comment_count]
+      properties:
+        id: { type: string, format: uuid }
+        board_id: { type: string, format: uuid }
+        board_name: { type: [string, "null"] }
+        university_id:
+          type: [string, "null"]
+          format: uuid
+          description: |
+            **Board scope context, not an author attribute.** It is denormalised from the
+            board. It must not be rendered as "this author is from BDU": on a national board
+            the two are unrelated. See `05-api-conventions.md` Open question 5.
+        kind: { $ref: "#/components/schemas/PostKind" }
+        title: { type: string }
+        excerpt: { type: [string, "null"] }
+        author: { $ref: "#/components/schemas/AliasAuthor" }
+        time_bucket: { $ref: "#/components/schemas/TimeBucket" }
+        time_label: { type: string, examples: ["~30 dəq"], description: Localised, server-rendered. No raw timestamp is returned. }
+        score: { type: integer, examples: [211] }
+        comment_count: { type: integer, examples: [62] }
+        save_count: { type: integer, examples: [18] }
+        view_count: { type: integer }
+        attachment_count: { type: integer }
+        has_poll: { type: boolean }
+        is_pinned: { type: boolean }
+        is_locked: { type: boolean }
+        moderation_state: { $ref: "#/components/schemas/ModerationState" }
+        my_vote: { type: integer, enum: [-1, 0, 1], description: The caller's own vote. There is no endpoint that reveals anyone else's. }
+        is_saved: { type: boolean }
+
+    PostPage:
+      type: object
+      required: [items, page_info]
+      properties:
+        pinned:
+          type: array
+          description: Returned ahead of the ordered page and excluded from the cursor.
+          items: { $ref: "#/components/schemas/PostListItem" }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/PostListItem" }
+        page_info: { $ref: "#/components/schemas/PageInfo" }
+
+    Attachment:
+      type: object
+      required: [id, url]
+      properties:
+        id: { type: string, format: uuid }
+        url:
+          type: string
+          description: |
+            Points at a ≥128-bit random object key in a flat namespace. The URL encodes no
+            user id, no handle, no post id, and shares no prefix with another object uploaded
+            by the same person. The image was **re-encoded server-side with all metadata
+            destroyed** — a re-encode, not a tag strip, because thumbnails embedded in EXIF
+            survive naive stripping.
+          examples: ["https://cdn.kiksu.az/p/8f3a1c9d2e4b6a70.jpg"]
+        mime_type: { type: [string, "null"] }
+        width: { type: [integer, "null"] }
+        height: { type: [integer, "null"] }
+        blurhash: { type: [string, "null"] }
+        caption: { type: [string, "null"], examples: ["Tapşırıq ekran şəkli"] }
+
+    PollOption:
+      type: object
+      required: [id, position, label, vote_count]
+      properties:
+        id: { type: string, format: uuid }
+        position: { type: integer }
+        label: { type: string, examples: ["Çərşənbə axşamı"] }
+        vote_count: { type: integer }
+
+    Poll:
+      type: object
+      required: [options, total_votes]
+      properties:
+        question: { type: [string, "null"] }
+        is_multi_choice: { type: boolean }
+        max_choices: { type: integer, minimum: 1 }
+        closes_at:
+          type: [string, "null"]
+          format: date-time
+          description: |
+            A raw timestamp, deliberately — a poll deadline is a property of the poll, not of
+            anyone's activity. Design renders `2 GÜN QALIB`.
+        total_votes: { type: integer, examples: [428], description: Distinct voters. Refreshed on a ≥60 s cache, with no per-option live delta. }
+        results_visible:
+          type: boolean
+          description: False when `hide_results_until_vote` is set and the caller has not voted.
+        options:
+          type: array
+          items: { $ref: "#/components/schemas/PollOption" }
+        my_option_ids:
+          type: array
+          items: { type: string, format: uuid }
+          description: |
+            The caller's own selection. **There is no endpoint that reveals who voted**, at
+            any privilege level below the legal-request service, and none may be added
+            (`02-identity-spec.md` T19).
+
+    PollInput:
+      type: object
+      required: [options]
+      properties:
+        question: { type: string, maxLength: 300 }
+        is_multi_choice: { type: boolean, default: false }
+        max_choices: { type: integer, minimum: 1, default: 1 }
+        closes_at: { type: string, format: date-time }
+        hide_results_until_vote: { type: boolean, default: false }
+        options:
+          type: array
+          minItems: 2
+          maxItems: 8
+          items: { type: string, minLength: 1, maxLength: 120 }
+
+    PostDetail:
+      allOf:
+        - $ref: "#/components/schemas/PostListItem"
+        - type: object
+          properties:
+            body: { type: [string, "null"] }
+            lang: { $ref: "#/components/schemas/LocaleCode" }
+            edited: { type: boolean, description: Boolean only. A raw `edited_at` would reintroduce a precise activity timestamp. }
+            is_mine: { type: boolean, description: Resolved server-side from `internal.post_author`, scoped to the token. }
+            attachments:
+              type: array
+              items: { $ref: "#/components/schemas/Attachment" }
+            poll:
+              oneOf:
+                - $ref: "#/components/schemas/Poll"
+                - type: "null"
+
+    Comment:
+      type: object
+      required: [id, post_id, depth, author, time_bucket, time_label, score, moderation_state]
+      properties:
+        id: { type: string, format: uuid }
+        post_id: { type: string, format: uuid }
+        parent_id: { type: [string, "null"], format: uuid }
+        depth: { type: integer, minimum: 0, maximum: 4 }
+        path:
+          type: array
+          items: { type: integer }
+          description: Materialised ancestor chain of per-thread sequence numbers. Threaded ordering from a plain btree, no recursive CTE.
+        author: { $ref: "#/components/schemas/AliasAuthor" }
+        body:
+          type: [string, "null"]
+          description: Null when `moderation_state` is `removed`.
+        deleted_label:
+          type: [string, "null"]
+          examples: ["silinib"]
+          description: |
+            Deleted comments are returned **in place**, keeping their ordinal. Removing them
+            would turn `1, 2, 4, 5` into evidence that participant 3 said something removable
+            (`02-identity-spec.md` T16, assertion 46). Ordinals are never renumbered.
+        time_bucket: { $ref: "#/components/schemas/TimeBucket" }
+        time_label: { type: string, examples: ["~30 dəq"] }
+        edited: { type: boolean }
+        score: { type: integer }
+        reply_count: { type: integer }
+        moderation_state: { $ref: "#/components/schemas/ModerationState" }
+        my_vote: { type: integer, enum: [-1, 0, 1] }
+        is_mine: { type: boolean }
+
+    CommentPage:
+      type: object
+      required: [items, page_info]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Comment" }
+        page_info: { $ref: "#/components/schemas/PageInfo" }
+
+    AliasPreview:
+      type: object
+      required: [post_id, alias_number, alias_label, composer_cta, state, is_existing]
+      additionalProperties: false
+      properties:
+        post_id: { type: string, format: uuid }
+        alias_number: { type: integer, minimum: 1, examples: [5] }
+        alias_label: { type: string, examples: ["ANONİM 5"] }
+        composer_cta:
+          type: string
+          examples: ["ANONİM 5 KİMİ YAZ"]
+          description: Already localised — this is grammar, not concatenation, and ru/en do not build it the same way.
+        state:
+          type: string
+          enum: [reserved, active]
+          description: "`reserved` — an ordinal is held with a TTL. `active` — the caller has already commented in this thread."
+        is_existing:
+          type: boolean
+          description: True when the caller already holds an ordinal here. Nothing is consumed and nothing is held.
+        expires_at:
+          type: [string, "null"]
+          format: date-time
+          description: |
+            When the hold lapses. Null when `is_existing` is true. **Authoritative** — the
+            client re-issues the call before this passes rather than assuming a fixed TTL,
+            because the TTL is server configuration.
+      description: |
+        The reservation behind `ANONİM 5 KİMİ YAZ`. Takes no user parameter: the caller is
+        bound from the token inside a privileged function, so there is no form of this call
+        that answers "what ordinal does someone else have"
+        (`02-identity-spec.md` §3.3).
+
+    VoteResult:
+      type: object
+      required: [score, my_vote]
+      properties:
+        score: { type: integer }
+        my_vote: { type: integer, enum: [-1, 0, 1] }
+
+    # ---------- reviews ----------
+
+    ReviewTag:
+      type: object
+      required: [key, label, polarity]
+      properties:
+        key: { type: string, examples: ["slides_clear"] }
+        label: { type: string, examples: ["Slaydlar aydın"] }
+        polarity: { type: string, enum: [positive, neutral, negative], description: Drives colour — positive Şirvan turkuazı, negative Nar. }
+        applies_to: { type: string, enum: [instructor, course, both] }
+        count: { type: [integer, "null"], description: Present only inside a summary's `top_tags`. }
+
+    ReviewSummary:
+      type: object
+      required: [review_count]
+      properties:
+        review_count: { type: integer, examples: [61] }
+        course_count: { type: [integer, "null"], examples: [3], description: "Design: `3 FƏNN`. Instructor summaries only." }
+        rating_avg: { type: [number, "null"], examples: [4.2] }
+        histogram:
+          type: [object, "null"]
+          description: 1–5 star counts, from the summary table's `star_1..star_5`.
+          additionalProperties: { type: integer }
+        criteria:
+          type: object
+          description: The four fixed axes the design renders as four labelled bars. Fixed columns, not EAV.
+          properties:
+            quality:
+              type: object
+              properties:
+                label: { type: string, examples: ["Dərs keyfiyyəti"] }
+                avg: { type: [number, "null"] }
+            fairness:
+              type: object
+              properties:
+                label: { type: string, examples: ["Ədalətli qiymət"] }
+                avg: { type: [number, "null"] }
+            workload:
+              type: object
+              properties:
+                label: { type: string, examples: ["İş yükü"] }
+                avg: { type: [number, "null"] }
+            attendance_strictness:
+              type: object
+              properties:
+                label: { type: string, examples: ["Davamiyyət tələbi"] }
+                avg: { type: [number, "null"] }
+        top_tags:
+          type: array
+          items: { $ref: "#/components/schemas/ReviewTag" }
+
+    InstructorProfile:
+      type: object
+      required: [instructor, summary]
+      properties:
+        instructor: { $ref: "#/components/schemas/Instructor" }
+        summary: { $ref: "#/components/schemas/ReviewSummary" }
+        courses:
+          type: array
+          description: Courses this instructor has been reviewed for, for the `FƏNN` filter.
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              code: { type: string }
+              title: { type: string }
+              review_count: { type: integer }
+              rating_avg: { type: [number, "null"] }
+
+    ReviewAccess:
+      type: object
+      required: [state, required_contributions, written_contributions]
+      properties:
+        state:
+          type: string
+          enum: [granted, walled, blocked]
+          description: |
+            Closed enum. `blocked` is a `review_ban` sanction and **contributing does not
+            lift it**.
+        term:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            label: { type: string, examples: ["2025/26 Payız"] }
+        required_contributions: { type: integer, examples: [1] }
+        written_contributions: { type: integer, examples: [0] }
+        unlocked_until: { type: [string, "null"], format: date-time }
+        message: { type: [string, "null"], examples: ["Rəyləri oxumaq üçün bu semestr bir rəy yaz."] }
+        reviewable_sections:
+          type: array
+          description: |
+            Derived from the caller's **own** enrollments, so it is own-data and not a cohort.
+            No count of other people appears anywhere in this object.
+          items:
+            type: object
+            properties:
+              section_id: { type: string, format: uuid }
+              course_id: { type: string, format: uuid }
+              course_code: { type: string, examples: ["CS 214"] }
+              course_title: { type: string, examples: ["Verilənlər bazası sistemləri"] }
+              instructor_id: { type: string, format: uuid }
+              instructor_name: { type: string, examples: ["dos. Nigar Əliyeva"] }
+              term_label: { type: string, examples: ["2025/26 Payız"] }
+              already_written: { type: boolean }
+      description: |
+        The contribution wall as **explicit, queryable state** rather than a surprise 403.
+        The wall cannot live in RLS — deciding whether a student has contributed this semester
+        requires `internal.review_author`, which policies may not touch — so it is a
+        server-layer rule, and a server-layer rule surfaced only as an error becomes a
+        surprise.
+
+    Review:
+      type: object
+      required: [id, course, instructor, overall_rating, quality, fairness, workload, attendance_strictness]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        course:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            code: { type: string, examples: ["CS 214"] }
+            title: { type: string, examples: ["Verilənlər bazası sistemləri"] }
+        instructor:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            full_name: { type: string, examples: ["Nigar Əliyeva"] }
+            title_prefix: { type: [string, "null"], examples: ["dos."] }
+        term:
+          type: [object, "null"]
+          description: |
+            Design renders `2024/25 YAZ · CS 214`. **May be absent** on an individual review
+            when the `(course, instructor, semester)` cohort is too small: on an 8-person
+            section with 3 reviews the reviewer is one of 8 and the text is often decisive
+            (`02-identity-spec.md` T17). The threshold `k_review` is unresolved — see
+            `05-api-conventions.md` Open question 6.
+          properties:
+            id: { type: string, format: uuid }
+            label: { type: string, examples: ["2024/25 Yaz"] }
+        overall_rating: { type: integer, minimum: 1, maximum: 5 }
+        quality: { type: integer, minimum: 1, maximum: 5, description: "Dərs keyfiyyəti" }
+        fairness: { type: integer, minimum: 1, maximum: 5, description: "Ədalətli qiymət" }
+        workload: { type: integer, minimum: 1, maximum: 5, description: "İş yükü" }
+        attendance_strictness: { type: integer, minimum: 1, maximum: 5, description: "Davamiyyət tələbi" }
+        tags:
+          type: array
+          items: { $ref: "#/components/schemas/ReviewTag" }
+        body: { type: [string, "null"] }
+        lang: { $ref: "#/components/schemas/LocaleCode" }
+        is_enrollment_verified:
+          type: boolean
+          description: |
+            The `DOĞRULANMIŞ` half of `ANONİM · DOĞRULANMIŞ`. **Gated**: only ever `true`
+            when the section cohort at write time met the university's k-anonymity floor. On
+            a small section an enrolled verified reviewer *is* identifiable, so the badge is
+            suppressed and `false` is returned with no indication that suppression occurred
+            and no count.
+        helpful_count: { type: integer }
+        my_helpful: { type: boolean, description: The caller's own row. }
+        time_bucket: { $ref: "#/components/schemas/TimeBucket" }
+        time_label: { type: string, examples: ["3 gün"] }
+        moderation_state: { $ref: "#/components/schemas/ModerationState" }
+      description: |
+        **There is no author field, at any tier — not `null`, not `"anonymous"`, absent.**
+        The design renders `ANONİM · DOĞRULANMIŞ` and nothing else. Reviews are the one
+        surface that renders neither an alias nor a handle, which is why
+        `additionalProperties: false` matters here as much as it does on `PublicProfile`.
+
+    ReviewPage:
+      type: object
+      required: [access, items, page_info]
+      properties:
+        access:
+          allOf:
+            - $ref: "#/components/schemas/ReviewAccess"
+          description: |
+            Always present. When `state` is `walled`, `items` is empty and the response is
+            still `200` — the client renders the contribution prompt from a response it
+            already has, with no error path and no extra round trip.
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Review" }
+        page_info: { $ref: "#/components/schemas/PageInfo" }
+
+    ReviewInput:
+      type: object
+      required: [course_id, instructor_id, term_id, overall_rating, quality, fairness, workload, attendance_strictness]
+      properties:
+        course_id: { type: string, format: uuid }
+        instructor_id: { type: string, format: uuid }
+        term_id: { type: string, format: uuid }
+        overall_rating: { type: integer, minimum: 1, maximum: 5 }
+        quality: { type: integer, minimum: 1, maximum: 5 }
+        fairness: { type: integer, minimum: 1, maximum: 5 }
+        workload: { type: integer, minimum: 1, maximum: 5 }
+        attendance_strictness: { type: integer, minimum: 1, maximum: 5 }
+        tag_keys:
+          type: array
+          maxItems: 8
+          items: { type: string }
+          description: Keys from `ref.review_tag`. At most 8, validated server-side.
+        body: { type: string, maxLength: 4000 }
+        lang: { $ref: "#/components/schemas/LocaleCode" }
+      description: |
+        The client sends no author field. Authorship is bound from the token and written to
+        `internal.review_author`, which also carries the
+        `(app_user_id, course_id, instructor_id, term_id)` uniqueness key — the constraint
+        cannot live on `public.review` because `public.review` has no author column.

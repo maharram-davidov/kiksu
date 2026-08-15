@@ -116,5 +116,22 @@ begin
     raise exception 'INVARIANT 8 FAILED: internal.post_author is missing; authorship may have been moved into public';
   end if;
 
-  raise notice 'All 8 schema invariants hold.';
+  ---------------------------------------------------------------------
+  -- 9. No externally visible table mints a UUIDv7 primary key.
+  --    A v7 id embeds a millisecond timestamp, so returning one hands the
+  --    caller the row's exact creation instant and defeats the coarse-time
+  --    bucketing applied to visible timestamps (threat T9/T11).
+  --    v7 is legitimate in internal.* and identity.*, which are sealed.
+  ---------------------------------------------------------------------
+  select string_agg(c.relname, ', ' order by c.relname) into v_cols
+    from pg_attrdef ad
+    join pg_class c     on c.oid = ad.adrelid
+    join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname in ('public', 'ref', 'career')
+     and pg_get_expr(ad.adbin, ad.adrelid) like '%uuid_v7%';
+  if v_cols is not null then
+    raise exception 'INVARIANT 9 FAILED: exposed table(s) default to UUIDv7: %', v_cols;
+  end if;
+
+  raise notice 'All 9 schema invariants hold.';
 end$$;

@@ -1,0 +1,8 @@
+{
+  "name": "@kiksu/tokens",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Design tokens extracted from design/kiksu-mobile-screens.html. Single source of truth for color, type and spacing — do not hardcode hex values in consumers.",
+  "main": "./tokens.ts",
+  "types": "./tokens.ts"
+}

@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "Kiksu",
+    "slug": "kiksu-mobile",
+    "scheme": "kiksu",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "primaryColor": "#0F7A85",
+    "ios": {
+      "bundleIdentifier": "az.kiksu.mobile",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "az.kiksu.mobile",
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
