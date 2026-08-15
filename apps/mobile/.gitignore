@@ -1,0 +1,11 @@
+# Expo
+.expo/
+expo-env.d.ts
+
+# Native project folders (not generated in this Expo Go workflow; would appear after `expo prebuild`)
+ios/
+android/
+
+# Misc
+.DS_Store
+*.log

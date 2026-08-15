@@ -1,0 +1,49 @@
+{
+  "nav": {
+    "today": "Bu gün",
+    "timetable": "Cədvəl",
+    "forum": "Forum",
+    "market": "Bazar",
+    "careers": "Karyera",
+    "profile": "Profil"
+  },
+  "screens": {
+    "today": {
+      "title": "Bu gün",
+      "description": "Gündəlik cədvəl, tapşırıqlar və bildirişlər bu ekranda görünəcək."
+    },
+    "timetable": {
+      "title": "Cədvəl",
+      "description": "Həftəlik dərs cədvəli və davamiyyət məlumatı bu ekranda olacaq."
+    },
+    "forum": {
+      "title": "Forum",
+      "description": "Universitet lövhələri və ümumi lövhələr bu ekranda olacaq."
+    },
+    "market": {
+      "title": "Bazar",
+      "description": "Elanlar, mənzil elanları və tapılıb-itirilənlər bu ekranda olacaq."
+    },
+    "careers": {
+      "title": "Karyera",
+      "description": "Vakansiyalar, təqaüdlər, tədbirlər və klublar bu ekranda olacaq."
+    },
+    "profile": {
+      "title": "Profil",
+      "description": "Profilin və bütün tənzimləmələr bu ekranda olacaq."
+    }
+  },
+  "header": {
+    "openDrawer": "Menyunu aç",
+    "notifications": "Bildirişlər",
+    "search": "Axtar",
+    "filter": "Filtr"
+  },
+  "identity": {
+    "emailVerifiedBadge": "E-POÇT DOĞRULANDI",
+    "cardVerifiedBadge": "KART",
+    "cardPendingBadge": "KART: GÖZLƏYİR",
+    "verifiedShort": "✓",
+    "handleCaption": "FORUM LƏQƏBİ · 14 GÜNDƏN BİR DƏYİŞİLİR"
+  }
+}

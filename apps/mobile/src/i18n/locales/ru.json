@@ -1,0 +1,52 @@
+{
+  "_meta": {
+    "status": "MACHINE-DRAFTED STUB — needs review by a native Russian editor before shipping. Do not treat as final copy."
+  },
+  "nav": {
+    "today": "Сегодня",
+    "timetable": "Расписание",
+    "forum": "Форум",
+    "market": "Рынок",
+    "careers": "Карьера",
+    "profile": "Профиль"
+  },
+  "screens": {
+    "today": {
+      "title": "Сегодня",
+      "description": "Здесь появится твоё расписание на день, задачи и уведомления."
+    },
+    "timetable": {
+      "title": "Расписание",
+      "description": "Здесь будет недельное расписание занятий и посещаемость."
+    },
+    "forum": {
+      "title": "Форум",
+      "description": "Здесь будут университетские и общие форумы."
+    },
+    "market": {
+      "title": "Рынок",
+      "description": "Здесь будут объявления, жильё и раздел находок."
+    },
+    "careers": {
+      "title": "Карьера",
+      "description": "Здесь будут вакансии, стипендии, мероприятия и клубы."
+    },
+    "profile": {
+      "title": "Профиль",
+      "description": "Здесь будет твой профиль и все настройки."
+    }
+  },
+  "header": {
+    "openDrawer": "Открыть меню",
+    "notifications": "Уведомления",
+    "search": "Поиск",
+    "filter": "Фильтр"
+  },
+  "identity": {
+    "emailVerifiedBadge": "ПОЧТА ПОДТВЕРЖДЕНА",
+    "cardVerifiedBadge": "КАРТА",
+    "cardPendingBadge": "КАРТА: ОЖИДАНИЕ",
+    "verifiedShort": "✓",
+    "handleCaption": "ПСЕВДОНИМ ФОРУМА · МЕНЯЕТСЯ РАЗ В 14 ДНЕЙ"
+  }
+}

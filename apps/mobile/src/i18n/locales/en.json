@@ -1,0 +1,52 @@
+{
+  "_meta": {
+    "status": "MACHINE-DRAFTED STUB — needs review by a native English editor before shipping. Do not treat as final copy."
+  },
+  "nav": {
+    "today": "Today",
+    "timetable": "Timetable",
+    "forum": "Forum",
+    "market": "Market",
+    "careers": "Careers",
+    "profile": "Profile"
+  },
+  "screens": {
+    "today": {
+      "title": "Today",
+      "description": "Your daily schedule, tasks and notifications will appear here."
+    },
+    "timetable": {
+      "title": "Timetable",
+      "description": "Your weekly class grid and attendance record will live here."
+    },
+    "forum": {
+      "title": "Forum",
+      "description": "University boards and national boards will live here."
+    },
+    "market": {
+      "title": "Market",
+      "description": "Listings, housing posts and lost & found will live here."
+    },
+    "careers": {
+      "title": "Careers",
+      "description": "Vacancies, scholarships, events and clubs will live here."
+    },
+    "profile": {
+      "title": "Profile",
+      "description": "Your profile and all settings will live here."
+    }
+  },
+  "header": {
+    "openDrawer": "Open menu",
+    "notifications": "Notifications",
+    "search": "Search",
+    "filter": "Filter"
+  },
+  "identity": {
+    "emailVerifiedBadge": "EMAIL VERIFIED",
+    "cardVerifiedBadge": "CARD",
+    "cardPendingBadge": "CARD: PENDING",
+    "verifiedShort": "✓",
+    "handleCaption": "FORUM HANDLE · CHANGEABLE EVERY 14 DAYS"
+  }
+}
