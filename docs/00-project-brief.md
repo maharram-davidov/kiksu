@@ -67,9 +67,16 @@ The design is the source of truth for UI and for these behaviours:
 - Weekday labels: B.E, Ç.A, Ç, C.A, C (Mon–Fri).
 
 ## Design tokens (from the design file)
-- Şirvan turquoise `#0F7A85` (primary), bronze `#C8952A` (card tier),
-  nar/pomegranate `#B23A2F` (deadlines/urgent), ink `#141C24`, paper `#E7E5DF`,
-  surfaces `#F5F3EC` `#EDEBE4` `#DEDCD5`, muted greys `#6D7580` `#8A9099` `#4A525C`.
+The design file names five colors itself, in Azerbaijani — use these names:
+- `#0F7A85` **Şirvan turkuazı** — primary
+- `#C8952A` **Tunc** — bronze, the card-verification tier
+- `#B23A2F` **Nar** — pomegranate, deadlines and urgency
+- `#141C24` **Xəzər mürəkkəbi** — ink, primary text
+- `#F1F0EC` **Bakı əhəngdaşı** — limestone, page background
+
+Full extracted set with usage counts: `packages/tokens/tokens.ts` (45 colors).
+That file is generated from the design and is the single source of truth for
+styling — do not hardcode hex values anywhere else.
 
 ## Output conventions
 - Write deliverables into `docs/`. Use exactly the filename you are told.

@@ -14,6 +14,7 @@ export const colors = {
   primaryHover: '#0B5C64', // Teal darker state (9 uses)
   primaryLight: '#F0F7F7', // Teal tint background (9 uses)
   primaryAccent: '#9ECBCF', // Teal accent/border (9 uses)
+  primaryTint: '#E4F0F1', // Teal tint surface (3 uses)
 
   // Secondary / Bronze (course indicator, card tier)
   secondary: '#C8952A', // Tunc / kart (bronze, card tier, 10 uses)
@@ -56,6 +57,7 @@ export const colors = {
   backgroundStone: '#EAE7DF', // Stone (1 use)
   backgroundUltraLight: '#E9E6DE', // Ultra light (1 use)
   backgroundPageBg: '#E7E5DF', // Page/document background (2 uses)
+  backgroundWarmSurface: '#EFEDE6', // Warm surface (4 uses)
 
   // Borders / Strokes / Dividers
   border: '#DEDCD5', // Primary border (48 uses)
