@@ -1,0 +1,2984 @@
+-- =====================================================================
+-- Kiksu — database schema (Postgres 17 / Supabase)
+-- Deliverable A of stage 1. Companion prose: docs/01-schema-notes.md
+--
+-- READ THIS HEADER BEFORE CHANGING ANYTHING BELOW.
+--
+-- The schema is split into SEVEN Postgres schemas. The split is not
+-- cosmetic: it is the enforcement mechanism for the four identity layers
+-- described in docs/00-project-brief.md. Grants, RLS and an event trigger
+-- hang off the schema boundaries.
+--
+--   util        Generic helpers (uuid v7, text folding, FTS config,
+--               updated_at). No data.
+--   ref         Reference / catalogue data: universities, faculties,
+--               departments, programmes, terms, rooms, courses, sections,
+--               meetings, instructors, vocabularies, settings. Globally
+--               readable, staff-written.
+--   public      LAYER 2 (app_user) + every pseudonymous, user-facing
+--               domain: forum, reviews, marketplace, vacancies, events,
+--               clubs, notifications. Client gets SELECT here (RLS-gated)
+--               and NOTHING else.
+--   internal    LAYER 3 machinery + attribution maps. This is where
+--               "which app_user wrote this anonymous thing" lives. No
+--               client grants of any kind, ever.
+--   identity    LAYER 1, SEALED. verified_identity + evidence + the
+--               subject <-> app_user binding. Forced RLS, separate owner
+--               role, every read audited, no grants to anon /
+--               authenticated / service_role.
+--   career      LAYER 4, SILOED. Real name + CV + job applications.
+--               Reachable only via a keyed pointer that the database
+--               itself cannot compute (see career.career_profile).
+--   moderation  Cases, actions, staff, appeals. Moderator role only.
+--
+-- HARD INVARIANTS, and where each one is actually enforced:
+--
+--   I1  career_profile has NO traversable FK to app_user.
+--       -> career.career_profile is keyed by subject_key = HMAC over the
+--          auth user id with a pepper held OUTSIDE the database. There is
+--          no column, no FK and no view that lets SQL walk from a career
+--          row to an app_user row. Enforced additionally by the DDL event
+--          trigger util.guard_identity_invariants() which rejects any
+--          FK into public/internal from career, and rejects any column in
+--          the career schema whose name looks like a user pointer.
+--
+--   I2  verified_identity is isolated; only the verification and
+--       legal-request services may join it to app_user.
+--       -> The binding lives in identity.app_user_link, which (a) is in
+--          the sealed schema, (b) deliberately has NO foreign key to
+--          public.app_user so no relationship exists in pg_constraint and
+--          no cascade path exists, (c) has FORCE ROW LEVEL SECURITY with
+--          a policy that only passes when a transaction-local GUC is set,
+--          and (d) the only thing that sets that GUC is a SECURITY
+--          DEFINER function that writes identity.access_log first.
+--
+--   I3  k-anonymity floor of 20.
+--       -> ref.university.k_anon_min is CHECKed >= 20 (it cannot be
+--          configured below the floor). public.cohort_size carries counts
+--          only (never identifiers) and is pushed from the identity
+--          service. public.app_user.display_* columns are nulled by
+--          trigger when the cohort is too small.
+--
+--   I4  One verified person = one app_user.
+--       -> identity.credential_binding UNIQUE (kind, credential_hmac)
+--          plus identity.app_user_link UNIQUE on both columns.
+--
+-- CONVENTIONS
+--   * Every id is uuid v7 (util.uuid_v7) so that primary keys are
+--     time-ordered and hot append tables do not shred their btrees.
+--   * All wall-clock instants are timestamptz. Academic calendar dates
+--     are date. Class meeting times are `time` interpreted in
+--     ref.university.timezone.
+--   * Money is integer minor units (qəpik) + an explicit currency code.
+--   * Native ENUM for closed structural sets; a lookup TABLE in ref for
+--     product vocabularies that will grow (tags, report reasons,
+--     categories, notification kinds).
+--   * Soft delete via deleted_at where content must survive moderation;
+--     hard delete elsewhere.
+--   * "Counter cache" columns are named *_count / *_sum and are listed in
+--     docs/01-schema-notes.md with their maintenance strategy.
+-- =====================================================================
+
+
+-- =====================================================================
+-- 01. EXTENSIONS
+-- =====================================================================
+
+create extension if not exists pgcrypto      with schema extensions;  -- gen_random_uuid, digest, hmac
+create extension if not exists citext        with schema extensions;  -- case-insensitive domains/emails
+create extension if not exists pg_trgm       with schema extensions;  -- fuzzy / substring search
+create extension if not exists btree_gist    with schema extensions;  -- room double-booking exclusion
+create extension if not exists unaccent      with schema extensions;  -- long tail of Latin diacritics
+create extension if not exists pg_stat_statements with schema extensions;
+
+-- Note: we do NOT rely on unaccent for Azerbaijani. Its rules file does
+-- not cover U+0259 SCHWA (ə), which is the single most important
+-- character in this product. Folding is done by util.fold_text below.
+
+
+-- =====================================================================
+-- 02. SCHEMAS AND ROLES
+-- =====================================================================
+
+create schema if not exists util;
+create schema if not exists ref;
+create schema if not exists internal;
+create schema if not exists identity;
+create schema if not exists career;
+create schema if not exists moderation;
+
+comment on schema internal is
+  'Attribution maps and alias machinery. NEVER grant to anon/authenticated. Not in PostgREST db-schemas.';
+comment on schema identity is
+  'LAYER 1 SEALED. Reads only through identity.* SECURITY DEFINER accessors, which audit. Owned by kiksu_identity_owner.';
+comment on schema career is
+  'LAYER 4 SILO. No traversable path to public.app_user exists or may be added.';
+
+-- Service roles. Supabase ships anon / authenticated / service_role.
+-- We add one login role per trust boundary so that a credential leak in
+-- one service does not hand over another layer. These are created
+-- NOLOGIN here; passwords are set out of band during provisioning.
+do $$
+begin
+  if not exists (select 1 from pg_roles where rolname = 'kiksu_identity_owner') then
+    create role kiksu_identity_owner nologin;
+  end if;
+  if not exists (select 1 from pg_roles where rolname = 'kiksu_career_owner') then
+    create role kiksu_career_owner nologin;
+  end if;
+  if not exists (select 1 from pg_roles where rolname = 'kiksu_app') then
+    create role kiksu_app nologin;          -- the normal server layer
+  end if;
+  if not exists (select 1 from pg_roles where rolname = 'kiksu_identity_svc') then
+    create role kiksu_identity_svc nologin; -- verification service only
+  end if;
+  if not exists (select 1 from pg_roles where rolname = 'kiksu_career_svc') then
+    create role kiksu_career_svc nologin;   -- career/applications service only
+  end if;
+  if not exists (select 1 from pg_roles where rolname = 'kiksu_moderator') then
+    create role kiksu_moderator nologin;    -- moderation console
+  end if;
+  if not exists (select 1 from pg_roles where rolname = 'kiksu_analytics') then
+    create role kiksu_analytics nologin;    -- recompute jobs, read-mostly
+  end if;
+end$$;
+
+alter schema identity owner to kiksu_identity_owner;
+alter schema career   owner to kiksu_career_owner;
+
+-- Nobody gets anything by default. Grants are handed out explicitly in
+-- section 19.
+revoke all on schema identity, career, internal, moderation from public;
+revoke usage on schema identity from anon, authenticated, service_role;
+revoke usage on schema career   from anon, authenticated, service_role;
+revoke usage on schema internal from anon, authenticated;
+
+grant usage on schema util, ref to anon, authenticated, service_role, kiksu_app;
+grant usage on schema internal to service_role, kiksu_app;
+grant usage on schema identity to kiksu_identity_svc;
+grant usage on schema career   to kiksu_career_svc;
+grant usage on schema moderation to kiksu_moderator, service_role;
+
+
+-- =====================================================================
+-- 03. UTIL — id generation, timestamps, text folding, FTS configuration
+-- =====================================================================
+
+-- --------------------------------------------------------------------
+-- 03.1 UUID v7
+-- Postgres 17 has no native uuidv7 (that lands in 18). Time-ordered keys
+-- matter here: post, comment, chat_message, notification and vote are
+-- append-heavy and random v4 keys cause index write amplification.
+-- --------------------------------------------------------------------
+create or replace function util.uuid_v7() returns uuid
+language sql volatile parallel safe as $$
+  select encode(
+    set_bit(
+      set_bit(
+        overlay(
+          uuid_send(gen_random_uuid())
+          placing substring(int8send(floor(extract(epoch from clock_timestamp()) * 1000)::bigint) from 3)
+          from 1 for 6
+        ),
+      52, 1),
+    53, 1), 'hex')::uuid;
+$$;
+
+comment on function util.uuid_v7() is
+  'RFC 9562 UUIDv7. Replace with the built-in uuidv7() when the project moves to Postgres 18.';
+
+-- --------------------------------------------------------------------
+-- 03.2 updated_at
+-- --------------------------------------------------------------------
+create or replace function util.tg_touch_updated_at() returns trigger
+language plpgsql as $$
+begin
+  new.updated_at := now();
+  return new;
+end$$;
+
+-- --------------------------------------------------------------------
+-- 03.3 Text folding — the Azerbaijani search problem
+--
+-- Requirements:
+--   * ə ğ ı ö ş ü ç must match their ASCII skeletons, because students
+--     habitually type `e` for `ə` ("mualim", "pervane", "kecid").
+--   * Russian content (Cyrillic) must survive folding intact apart from
+--     ё -> е, which is the standard Russian search equivalence.
+--   * The Azerbaijani dotted/dotless I trap: lower('İ') produces TWO
+--     codepoints, 'i' + U+0307 COMBINING DOT ABOVE. If that combining
+--     mark is not stripped, "İqtisad" and "iqtisad" do not match.
+--     lower('I') produces 'i' in a non-Turkish locale, which conflates
+--     I/ı — that is exactly what we want, because we fold ı -> i anyway.
+--
+-- The function must be IMMUTABLE because generated tsvector columns and
+-- expression indexes depend on it. normalize(), lower(), translate() and
+-- regexp_replace() are all immutable, so the composition is too.
+--
+-- OPERATIONAL HAZARD: CREATE OR REPLACE on this function silently
+-- invalidates every stored generated column and expression index built
+-- on it. Changing the fold rules is a migration, not an edit. See
+-- docs/01-schema-notes.md ("Changing the fold rules") for the PG17
+-- ALTER TABLE ... ALTER COLUMN ... SET EXPRESSION AS recipe.
+-- --------------------------------------------------------------------
+create or replace function util.fold_text(txt text) returns text
+language sql immutable parallel safe strict as $$
+  select translate(
+           lower(normalize(txt, NFKC)),
+           -- from: az specific + cyrillic yo + combining dot above
+           'əğıöşüçё' || U&'\0307',
+           -- to:   one shorter than `from`, so U+0307 is DELETED
+           'egiosuc'  || U&'\0435'
+         );
+$$;
+
+comment on function util.fold_text(text) is
+  'Diacritic/script folding for search and for uniqueness keys. ə->e ğ->g ı->i ö->o ş->s ü->u ç->c ё->е, strips U+0307. IMMUTABLE: do not edit in place, migrate.';
+
+-- Handle/slug folding also removes separators, so that `sakit-pərvanə-37`
+-- and `sakitpervane37` collapse to the same uniqueness key. Without this,
+-- diacritic-swapped lookalike handles are an impersonation vector.
+create or replace function util.fold_handle(txt text) returns text
+language sql immutable parallel safe strict as $$
+  select regexp_replace(util.fold_text(txt), '[^a-z0-9]', '', 'g');
+$$;
+
+-- --------------------------------------------------------------------
+-- 03.4 Full-text search configurations
+--
+-- There is no Azerbaijani stemmer in Postgres and writing one is out of
+-- scope, so Azerbaijani uses `simple` (no stemming) over folded text.
+-- Russian and English keep their real stemmers — folding leaves Cyrillic
+-- and ASCII words untouched, so the stemmers still work.
+-- --------------------------------------------------------------------
+create text search configuration util.az (copy = pg_catalog.simple);
+comment on text search configuration util.az is
+  'Azerbaijani: `simple` tokenizer over util.fold_text() output. No stemmer exists; prefix + trigram indexes compensate.';
+
+create text search configuration util.ru (copy = pg_catalog.russian);
+create text search configuration util.en (copy = pg_catalog.english);
+
+-- Maps a board/post/listing language code to a config. IMMUTABLE, so it
+-- can be used inside GENERATED ALWAYS AS (...) STORED columns — that is
+-- the whole point: the tsvector is derived from the row's own `lang`
+-- column with zero trigger code.
+create or replace function util.ts_config(lang text) returns regconfig
+language sql immutable parallel safe as $$
+  select case lang
+           when 'ru' then 'util.ru'::regconfig
+           when 'en' then 'util.en'::regconfig
+           else           'util.az'::regconfig
+         end;
+$$;
+
+-- Standard two-field weighted vector. A = title, B = body.
+create or replace function util.tsv_ab(lang text, a text, b text) returns tsvector
+language sql immutable parallel safe as $$
+  select setweight(to_tsvector(util.ts_config(lang), util.fold_text(coalesce(a, ''))), 'A')
+      || setweight(to_tsvector(util.ts_config(lang), util.fold_text(coalesce(b, ''))), 'B');
+$$;
+
+-- Query side MUST use this so that the query text is folded identically.
+-- websearch_to_tsquery gives users quoted phrases and -exclusion for free.
+create or replace function util.tsq(lang text, q text) returns tsquery
+language sql stable parallel safe as $$
+  select websearch_to_tsquery(util.ts_config(lang), util.fold_text(coalesce(q, '')));
+$$;
+
+comment on function util.tsq(text, text) is
+  'Always build queries with this. Folding the query and not the index (or vice versa) is the classic way to break Azerbaijani search.';
+
+-- --------------------------------------------------------------------
+-- 03.5 Reddit-style hot ranking
+-- The formula is time-ANCHORED, not decaying: the value only changes when
+-- the score changes, so a stored column stays correct forever and a
+-- plain btree on it is a valid feed ordering. Epoch base = 2025-01-01.
+-- --------------------------------------------------------------------
+create or replace function util.hot_rank(score integer, created_at timestamptz) returns double precision
+language sql immutable parallel safe as $$
+  select round(
+           (sign(score) * log(greatest(abs(score), 1)::numeric + 1))
+           + ((extract(epoch from created_at) - 1735689600) / 45000.0)::numeric
+         , 7)::double precision;
+$$;
+
+-- CAVEAT: extract(epoch from timestamptz) is declared STABLE by
+-- Postgres (some extract fields depend on TimeZone; `epoch` does not).
+-- We therefore do NOT use hot_rank in a generated column — post.hot_rank
+-- is maintained by the same trigger that maintains post.score. Do not add
+-- a now() term here: the ranking must be an anchored constant per score
+-- value, otherwise every feed read would need a full-table rescore.
+
+
+-- =====================================================================
+-- 04. ENUM TYPES
+-- Closed structural sets only. Anything that product/ops will want to
+-- extend without a migration is a lookup table in `ref` instead.
+-- =====================================================================
+
+create type public.locale_code            as enum ('az', 'ru', 'en');
+create type public.verification_tier      as enum ('unverified', 'email_verified', 'card_verified');
+create type public.verification_method    as enum ('university_email', 'student_card', 'invite_code', 'manual_staff');
+create type public.app_user_status        as enum ('pending', 'active', 'muted', 'suspended', 'shadowbanned', 'deactivated', 'erased');
+create type public.term_season            as enum ('payiz', 'yaz', 'yay');           -- autumn / spring / summer
+create type public.meeting_kind           as enum ('lecture', 'seminar', 'lab', 'exam', 'consultation');
+create type public.week_parity            as enum ('every', 'odd', 'even');
+create type public.enrollment_state       as enum ('enrolled', 'dropped', 'completed', 'failed');
+create type public.absence_kind           as enum ('absent', 'late', 'excused');
+create type public.absence_source         as enum ('self_reported', 'instructor', 'import');
+create type public.coursework_kind        as enum ('homework', 'lab', 'project', 'quiz', 'midterm', 'final', 'presentation', 'other');
+create type public.coursework_origin      as enum ('official', 'crowdsourced', 'personal');
+create type public.board_scope            as enum ('national', 'university', 'faculty', 'course', 'club');
+create type public.post_kind              as enum ('text', 'image', 'link', 'poll');
+create type public.author_display_mode    as enum ('alias', 'handle', 'staff');
+create type public.moderation_state       as enum ('visible', 'pending_review', 'limited', 'removed');
+create type public.listing_condition      as enum ('new', 'like_new', 'good', 'fair', 'poor');
+create type public.listing_status         as enum ('draft', 'active', 'reserved', 'sold', 'expired', 'removed');
+create type public.deal_state             as enum ('inquiry', 'agreed', 'completed', 'cancelled', 'disputed');
+create type public.conversation_kind      as enum ('listing', 'direct');
+create type public.chat_message_kind      as enum ('text', 'image', 'offer', 'system');
+create type public.vacancy_kind           as enum ('internship', 'part_time', 'full_time', 'volunteer', 'thesis', 'scholarship');
+create type public.work_mode              as enum ('onsite', 'hybrid', 'remote');
+create type public.vacancy_status         as enum ('draft', 'active', 'paused', 'closed', 'expired');
+create type public.event_kind             as enum ('career', 'academic', 'club', 'social', 'sport', 'other');
+create type public.rsvp_state             as enum ('going', 'interested', 'cancelled');
+create type public.club_member_role       as enum ('owner', 'admin', 'member');
+create type public.report_target_type     as enum ('post', 'comment', 'review', 'listing', 'chat_message', 'app_user', 'event', 'club');
+create type public.alias_state            as enum ('reserved', 'active');
+create type public.accent_color           as enum ('turquoise', 'bronze', 'pomegranate', 'indigo', 'ink', 'moss', 'plum');
+
+create type identity.verification_state   as enum ('none', 'pending', 'in_review', 'verified', 'rejected', 'expired', 'revoked');
+create type identity.credential_kind      as enum ('university_email', 'student_number', 'card_image_hash', 'invite_code', 'national_id');
+create type identity.access_purpose       as enum ('verification', 'legal_request', 'safety_escalation', 'user_data_request', 'cohort_recount', 'incident_response');
+
+create type career.application_state      as enum ('draft', 'submitted', 'viewed', 'shortlisted', 'rejected', 'withdrawn', 'hired');
+create type career.document_kind          as enum ('cv', 'transcript', 'certificate', 'portfolio', 'cover_letter');
+
+create type moderation.case_state         as enum ('open', 'triage', 'actioned', 'dismissed', 'escalated');
+create type moderation.action_kind        as enum ('no_action', 'remove_content', 'restore_content', 'warn', 'mute', 'suspend', 'ban', 'shadowban', 'unban', 'escalate_legal');
+create type moderation.staff_role         as enum ('moderator', 'senior_moderator', 'admin', 'legal');
+
+
+-- =====================================================================
+-- 05. REF — universities, calendar, courses, instructors, vocabularies
+-- Written by staff / import jobs. Readable by everyone (anon included
+-- for the onboarding screen, which runs before any account exists).
+-- =====================================================================
+
+-- --------------------------------------------------------------------
+-- 05.1 University
+-- Screen 01 renders: code badge (BDU), full name, city, selection state.
+-- --------------------------------------------------------------------
+create table ref.university (
+  id                      uuid primary key default util.uuid_v7(),
+  code                    text not null,                    -- 'BDU', 'ADA', 'UNEC', 'BMU'
+  name_az                 text not null,                    -- 'Bakı Dövlət Universiteti'
+  name_ru                 text,
+  name_en                 text,
+  city_az                 text not null,                    -- 'Bakı', 'Xırdalan'
+  city_ru                 text,
+  city_en                 text,
+  timezone                text not null default 'Asia/Baku',
+  default_locale          public.locale_code not null default 'az',
+  brand_color             text check (brand_color ~ '^#[0-9A-Fa-f]{6}$'),
+  logo_storage_path       text,
+
+  -- k-anonymity floor. The CHECK is the enforcement of invariant I3: an
+  -- operator cannot lower this below 20 through configuration, only
+  -- through a migration that is visible in review.
+  k_anon_min              integer not null default 20 check (k_anon_min >= 20),
+
+  -- Default absence allowance when no narrower policy matches.
+  -- Design screen 04 shows 12 for a 6-credit course at BDU.
+  default_absence_limit   integer not null default 12 check (default_absence_limit > 0),
+
+  is_active               boolean not null default true,
+  onboarding_order        integer,
+  created_at              timestamptz not null default now(),
+  updated_at              timestamptz not null default now(),
+
+  name_search             tsvector generated always as (
+                            util.tsv_ab('az', code || ' ' || name_az,
+                                        coalesce(name_ru, '') || ' ' || coalesce(name_en, '') || ' ' || city_az)
+                          ) stored,
+
+  constraint university_code_uniq unique (code)
+);
+create index university_search_idx  on ref.university using gin (name_search);
+create index university_trgm_idx    on ref.university using gin (util.fold_text(name_az) extensions.gin_trgm_ops);
+create index university_active_idx  on ref.university (onboarding_order) where is_active;
+
+comment on column ref.university.k_anon_min is
+  'Minimum cohort size before an attribute combination may be displayed. CHECK >= 20 makes the brief''s floor structural.';
+
+-- Email domains accepted for the `university_email` route.
+-- Design: 'ad.soyad@std.bsu.edu.az'.
+create table ref.university_email_domain (
+  id              uuid primary key default util.uuid_v7(),
+  university_id   uuid not null references ref.university(id) on delete cascade,
+  domain          extensions.citext not null,               -- 'std.bsu.edu.az'
+  audience        text not null default 'student' check (audience in ('student', 'staff', 'alumni')),
+  sample_pattern  text,                                     -- 'ad.soyad@std.bsu.edu.az' shown in the UI
+  is_primary      boolean not null default false,
+  is_active       boolean not null default true,
+  created_at      timestamptz not null default now(),
+  constraint university_email_domain_uniq unique (domain)
+);
+create index university_email_domain_univ_idx on ref.university_email_domain (university_id) where is_active;
+
+-- Which verification routes a given university offers, in what order,
+-- with the SLA the onboarding screen advertises.
+-- Design: email "2 dəqiqə" + TÖVSİYƏ badge, card "24 saata qədər",
+-- invite code "Kursdaşından 6 rəqəmli kod".
+create table ref.university_verification_route (
+  university_id   uuid not null references ref.university(id) on delete cascade,
+  method          public.verification_method not null,
+  is_enabled      boolean not null default true,
+  is_recommended  boolean not null default false,
+  sla_minutes     integer not null check (sla_minutes > 0),  -- 2 / 1440
+  display_order   smallint not null default 0,
+  note_az         text,
+  note_ru         text,
+  note_en         text,
+  primary key (university_id, method)
+);
+-- At most one recommended route per university (the TÖVSİYƏ badge).
+create unique index university_route_one_recommended_idx
+  on ref.university_verification_route (university_id) where is_recommended;
+
+-- --------------------------------------------------------------------
+-- 05.2 Faculty / department / programme
+-- Two different things in the design, do not conflate:
+--   faculty    student-facing org unit  -> "BDU · İNFORMATİKA · 2-Cİ KURS"
+--   department instructor's kafedra     -> "İNFORMATİKA KAFEDRASI · BDU"
+--   programme  the actual degree track  -> the k-anonymity risk surface
+-- --------------------------------------------------------------------
+create table ref.faculty (
+  id              uuid primary key default util.uuid_v7(),
+  university_id   uuid not null references ref.university(id) on delete cascade,
+  code            text,
+  name_az         text not null,
+  name_ru         text,
+  name_en         text,
+  is_active       boolean not null default true,
+  created_at      timestamptz not null default now(),
+  constraint faculty_code_uniq unique (university_id, code)
+);
+create index faculty_university_idx on ref.faculty (university_id) where is_active;
+
+create table ref.department (
+  id              uuid primary key default util.uuid_v7(),
+  university_id   uuid not null references ref.university(id) on delete cascade,
+  faculty_id      uuid references ref.faculty(id) on delete set null,
+  code            text,
+  name_az         text not null,                            -- 'İnformatika kafedrası'
+  name_ru         text,
+  name_en         text,
+  is_active       boolean not null default true,
+  created_at      timestamptz not null default now(),
+  constraint department_code_uniq unique (university_id, code)
+);
+create index department_faculty_idx on ref.department (faculty_id);
+
+create table ref.program (
+  id              uuid primary key default util.uuid_v7(),
+  university_id   uuid not null references ref.university(id) on delete cascade,
+  faculty_id      uuid not null references ref.faculty(id) on delete cascade,
+  code            text,
+  name_az         text not null,
+  name_ru         text,
+  name_en         text,
+  degree_level    text not null default 'bachelor'
+                  check (degree_level in ('bachelor', 'master', 'phd', 'preparatory')),
+  normal_years    smallint not null default 4 check (normal_years between 1 and 8),
+  is_active       boolean not null default true,
+  created_at      timestamptz not null default now(),
+  constraint program_code_uniq unique (university_id, code)
+);
+create index program_faculty_idx on ref.program (faculty_id) where is_active;
+
+comment on table ref.program is
+  'Small programmes are THE de-anonymisation risk ("3rd year, Petroleum Engineering"). Never render programme on a public surface without checking public.cohort_size against ref.university.k_anon_min.';
+
+-- --------------------------------------------------------------------
+-- 05.3 Academic calendar
+-- Design: "2025/26 · PAYIZ SEMESTRİ", review keys "2024/25 YAZ".
+-- --------------------------------------------------------------------
+create table ref.academic_year (
+  id              uuid primary key default util.uuid_v7(),
+  university_id   uuid not null references ref.university(id) on delete cascade,
+  label           text not null,                            -- '2025/26'
+  starts_on       date not null,
+  ends_on         date not null,
+  constraint academic_year_uniq unique (university_id, label),
+  constraint academic_year_range_ck check (ends_on > starts_on)
+);
+
+create table ref.term (
+  id                 uuid primary key default util.uuid_v7(),
+  university_id      uuid not null references ref.university(id) on delete cascade,
+  academic_year_id   uuid not null references ref.academic_year(id) on delete cascade,
+  season             public.term_season not null,
+  label              text not null,                         -- '2025/26 Payız'
+  starts_on          date not null,
+  ends_on            date not null,
+  add_drop_ends_on   date,
+  exams_start_on     date,
+  is_current         boolean not null default false,
+  constraint term_uniq unique (academic_year_id, season),
+  constraint term_range_ck check (ends_on > starts_on)
+);
+-- Exactly one current term per university keeps "which semester am I in"
+-- a single indexed lookup instead of a date range scan.
+create unique index term_one_current_idx on ref.term (university_id) where is_current;
+create index term_university_dates_idx on ref.term (university_id, starts_on desc);
+
+-- --------------------------------------------------------------------
+-- 05.4 Campus / room
+-- Design: "II KORPUS 312", "BAŞ KORPUS 205", "L-3".
+-- --------------------------------------------------------------------
+create table ref.campus (
+  id              uuid primary key default util.uuid_v7(),
+  university_id   uuid not null references ref.university(id) on delete cascade,
+  name_az         text not null,                            -- 'Baş korpus', 'II korpus'
+  name_ru         text,
+  name_en         text,
+  address         text,
+  latitude        numeric(9, 6),
+  longitude       numeric(9, 6),
+  constraint campus_name_uniq unique (university_id, name_az)
+);
+
+create table ref.room (
+  id              uuid primary key default util.uuid_v7(),
+  campus_id       uuid not null references ref.campus(id) on delete cascade,
+  code            text not null,                            -- '312', 'L-3'
+  floor           smallint,
+  capacity        integer,
+  kind            text check (kind in ('classroom', 'lab', 'auditorium', 'studio', 'online')),
+  constraint room_code_uniq unique (campus_id, code)
+);
+create index room_campus_idx on ref.room (campus_id);
+
+-- --------------------------------------------------------------------
+-- 05.5 Instructor
+-- Instructor names are REAL and public — this is a professor-review
+-- product, the same as the reference competitor. Instructors are not
+-- app_users and must never be linked to one.
+-- Design: "dos. Nigar Əliyeva", initials "NƏ", "İNFORMATİKA KAFEDRASI · BDU".
+-- --------------------------------------------------------------------
+create table ref.instructor (
+  id              uuid primary key default util.uuid_v7(),
+  university_id   uuid not null references ref.university(id) on delete cascade,
+  department_id   uuid references ref.department(id) on delete set null,
+  title_prefix    text,                                     -- 'dos.', 'prof.', 'b/m.'
+  full_name       text not null,                            -- 'Nigar Əliyeva'
+  slug            text not null,
+  initials        text,                                     -- 'NƏ' (rendered avatar)
+  email_public    text,
+  is_active       boolean not null default true,
+  is_claimed      boolean not null default false,           -- instructor claimed their page
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+
+  name_folded     text generated always as (util.fold_text(full_name)) stored,
+  name_search     tsvector generated always as (
+                    util.tsv_ab('az', full_name, coalesce(title_prefix, ''))
+                  ) stored,
+
+  constraint instructor_slug_uniq unique (university_id, slug)
+);
+create index instructor_department_idx on ref.instructor (department_id) where is_active;
+create index instructor_search_idx     on ref.instructor using gin (name_search);
+-- "Əliyeva" typed as "Aliyeva" must still match: trigram over folded name.
+create index instructor_trgm_idx       on ref.instructor using gin (name_folded extensions.gin_trgm_ops);
+
+-- --------------------------------------------------------------------
+-- 05.6 Course / section / meeting
+-- Design screen 04: "CS 214 · 6 KREDİT", "Verilənlər bazası sistemləri".
+-- Screen 03: a week grid of 80-minute blocks, Mon–Fri, 09:00–17:00.
+-- --------------------------------------------------------------------
+create table ref.course (
+  id              uuid primary key default util.uuid_v7(),
+  university_id   uuid not null references ref.university(id) on delete cascade,
+  department_id   uuid references ref.department(id) on delete set null,
+  code            text not null,                            -- 'CS 214'
+  title_az        text not null,                            -- 'Verilənlər bazası sistemləri'
+  title_ru        text,
+  title_en        text,
+  short_title     text,                                     -- grid label, e.g. 'Verilənlər bazası'
+  credits         numeric(4, 1) check (credits >= 0),       -- 6
+  level           smallint check (level between 1 and 8),
+  description     text,
+  is_active       boolean not null default true,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+
+  code_folded     text generated always as (util.fold_handle(code)) stored,
+  title_search    tsvector generated always as (
+                    util.tsv_ab('az', code || ' ' || title_az,
+                                coalesce(title_ru, '') || ' ' || coalesce(title_en, '') || ' ' || coalesce(description, ''))
+                  ) stored,
+
+  constraint course_code_uniq unique (university_id, code)
+);
+create index course_department_idx on ref.course (department_id) where is_active;
+create index course_search_idx     on ref.course using gin (title_search);
+create index course_code_trgm_idx  on ref.course using gin (code_folded extensions.gin_trgm_ops);
+
+-- A concrete offering of a course in one term. Enrollment, absence,
+-- timetable and coursework all hang off the SECTION, not the course.
+create table ref.course_section (
+  id                 uuid primary key default util.uuid_v7(),
+  course_id          uuid not null references ref.course(id) on delete cascade,
+  term_id            uuid not null references ref.term(id) on delete cascade,
+  section_code       text not null default '1',             -- 'A', '1', 'lab-3'
+  primary_instructor_id uuid references ref.instructor(id) on delete set null,
+  lang               public.locale_code not null default 'az',
+  capacity           integer,
+  enrolled_count     integer not null default 0,            -- counter cache
+  -- Per-section override of the absence allowance. NULL = inherit from
+  -- the policy chain (see ref.absence_policy).
+  absence_limit_override integer check (absence_limit_override > 0),
+  is_active          boolean not null default true,
+  created_at         timestamptz not null default now(),
+  constraint course_section_uniq unique (course_id, term_id, section_code)
+);
+create index course_section_term_idx       on ref.course_section (term_id);
+create index course_section_instructor_idx on ref.course_section (primary_instructor_id, term_id);
+
+-- Several instructors can touch one section (lecturer + lab assistant).
+create table ref.section_instructor (
+  section_id      uuid not null references ref.course_section(id) on delete cascade,
+  instructor_id   uuid not null references ref.instructor(id) on delete cascade,
+  role            text not null default 'lecturer'
+                  check (role in ('lecturer', 'assistant', 'lab', 'guest')),
+  primary key (section_id, instructor_id, role)
+);
+create index section_instructor_instructor_idx on ref.section_instructor (instructor_id);
+
+-- The timetable grid itself. weekday follows ISO-8601: 1 = Monday.
+-- Design shows B.E Ç.A Ç C.A C = 1..5.
+create table ref.section_meeting (
+  id              uuid primary key default util.uuid_v7(),
+  section_id      uuid not null references ref.course_section(id) on delete cascade,
+  weekday         smallint not null check (weekday between 1 and 7),
+  starts_at       time not null,                            -- 14:05, local to university timezone
+  ends_at         time not null,
+  room_id         uuid references ref.room(id) on delete set null,
+  kind            public.meeting_kind not null default 'lecture',
+  parity          public.week_parity not null default 'every',
+  valid_from      date,
+  valid_to        date,
+  created_at      timestamptz not null default now(),
+  constraint section_meeting_time_ck check (ends_at > starts_at),
+
+  -- A room cannot host two meetings at once. This catches the single
+  -- most common timetable-import defect before students see it.
+  constraint section_meeting_room_no_overlap
+    exclude using gist (
+      room_id  with =,
+      weekday  with =,
+      parity   with =,
+      tsrange(('2000-01-01'::date + starts_at), ('2000-01-01'::date + ends_at)) with &&
+    ) where (room_id is not null)
+);
+create index section_meeting_section_idx on ref.section_meeting (section_id, weekday, starts_at);
+create index section_meeting_room_idx    on ref.section_meeting (room_id, weekday, starts_at);
+
+-- One-off changes: cancelled class, moved room, moved time.
+create table ref.section_meeting_exception (
+  id              uuid primary key default util.uuid_v7(),
+  meeting_id      uuid not null references ref.section_meeting(id) on delete cascade,
+  on_date         date not null,
+  status          text not null check (status in ('cancelled', 'moved', 'extra')),
+  new_room_id     uuid references ref.room(id) on delete set null,
+  new_starts_at   time,
+  new_ends_at     time,
+  note_az         text,
+  created_at      timestamptz not null default now(),
+  constraint section_meeting_exception_uniq unique (meeting_id, on_date)
+);
+create index section_meeting_exception_date_idx on ref.section_meeting_exception (on_date, meeting_id);
+
+-- --------------------------------------------------------------------
+-- 05.7 Absence policy — configurable, never hardcoded
+-- Design screen 04: "4 / 12", "İcazəli qayıb limitinin 33%-i istifadə
+-- olunub. 12 qayıbdan sonra kursdan kənarlaşdırılma."
+--
+-- Resolution order (most specific wins):
+--   section override -> course policy -> faculty policy -> university
+--   policy -> ref.university.default_absence_limit
+-- --------------------------------------------------------------------
+create table ref.absence_policy (
+  id                 uuid primary key default util.uuid_v7(),
+  university_id      uuid not null references ref.university(id) on delete cascade,
+  faculty_id         uuid references ref.faculty(id) on delete cascade,
+  course_id          uuid references ref.course(id) on delete cascade,
+
+  max_absences       integer not null check (max_absences > 0),      -- 12
+  expulsion_at       integer check (expulsion_at > 0),               -- default = max_absences
+  late_counts_as     numeric(3, 2) not null default 0.50
+                     check (late_counts_as >= 0 and late_counts_as <= 1),
+  warn_at_ratio      numeric(3, 2) not null default 0.50
+                     check (warn_at_ratio > 0 and warn_at_ratio <= 1),
+  excused_counts     boolean not null default false,
+  effective_from     date not null default current_date,
+  effective_to       date,
+  note_az            text,
+  created_at         timestamptz not null default now(),
+
+  -- Specificity of the row, derived so the resolver can ORDER BY it.
+  specificity        smallint generated always as (
+                       case when course_id  is not null then 3
+                            when faculty_id is not null then 2
+                            else 1 end
+                     ) stored
+);
+create index absence_policy_lookup_idx
+  on ref.absence_policy (university_id, course_id, faculty_id, specificity desc);
+
+-- Resolver. Kept in SQL so the timetable/attendance read path is a single
+-- round trip and so the rule cannot drift between clients.
+create or replace function ref.effective_absence_limit(p_section_id uuid)
+returns table (max_absences integer, expulsion_at integer, late_counts_as numeric, warn_at_ratio numeric)
+language sql stable as $$
+  with s as (
+    select cs.id, cs.absence_limit_override, c.id as course_id,
+           c.university_id, d.faculty_id
+    from ref.course_section cs
+    join ref.course c     on c.id = cs.course_id
+    left join ref.department d on d.id = c.department_id
+    where cs.id = p_section_id
+  ),
+  p as (
+    select ap.*
+    from ref.absence_policy ap, s
+    where ap.university_id = s.university_id
+      and (ap.course_id  is null or ap.course_id  = s.course_id)
+      and (ap.faculty_id is null or ap.faculty_id = s.faculty_id)
+      and ap.effective_from <= current_date
+      and (ap.effective_to is null or ap.effective_to >= current_date)
+    order by ap.specificity desc, ap.effective_from desc
+    limit 1
+  )
+  select
+    coalesce(s.absence_limit_override, p.max_absences, u.default_absence_limit),
+    coalesce(p.expulsion_at, s.absence_limit_override, p.max_absences, u.default_absence_limit),
+    coalesce(p.late_counts_as, 0.50),
+    coalesce(p.warn_at_ratio, 0.50)
+  from s
+  join ref.university u on u.id = s.university_id
+  left join p on true;
+$$;
+
+-- --------------------------------------------------------------------
+-- 05.8 Grade scale (GPA support)
+-- --------------------------------------------------------------------
+create table ref.grade_scale (
+  id              uuid primary key default util.uuid_v7(),
+  university_id   uuid not null references ref.university(id) on delete cascade,
+  letter          text not null,                            -- 'A', 'B', ...
+  min_score       numeric(5, 2) not null,
+  max_score       numeric(5, 2) not null,
+  gpa_points      numeric(3, 2) not null,
+  is_passing      boolean not null default true,
+  constraint grade_scale_uniq  unique (university_id, letter),
+  constraint grade_scale_range check (max_score >= min_score)
+);
+
+-- --------------------------------------------------------------------
+-- 05.9 Product vocabularies (extensible without migrations)
+-- --------------------------------------------------------------------
+
+-- Review tags. Design screen 07: SLAYDLAR AYDIN / LAB. FAYDALI (positive,
+-- teal) and YOXLAMA SIX (negative, pomegranate). Polarity drives colour.
+create table ref.review_tag (
+  key             text primary key,                         -- 'slides_clear'
+  label_az        text not null,                            -- 'Slaydlar aydın'
+  label_ru        text,
+  label_en        text,
+  polarity        text not null check (polarity in ('positive', 'neutral', 'negative')),
+  applies_to      text not null default 'both' check (applies_to in ('instructor', 'course', 'both')),
+  display_order   smallint not null default 0,
+  is_active       boolean not null default true
+);
+
+-- Curated Azerbaijani wordlist for generated handles: adjective-noun-NN
+-- ('sakit-pərvanə-37'). The assignment ALGORITHM belongs to the Identity
+-- Architect; this table is the vocabulary it draws from.
+create table ref.handle_word (
+  id              uuid primary key default util.uuid_v7(),
+  kind            text not null check (kind in ('adjective', 'noun')),
+  word            text not null,                            -- 'sakit' / 'pərvanə'
+  weight          smallint not null default 1 check (weight > 0),
+  is_active       boolean not null default true,
+  -- Folded form so that two words that render identically after folding
+  -- cannot both be active (avoids confusable handles).
+  word_folded     text generated always as (util.fold_handle(word)) stored,
+  constraint handle_word_uniq unique (kind, word_folded)
+);
+create index handle_word_pick_idx on ref.handle_word (kind) where is_active;
+
+create table ref.marketplace_category (
+  id              uuid primary key default util.uuid_v7(),
+  parent_id       uuid references ref.marketplace_category(id) on delete cascade,
+  key             text not null unique,                     -- 'textbooks_notes'
+  name_az         text not null,                            -- 'Dərslik və qeydlər'
+  name_ru         text,
+  name_en         text,
+  display_order   smallint not null default 0,
+  -- JSON Schema describing the category-specific attribute chips the
+  -- design renders ("QEYDLƏR VAR", "2 KİTAB"). Validated in the server
+  -- layer; stored here so one deploy adds a category + its filters.
+  attribute_schema jsonb not null default '{}'::jsonb,
+  is_active       boolean not null default true
+);
+create index marketplace_category_parent_idx on ref.marketplace_category (parent_id, display_order);
+
+create table ref.sector (
+  id              uuid primary key default util.uuid_v7(),
+  key             text not null unique,                     -- 'it'
+  name_az         text not null,
+  name_ru         text,
+  name_en         text,
+  display_order   smallint not null default 0,
+  is_active       boolean not null default true
+);
+
+create table ref.notification_kind (
+  key             text primary key,                         -- 'comment_reply'
+  default_push    boolean not null default true,
+  default_email   boolean not null default false,
+  is_mutable      boolean not null default true,            -- false = always delivered (safety/legal)
+  display_order   smallint not null default 0
+);
+
+create table ref.report_reason (
+  key             text primary key,                         -- 'harassment'
+  label_az        text not null,
+  label_ru        text,
+  label_en        text,
+  applies_to      public.report_target_type[] not null,
+  severity        smallint not null default 1 check (severity between 1 and 5),
+  auto_hide_at_count integer,                               -- auto limit content after N reports
+  display_order   smallint not null default 0,
+  is_active       boolean not null default true
+);
+
+-- Default board set created for every new university at seed time.
+create table ref.board_template (
+  key             text primary key,                         -- 'course_and_teacher'
+  name_az         text not null,                            -- 'Dərs və müəllim'
+  name_ru         text,
+  name_en         text,
+  description_az  text,
+  scope           public.board_scope not null default 'university',
+  lang            public.locale_code not null default 'az',
+  display_order   smallint not null default 0,
+  is_default_follow boolean not null default false
+);
+
+-- Global, environment-level settings that ops must be able to move
+-- without a deploy (rate limits, feature flags, ranking constants).
+create table ref.app_setting (
+  key             text primary key,
+  value           jsonb not null,
+  description     text,
+  updated_at      timestamptz not null default now(),
+  updated_by      text
+);
+
+
+-- =====================================================================
+-- 06. IDENTITY — LAYER 1, SEALED
+--
+-- Nothing in this schema is ever rendered in a user-facing surface.
+-- Nothing outside the verification and legal-request services may read
+-- it. The controls, in order of strength:
+--
+--   1. Schema is owned by kiksu_identity_owner and USAGE is granted only
+--      to kiksu_identity_svc. anon, authenticated and service_role have
+--      no USAGE — the Supabase service key cannot reach this schema.
+--   2. Not listed in PostgREST `db-schemas`, so no HTTP surface exists.
+--   3. RLS is ENABLED *and* FORCED on every table, so even the owning
+--      role is subject to policy. The policy on the linking table only
+--      passes when a transaction-local GUC is set.
+--   4. The only thing that sets that GUC is identity.unseal(), a
+--      SECURITY DEFINER function that writes identity.access_log FIRST
+--      and requires a declared purpose (and, for legal purposes, an
+--      approved identity.legal_request row).
+--   5. identity.access_log is append-only, enforced by trigger.
+--
+-- Residual risk that the database cannot close: a superuser or a role
+-- with BYPASSRLS (Supabase's `postgres` role has it) can read anything.
+-- That is a platform-access-control problem, documented in the notes.
+--
+-- THE AUTH ANCHOR RULE
+-- auth.users must NOT contain the university email. If it did, the
+-- trivially joinable path app_user -> auth.users -> email would leak
+-- 'ad.soyad@std.bsu.edu.az' — i.e. the student's real name — and the
+-- whole four-layer model would be decorative. Accounts are created with
+-- a synthetic address (<uuid>@users.kiksu.app) or phone; the university
+-- email is submitted to the verification service, reduced to an HMAC in
+-- identity.credential_binding, and the plaintext is discarded once the
+-- confirmation link is consumed. identity.auth_email_leak_check exists
+-- to make a regression here loud.
+-- =====================================================================
+
+-- --------------------------------------------------------------------
+-- 06.1 Subject — one row per verified human being
+--
+-- subject_key = HMAC-SHA256(pepper_identity, 'kiksu:identity:v1' || auth_uid)
+-- computed by the verification service. The pepper lives in the service's
+-- KMS/secret store, NEVER in this database (that includes Supabase Vault,
+-- which is in-database). Consequence: a full dump of Postgres does not
+-- let the reader map a subject back to an auth account.
+-- --------------------------------------------------------------------
+create table identity.subject (
+  id              uuid primary key default util.uuid_v7(),
+  subject_key     bytea not null,
+  key_version     smallint not null default 1,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  constraint subject_key_uniq unique (subject_key),
+  constraint subject_key_len  check (octet_length(subject_key) = 32)
+);
+
+comment on column identity.subject.subject_key is
+  'HMAC(auth uid) under a pepper held outside the database. There is deliberately no auth.users FK: the mapping must not be recomputable from a database dump alone.';
+
+-- --------------------------------------------------------------------
+-- 06.2 Verified identity — the sealed attribute set
+-- --------------------------------------------------------------------
+create table identity.verified_identity (
+  id                    uuid primary key default util.uuid_v7(),
+  subject_id            uuid not null references identity.subject(id) on delete restrict,
+
+  university_id         uuid not null references ref.university(id),
+  faculty_id            uuid references ref.faculty(id),
+  program_id            uuid references ref.program(id),
+  entry_year            smallint check (entry_year between 1990 and 2100),
+  expected_graduation_year smallint check (expected_graduation_year between 1990 and 2100),
+  degree_level          text check (degree_level in ('bachelor', 'master', 'phd', 'preparatory')),
+
+  -- PII: ciphertext produced by the verification service with an envelope
+  -- key from an external KMS. The database stores bytes it cannot read.
+  legal_name_ct         bytea,
+  legal_name_kid        text,
+  student_number_hmac   bytea,
+
+  tier                  public.verification_tier not null default 'unverified',
+  state                 identity.verification_state not null default 'none',
+  method                public.verification_method,
+
+  verified_at           timestamptz,
+  expires_at            timestamptz,                        -- re-verification cadence
+  revoked_at            timestamptz,
+  revocation_reason     text,
+
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now(),
+
+  constraint verified_identity_subject_uniq unique (subject_id),
+  constraint verified_identity_tier_ck check (
+    (tier = 'unverified') or (state = 'verified' and verified_at is not null)
+  )
+);
+create index verified_identity_cohort_idx
+  on identity.verified_identity (university_id, faculty_id, program_id, entry_year)
+  where state = 'verified';
+
+comment on table identity.verified_identity is
+  'LAYER 1. Never rendered. The only thing that leaves this schema is (a) a coarse, k-anonymity-checked projection onto public.app_user and (b) aggregate counts in public.cohort_size.';
+
+-- --------------------------------------------------------------------
+-- 06.3 Credential binding — "one verified person = one app_user"
+--
+-- The unique index on (kind, credential_hmac) is the structural version
+-- of invariant I4: the same university email / student number cannot
+-- produce a second subject. Salt is per-credential-kind and peppered
+-- outside the DB, so the table is not a rainbow-table target.
+-- --------------------------------------------------------------------
+create table identity.credential_binding (
+  id                 uuid primary key default util.uuid_v7(),
+  subject_id         uuid not null references identity.subject(id) on delete restrict,
+  kind               identity.credential_kind not null,
+  credential_hmac    bytea not null,
+  key_version        smallint not null default 1,
+  university_id      uuid references ref.university(id),
+  first_seen_at      timestamptz not null default now(),
+  last_verified_at   timestamptz,
+  released_at        timestamptz,                            -- graduation / account erasure
+  constraint credential_binding_uniq unique (kind, credential_hmac),
+  constraint credential_hmac_len check (octet_length(credential_hmac) = 32)
+);
+create index credential_binding_subject_idx on identity.credential_binding (subject_id);
+
+-- --------------------------------------------------------------------
+-- 06.4 Verification attempts (the state machine's storage)
+-- The state machine itself is the Identity Architect's deliverable. This
+-- table only has to be able to hold it: one row per attempt, an SLA
+-- deadline (2 minutes for email, 24h for card review), evidence pointer,
+-- reviewer decision, and abuse counters.
+-- --------------------------------------------------------------------
+create table identity.verification_attempt (
+  id                  uuid primary key default util.uuid_v7(),
+  subject_id          uuid references identity.subject(id) on delete cascade,
+  auth_user_id_hmac   bytea,                                 -- for pre-subject attempts
+  university_id       uuid not null references ref.university(id),
+  method              public.verification_method not null,
+  state               identity.verification_state not null default 'pending',
+
+  -- Evidence lives in a PRIVATE storage bucket. We keep the path plus a
+  -- content hash so tampering is detectable, and a purge deadline.
+  evidence_path       text,
+  evidence_sha256     bytea,
+  evidence_purge_at   timestamptz,
+
+  challenge_hmac      bytea,                                 -- emailed token / 6-digit code
+  challenge_expires_at timestamptz,
+  attempt_count       smallint not null default 0,
+  sla_due_at          timestamptz,
+
+  decided_at          timestamptz,
+  decided_by_staff_id uuid,                                  -- moderation.staff.id, intentionally no FK
+  decision            text check (decision in ('approved', 'rejected', 'needs_more_info')),
+  reject_reason_code  text,
+
+  -- Abuse signals, hashed. Never store raw IP or UA in this schema.
+  ip_hmac             bytea,
+  user_agent_hmac     bytea,
+  device_hmac         bytea,
+
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now()
+);
+create index verification_attempt_queue_idx
+  on identity.verification_attempt (state, sla_due_at)
+  where state in ('pending', 'in_review');
+create index verification_attempt_subject_idx on identity.verification_attempt (subject_id, created_at desc);
+create index verification_attempt_device_idx  on identity.verification_attempt (device_hmac) where device_hmac is not null;
+
+-- Invite codes: 6 digits, issued by an already-verified student.
+create table identity.invite_code (
+  id                 uuid primary key default util.uuid_v7(),
+  code_hmac          bytea not null unique,
+  issuer_subject_id  uuid not null references identity.subject(id) on delete cascade,
+  university_id      uuid not null references ref.university(id),
+  max_uses           smallint not null default 1 check (max_uses > 0),
+  used_count         smallint not null default 0,
+  expires_at         timestamptz not null,
+  revoked_at         timestamptz,
+  created_at         timestamptz not null default now(),
+  constraint invite_code_uses_ck check (used_count <= max_uses)
+);
+create index invite_code_issuer_idx on identity.invite_code (issuer_subject_id);
+
+-- --------------------------------------------------------------------
+-- 06.5 THE SEALED LINK
+--
+-- This is the single most dangerous table in the product. It is the only
+-- place where "which pseudonym belongs to which verified student" is
+-- written down.
+--
+-- Deliberate design choices:
+--   * app_user_id has NO FOREIGN KEY. An FK would (a) publish the
+--     relationship in pg_constraint, so every ER diagram, ORM
+--     introspection and "helpful" JOIN suggestion would surface it, and
+--     (b) create a cascade path between the layers. Referential
+--     integrity here is maintained by the verification service.
+--   * UNIQUE on both columns: one subject <-> one app_user (invariant I4).
+--   * FORCE ROW LEVEL SECURITY: the owner does not get a free pass.
+-- --------------------------------------------------------------------
+create table identity.app_user_link (
+  subject_id      uuid primary key references identity.subject(id) on delete restrict,
+  app_user_id     uuid not null,        -- NO FK. See comment above. Do not "fix" this.
+  bound_at        timestamptz not null default now(),
+  unbound_at      timestamptz,
+  rebind_count    smallint not null default 0,
+  constraint app_user_link_user_uniq unique (app_user_id)
+);
+
+comment on table identity.app_user_link is
+  'SEALED. The subject <-> app_user binding. app_user_id intentionally has no FK to public.app_user: adding one would publish the relationship and create a cascade path between identity layers.';
+comment on column identity.app_user_link.app_user_id is
+  'Deliberately unconstrained uuid. Referential integrity is the verification service''s job. See docs/01-schema-notes.md.';
+
+-- --------------------------------------------------------------------
+-- 06.6 Legal requests and the access log
+-- --------------------------------------------------------------------
+create table identity.legal_request (
+  id                   uuid primary key default util.uuid_v7(),
+  case_ref             text not null unique,
+  requesting_authority text not null,
+  received_at          timestamptz not null,
+  scope                text not null,
+  legal_basis          text not null,
+  approved_by          text,
+  approved_at          timestamptz,
+  rejected_at          timestamptz,
+  executed_at          timestamptz,
+  expires_at           timestamptz not null,
+  notes                text,
+  created_at           timestamptz not null default now(),
+  constraint legal_request_decided_ck check (
+    approved_at is null or rejected_at is null
+  )
+);
+
+create table identity.access_log (
+  id                uuid primary key default util.uuid_v7(),
+  at                timestamptz not null default clock_timestamp(),
+  db_role           text not null default current_user,
+  actor_ref         text,                                    -- staff id / service instance
+  purpose           identity.access_purpose not null,
+  function_name     text not null,
+  subject_id        uuid,
+  app_user_id       uuid,
+  legal_request_id  uuid references identity.legal_request(id),
+  justification     text,
+  session_ref       text
+);
+create index access_log_at_idx      on identity.access_log (at desc);
+create index access_log_subject_idx on identity.access_log (subject_id, at desc);
+
+-- Append-only. An auditor's log that can be edited is not a log.
+create or replace function identity.tg_append_only() returns trigger
+language plpgsql as $$
+begin
+  raise exception 'identity.% is append-only (attempted %)', tg_table_name, tg_op
+    using errcode = 'insufficient_privilege';
+end$$;
+
+create trigger access_log_append_only
+  before update or delete on identity.access_log
+  for each row execute function identity.tg_append_only();
+
+-- --------------------------------------------------------------------
+-- 06.7 The seal
+-- --------------------------------------------------------------------
+create or replace function identity.is_unsealed() returns boolean
+language sql stable parallel safe as $$
+  select coalesce(current_setting('kiksu.identity_unsealed', true), 'off') = 'on';
+$$;
+
+-- Opens the seal for the REMAINDER OF THE CURRENT TRANSACTION ONLY
+-- (set_config with is_local = true). Logs before it opens, so an
+-- unlogged read is not reachable through this path.
+create or replace function identity.unseal(
+  p_purpose          identity.access_purpose,
+  p_function_name    text,
+  p_justification    text,
+  p_subject_id       uuid default null,
+  p_legal_request_id uuid default null,
+  p_actor_ref        text default null
+) returns void
+language plpgsql security definer set search_path = identity, pg_catalog, pg_temp as $$
+begin
+  if p_justification is null or length(btrim(p_justification)) < 8 then
+    raise exception 'identity.unseal requires a justification' using errcode = 'insufficient_privilege';
+  end if;
+
+  -- Legal reads require an approved, unexpired request on file.
+  if p_purpose = 'legal_request' then
+    if p_legal_request_id is null then
+      raise exception 'legal_request purpose requires a legal_request_id' using errcode = 'insufficient_privilege';
+    end if;
+    perform 1 from identity.legal_request lr
+     where lr.id = p_legal_request_id
+       and lr.approved_at is not null
+       and lr.rejected_at is null
+       and lr.expires_at > now();
+    if not found then
+      raise exception 'legal request % is not approved or has expired', p_legal_request_id
+        using errcode = 'insufficient_privilege';
+    end if;
+  end if;
+
+  insert into identity.access_log (purpose, function_name, subject_id, legal_request_id, justification, actor_ref)
+  values (p_purpose, p_function_name, p_subject_id, p_legal_request_id, p_justification, p_actor_ref);
+
+  perform set_config('kiksu.identity_unsealed', 'on', true);
+end$$;
+
+revoke all on function identity.unseal(identity.access_purpose, text, text, uuid, uuid, text) from public;
+
+-- The ONLY sanctioned way to walk from a subject to a pseudonym.
+-- Two log lines are written: the intent (by unseal) and the resolved
+-- value. Both are INSERTs — the log is append-only, so the resolved
+-- value cannot be back-filled by UPDATE.
+create or replace function identity.resolve_app_user(
+  p_subject_id       uuid,
+  p_purpose          identity.access_purpose,
+  p_justification    text,
+  p_legal_request_id uuid default null,
+  p_actor_ref        text default null
+) returns uuid
+language plpgsql security definer set search_path = identity, pg_catalog, pg_temp as $$
+declare v_app_user uuid;
+begin
+  perform identity.unseal(p_purpose, 'resolve_app_user', p_justification, p_subject_id, p_legal_request_id, p_actor_ref);
+  select l.app_user_id into v_app_user
+    from identity.app_user_link l
+   where l.subject_id = p_subject_id and l.unbound_at is null;
+  insert into identity.access_log (purpose, function_name, subject_id, app_user_id, legal_request_id, justification, actor_ref)
+  values (p_purpose, 'resolve_app_user:result', p_subject_id, v_app_user, p_legal_request_id, p_justification, p_actor_ref);
+  return v_app_user;
+end$$;
+
+revoke all on function identity.resolve_app_user(uuid, identity.access_purpose, text, uuid, text) from public;
+
+-- ... and the reverse direction, which is what a safety escalation needs.
+create or replace function identity.resolve_subject(
+  p_app_user_id      uuid,
+  p_purpose          identity.access_purpose,
+  p_justification    text,
+  p_legal_request_id uuid default null,
+  p_actor_ref        text default null
+) returns uuid
+language plpgsql security definer set search_path = identity, pg_catalog, pg_temp as $$
+declare v_subject uuid;
+begin
+  perform identity.unseal(p_purpose, 'resolve_subject', p_justification, null, p_legal_request_id, p_actor_ref);
+  select l.subject_id into v_subject
+    from identity.app_user_link l
+   where l.app_user_id = p_app_user_id and l.unbound_at is null;
+  return v_subject;
+end$$;
+
+revoke all on function identity.resolve_subject(uuid, identity.access_purpose, text, uuid, text) from public;
+
+-- --------------------------------------------------------------------
+-- 06.8 Regression detector for the auth anchor rule
+-- Counts auth accounts whose email is NOT the synthetic domain. Must be
+-- zero. Wire this into the invariant test suite and to alerting.
+-- --------------------------------------------------------------------
+create or replace view identity.auth_email_leak_check as
+  select count(*) filter (where u.email is not null
+                            and u.email not like '%@users.kiksu.app') as identifying_emails,
+         count(*)                                                     as total_accounts
+  from auth.users u;
+
+comment on view identity.auth_email_leak_check is
+  'identifying_emails must be 0. A non-zero value means a university email reached auth.users, which makes app_user -> auth.users a name leak.';
+
+
+-- =====================================================================
+-- 07. PUBLIC.APP_USER — LAYER 2, the persistent pseudonym
+--
+-- This is what other students see. It carries a GENERATED handle, karma,
+-- tier, trade reputation and a deliberately COARSE projection of a few
+-- identity attributes.
+--
+-- The projection columns (university_id, display_faculty_id,
+-- display_study_year) are the one sanctioned leak from layer 1 to layer
+-- 2. They exist because the design requires them:
+--   * board scoping and the campus feed need university_id;
+--   * the seller card renders "BDU · İNFORMATİKA · 2-Cİ KURS";
+--   * post badges render the tier.
+-- They are WRITTEN BY the verification service (never by a join) and are
+-- nulled by trigger whenever the cohort behind them is smaller than
+-- ref.university.k_anon_min.
+-- =====================================================================
+
+create table public.app_user (
+  id                        uuid primary key default util.uuid_v7(),
+
+  -- Auth anchor. Safe ONLY because auth.users holds a synthetic address
+  -- (see the auth anchor rule in section 06).
+  auth_user_id              uuid not null references auth.users(id) on delete restrict,
+
+  -- ---- pseudonym -------------------------------------------------
+  handle                    text not null,                  -- 'sakit-pərvanə-37'
+  handle_folded             text generated always as (util.fold_handle(handle)) stored,
+  handle_number             smallint,                        -- the '37' shown in the avatar
+  handle_changed_at         timestamptz not null default now(),
+  handle_change_allowed_at  timestamptz generated always as
+                              (handle_changed_at + interval '14 days') stored,
+
+  -- ---- identity projection (coarse, k-anonymity gated) ------------
+  verification_tier         public.verification_tier not null default 'unverified',
+  card_review_state         identity.verification_state not null default 'none',  -- own-profile only
+  university_id             uuid references ref.university(id) on delete restrict,
+  display_faculty_id        uuid references ref.faculty(id) on delete set null,
+  display_study_year        smallint check (display_study_year between 1 and 8),
+  display_cohort_size       integer,                         -- audit trail for the k-anon decision
+  projection_updated_at     timestamptz,
+
+  -- ---- reputation -------------------------------------------------
+  karma                     integer not null default 0,
+  post_count                integer not null default 0,
+  comment_count             integer not null default 0,
+  review_count              integer not null default 0,
+
+  -- marketplace reputation (design screen 08 + 10)
+  trade_rating_sum          integer not null default 0,
+  trade_rating_count        integer not null default 0,
+  trade_rating_avg          numeric(3, 2) generated always as (
+                              case when trade_rating_count = 0 then null
+                                   else round(trade_rating_sum::numeric / trade_rating_count, 2) end
+                            ) stored,
+  deal_count                integer not null default 0,       -- '12 SÖVDƏLƏŞMƏ'
+  response_rate_pct         smallint check (response_rate_pct between 0 and 100),
+  response_time_median_sec  integer,                          -- '~2 saat'
+  complaint_count           integer not null default 0,       -- '0 ŞİKAYƏT'
+
+  -- ---- preferences ------------------------------------------------
+  locale                    public.locale_code not null default 'az',
+  feed_languages            public.locale_code[] not null default '{az}',
+
+  -- privacy toggles, design screen 10 (defaults match the mockup)
+  privacy_show_year         boolean not null default true,    -- 'Kursumu profildə göstər'
+  privacy_share_timetable   boolean not null default false,   -- 'Cədvəlimi kursdaşlarla paylaş'
+  privacy_show_uni_badge    boolean not null default true,    -- 'Postlarımda universitet nişanı'
+  privacy_link_listings     boolean not null default false,   -- 'Bazar profilimə keçid'
+  privacy_discoverable      boolean not null default false,   -- 'Axtarışda tapılım'
+
+  -- ---- lifecycle ---------------------------------------------------
+  status                    public.app_user_status not null default 'pending',
+  suspended_until           timestamptz,
+  created_at                timestamptz not null default now(),
+  updated_at                timestamptz not null default now(),
+  last_active_at            timestamptz,
+  deactivated_at            timestamptz,
+
+  constraint app_user_auth_uniq   unique (auth_user_id),
+  constraint app_user_handle_uniq unique (handle),
+  -- Folded uniqueness stops `sakit-pervane-37` impersonating
+  -- `sakit-pərvanə-37`.
+  constraint app_user_handle_folded_uniq unique (handle_folded),
+  constraint app_user_tier_needs_uni check (
+    verification_tier = 'unverified' or university_id is not null
+  )
+);
+
+create index app_user_university_idx on public.app_user (university_id) where status = 'active';
+create index app_user_handle_trgm_idx on public.app_user using gin (handle_folded extensions.gin_trgm_ops)
+  where privacy_discoverable;
+create index app_user_active_idx on public.app_user (last_active_at desc) where status = 'active';
+
+comment on table public.app_user is
+  'LAYER 2. Everything here may be shown to other students. Nothing here may be derived by joining identity.* at read time — the projection columns are pushed by the verification service.';
+comment on column public.app_user.display_faculty_id is
+  'NULL unless the (university, faculty, year) cohort has at least ref.university.k_anon_min verified members. Enforced by trigger tg_app_user_k_anon.';
+
+-- --------------------------------------------------------------------
+-- 07.1 Cohort sizes — counts only, never identifiers
+-- Pushed from identity by a periodic job. This is what lets the app
+-- layer enforce k-anonymity without ever touching layer 1.
+-- --------------------------------------------------------------------
+create table public.cohort_size (
+  university_id   uuid not null references ref.university(id) on delete cascade,
+  faculty_id      uuid references ref.faculty(id) on delete cascade,
+  program_id      uuid references ref.program(id) on delete cascade,
+  study_year      smallint,
+  verified_count  integer not null check (verified_count >= 0),
+  computed_at     timestamptz not null default now(),
+  -- A PRIMARY KEY cannot hold NULLs, and the roll-up rows (faculty-only,
+  -- university-only) need them. UNIQUE ... NULLS NOT DISTINCT (PG15+) is
+  -- what makes those roll-up rows addressable by a plain ON CONFLICT
+  -- upsert instead of a coalesce-to-sentinel hack.
+  constraint cohort_size_dims_uniq unique nulls not distinct
+    (university_id, faculty_id, program_id, study_year)
+);
+
+comment on table public.cohort_size is
+  'Aggregate counts pushed out of identity. Rows contain no identifiers. Small counts are still sensitive: never expose this table to clients.';
+
+-- Trigger: refuse to publish an attribute combination that is below the
+-- floor. Rather than rejecting the write (which would strand the user in
+-- an unverified state) it coarsens the projection.
+create or replace function public.tg_app_user_k_anon() returns trigger
+language plpgsql as $$
+declare
+  v_min   integer;
+  v_count integer;
+begin
+  if new.university_id is null then
+    new.display_faculty_id := null;
+    new.display_study_year := null;
+    new.display_cohort_size := null;
+    return new;
+  end if;
+
+  select u.k_anon_min into v_min from ref.university u where u.id = new.university_id;
+  v_min := coalesce(v_min, 20);
+
+  if new.display_faculty_id is not null then
+    select cs.verified_count into v_count
+      from public.cohort_size cs
+     where cs.university_id = new.university_id
+       and cs.faculty_id    is not distinct from new.display_faculty_id
+       and cs.program_id    is null
+       and cs.study_year    is not distinct from new.display_study_year;
+
+    new.display_cohort_size := v_count;
+
+    if v_count is null or v_count < v_min then
+      -- Drop the finest dimension first (year), then the faculty.
+      new.display_study_year := null;
+      select cs.verified_count into v_count
+        from public.cohort_size cs
+       where cs.university_id = new.university_id
+         and cs.faculty_id    is not distinct from new.display_faculty_id
+         and cs.program_id    is null
+         and cs.study_year    is null;
+      new.display_cohort_size := v_count;
+      if v_count is null or v_count < v_min then
+        new.display_faculty_id := null;
+      end if;
+    end if;
+  end if;
+
+  -- The user's own privacy switch is applied on top of the floor.
+  if not new.privacy_show_year then
+    new.display_study_year := null;
+  end if;
+
+  return new;
+end$$;
+
+create trigger app_user_k_anon
+  before insert or update of university_id, display_faculty_id, display_study_year, privacy_show_year
+  on public.app_user
+  for each row execute function public.tg_app_user_k_anon();
+
+create trigger app_user_touch
+  before update on public.app_user
+  for each row execute function util.tg_touch_updated_at();
+
+-- --------------------------------------------------------------------
+-- 07.2 Session helpers used by every RLS policy
+--
+-- Always call these WRAPPED IN A SUBSELECT inside policies:
+--     using (app_user_id = (select public.current_app_user_id()))
+-- The subselect turns the call into an InitPlan evaluated once per
+-- statement instead of once per row. This is the single biggest RLS
+-- performance lever on Supabase.
+-- --------------------------------------------------------------------
+create or replace function public.current_app_user_id() returns uuid
+language sql stable security definer set search_path = public, pg_catalog, pg_temp as $$
+  select au.id
+    from public.app_user au
+   where au.auth_user_id = auth.uid()
+     and au.status in ('active', 'muted', 'pending');
+$$;
+
+create or replace function public.current_university_id() returns uuid
+language sql stable security definer set search_path = public, pg_catalog, pg_temp as $$
+  select au.university_id
+    from public.app_user au
+   where au.auth_user_id = auth.uid();
+$$;
+
+create or replace function public.current_tier() returns public.verification_tier
+language sql stable security definer set search_path = public, pg_catalog, pg_temp as $$
+  select coalesce((select au.verification_tier from public.app_user au where au.auth_user_id = auth.uid()),
+                  'unverified'::public.verification_tier);
+$$;
+
+-- --------------------------------------------------------------------
+-- 07.3 Handle history and reservations — INTERNAL
+-- Handle history is a linkage table: old handle -> new handle lets an
+-- observer follow a pseudonym across a rename. It therefore lives in
+-- `internal`, not next to app_user.
+-- --------------------------------------------------------------------
+create table internal.handle_history (
+  id              uuid primary key default util.uuid_v7(),
+  app_user_id     uuid not null references public.app_user(id) on delete cascade,
+  handle          text not null,
+  handle_folded   text generated always as (util.fold_handle(handle)) stored,
+  assigned_at     timestamptz not null default now(),
+  released_at     timestamptz,
+  release_reason  text
+);
+create index handle_history_user_idx   on internal.handle_history (app_user_id, assigned_at desc);
+create index handle_history_folded_idx on internal.handle_history (handle_folded);
+
+-- A released handle must not be immediately re-issued to someone else,
+-- or the pseudonym becomes transferable. Cool-down is held here.
+create table internal.handle_reservation (
+  handle_folded   text primary key,
+  reserved_until  timestamptz not null,
+  reason          text not null check (reason in ('cooldown', 'blocklist', 'staff', 'pending_assignment')),
+  created_at      timestamptz not null default now()
+);
+create index handle_reservation_expiry_idx on internal.handle_reservation (reserved_until);
+
+-- --------------------------------------------------------------------
+-- 07.4 Client-facing projection of app_user
+-- The base table carries auth_user_id and the raw projection columns.
+-- Clients read this view instead, which cannot expose the auth anchor.
+-- security_invoker = on so the caller's RLS still applies.
+-- --------------------------------------------------------------------
+create view public.app_user_card
+  with (security_invoker = on) as
+  select au.id,
+         au.handle,
+         au.handle_number,
+         au.verification_tier,
+         case when au.privacy_show_uni_badge then au.university_id end       as university_id,
+         case when au.privacy_show_uni_badge then au.display_faculty_id end  as display_faculty_id,
+         case when au.privacy_show_uni_badge then au.display_study_year end  as display_study_year,
+         au.karma,
+         au.post_count,
+         au.trade_rating_avg,
+         au.trade_rating_count,
+         au.deal_count,
+         au.response_rate_pct,
+         au.response_time_median_sec,
+         au.complaint_count,
+         au.privacy_link_listings,
+         au.status,
+         au.created_at
+    from public.app_user au
+   where au.status not in ('deactivated', 'erased');
+
+comment on view public.app_user_card is
+  'The only app_user shape clients see. Never grant SELECT on public.app_user itself to authenticated.';
+
+
+-- =====================================================================
+-- 08. ACADEMIC — enrollment, attendance, coursework, materials, grades
+--
+-- Enrollment is deliberately in `public` and not `internal`: the student
+-- must be able to read their own timetable with a plain RLS-gated
+-- SELECT, and the "share my timetable with classmates" toggle needs a
+-- policy, not a service call.
+--
+-- BUT NOTE THE RISK, documented here because it constrains the review
+-- feature: enrollment tells you who was in section X, and a review is
+-- keyed to course x instructor x semester with a "DOĞRULANMIŞ" badge.
+-- On a 6-person section those two facts together identify the reviewer.
+-- Mitigation lives on public.review (verified_cohort_size).
+-- =====================================================================
+
+create table public.enrollment (
+  id                 uuid primary key default util.uuid_v7(),
+  app_user_id        uuid not null references public.app_user(id) on delete cascade,
+  section_id         uuid not null references ref.course_section(id) on delete cascade,
+  term_id            uuid not null references ref.term(id) on delete cascade,
+  state              public.enrollment_state not null default 'enrolled',
+
+  -- Design screen 03 colours each course block. The colour is the
+  -- student's own choice, so it belongs on the enrollment.
+  color              public.accent_color not null default 'turquoise',
+  display_order      smallint,
+
+  -- Attendance counter cache. absence_units is the weighted total
+  -- (a 'late' contributes ref.absence_policy.late_counts_as), which is
+  -- what the "4 / 12" ring actually renders.
+  absence_count      integer not null default 0,
+  absence_units      numeric(6, 2) not null default 0,
+  absence_limit      integer,                                -- resolved snapshot, refreshed nightly
+  absence_notified_at timestamptz,
+
+  -- GPA support
+  final_score        numeric(5, 2),
+  final_letter       text,
+  gpa_points         numeric(3, 2),
+
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now(),
+  constraint enrollment_uniq unique (app_user_id, section_id)
+);
+
+-- The week-timetable fetch is: "my enrolled sections in the current
+-- term". This partial index is that query's whole access path.
+create index enrollment_user_term_idx
+  on public.enrollment (app_user_id, term_id)
+  where state = 'enrolled';
+create index enrollment_section_idx on public.enrollment (section_id) where state = 'enrolled';
+
+create trigger enrollment_touch
+  before update on public.enrollment
+  for each row execute function util.tg_touch_updated_at();
+
+-- --------------------------------------------------------------------
+-- 08.1 Absence
+-- Design screen 04: "Qayıb qeyd et" — self-reported by default, with
+-- room for an official import or an instructor feed later.
+-- --------------------------------------------------------------------
+create table public.absence (
+  id              uuid primary key default util.uuid_v7(),
+  enrollment_id   uuid not null references public.enrollment(id) on delete cascade,
+  meeting_id      uuid references ref.section_meeting(id) on delete set null,
+  occurred_on     date not null,
+  kind            public.absence_kind not null default 'absent',
+  source          public.absence_source not null default 'self_reported',
+  excuse_state    text check (excuse_state in ('none', 'requested', 'approved', 'rejected')) default 'none',
+  excuse_note     text,
+  created_at      timestamptz not null default now(),
+  -- One record per class occurrence. NULLS NOT DISTINCT so that two
+  -- "no specific meeting" entries on the same day still collide.
+  constraint absence_occurrence_uniq unique nulls not distinct (enrollment_id, occurred_on, meeting_id)
+);
+create index absence_enrollment_idx on public.absence (enrollment_id, occurred_on desc);
+
+-- --------------------------------------------------------------------
+-- 08.2 Coursework / deadlines
+-- Design screen 02: "SQL laboratoriya #4 · Verilənlər bazası · SABAH
+-- 23:59" and "Aralıq imtahan · Diskret riyaziyyat · 27 OKT".
+-- Deadlines can be official, crowdsourced by classmates, or personal.
+-- --------------------------------------------------------------------
+create table public.coursework (
+  id                 uuid primary key default util.uuid_v7(),
+  section_id         uuid not null references ref.course_section(id) on delete cascade,
+  kind               public.coursework_kind not null default 'homework',
+  title              text not null,                          -- 'SQL laboratoriya #4'
+  description        text,
+  due_at             timestamptz,
+  weight_pct         numeric(5, 2) check (weight_pct >= 0 and weight_pct <= 100),
+  origin             public.coursework_origin not null default 'crowdsourced',
+  -- Crowdsourced items are attributable to a handle so they can be
+  -- corrected and so vandalism has an owner. Personal items are private.
+  created_by         uuid references public.app_user(id) on delete set null,
+  confirm_count      integer not null default 0,
+  dispute_count      integer not null default 0,
+  is_verified        boolean not null default false,
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now()
+);
+-- "Yaxın son tarixlər": upcoming deadlines for my sections.
+create index coursework_section_due_idx on public.coursework (section_id, due_at)
+  where due_at is not null;
+
+create table public.coursework_state (
+  app_user_id     uuid not null references public.app_user(id) on delete cascade,
+  coursework_id   uuid not null references public.coursework(id) on delete cascade,
+  state           text not null default 'todo' check (state in ('todo', 'in_progress', 'done', 'skipped')),
+  remind_at       timestamptz,
+  updated_at      timestamptz not null default now(),
+  primary key (app_user_id, coursework_id)
+);
+create index coursework_state_remind_idx on public.coursework_state (remind_at)
+  where remind_at is not null and state <> 'done';
+
+-- --------------------------------------------------------------------
+-- 08.3 Course materials — design screen 04, "Kurs materialları · 14 fayl"
+-- Attribution is by HANDLE here (not alias): uploading notes is a
+-- reputational act, and the design shows no anonymity affordance for it.
+-- --------------------------------------------------------------------
+create table public.course_material (
+  id                 uuid primary key default util.uuid_v7(),
+  course_id          uuid not null references ref.course(id) on delete cascade,
+  section_id         uuid references ref.course_section(id) on delete set null,
+  uploader_id        uuid references public.app_user(id) on delete set null,
+  title              text not null,
+  kind               text not null default 'note'
+                     check (kind in ('note', 'slide', 'past_exam', 'syllabus', 'solution', 'other')),
+  storage_path       text not null,
+  mime_type          text,
+  byte_size          bigint check (byte_size >= 0),
+  download_count     integer not null default 0,
+  moderation_state   public.moderation_state not null default 'visible',
+  copyright_flagged  boolean not null default false,
+  created_at         timestamptz not null default now(),
+  deleted_at         timestamptz
+);
+create index course_material_course_idx on public.course_material (course_id, created_at desc)
+  where deleted_at is null and moderation_state = 'visible';
+
+comment on column public.course_material.copyright_flagged is
+  'Past exams and scanned textbooks are the usual takedown target. Kept as a first-class flag so takedowns do not require a schema change.';
+
+
+-- =====================================================================
+-- 09. FORUM — boards, posts, comments, aliases, votes, polls
+--
+-- THE CENTRAL TRICK OF THIS SECTION:
+-- public.post and public.post_comment carry NO author column. What they
+-- carry is the rendered identity: author_alias_number ("ANONİM 5") and
+-- author_tier (the ✓ / KART badge). Authorship lives in
+-- internal.post_author / internal.comment_author.
+--
+-- Consequences, all of them intended:
+--   * The feed renders without touching any table that knows who wrote
+--     what. A read-only leak of `public` de-anonymises nobody.
+--   * internal.thread_alias — the table that maps alias number to
+--     app_user, i.e. the table that would unmask a whole thread — is
+--     never on a read path at all. It is written once and read only by
+--     the composer and by moderation.
+--   * The tier badge is FROZEN AT WRITE TIME. A student who upgrades
+--     from ✓ to KART does not retroactively re-badge their old posts.
+--     This is deliberate: retroactive badges leak the upgrade event and
+--     correlate a user's posts across threads.
+-- =====================================================================
+
+create table public.board (
+  id                 uuid primary key default util.uuid_v7(),
+  scope              public.board_scope not null default 'university',
+  university_id      uuid references ref.university(id) on delete cascade,
+  faculty_id         uuid references ref.faculty(id) on delete cascade,
+  course_id          uuid references ref.course(id) on delete cascade,
+  club_id            uuid,                                   -- FK added after public.club exists
+
+  slug               text not null,
+  name_az            text not null,                          -- 'Dərs və müəllim'
+  name_ru            text,
+  name_en            text,
+  description_az     text,
+
+  -- Boards carry a language. Content is NOT translated: the language
+  -- attribute decides which FTS configuration the board's posts use and
+  -- which users see the board in their feed (app_user.feed_languages).
+  lang               public.locale_code not null default 'az',
+
+  -- Posting gate. Some boards (e.g. dorm/rent) may require the card tier.
+  min_tier_to_post   public.verification_tier not null default 'email_verified',
+  min_tier_to_read   public.verification_tier not null default 'unverified',
+  allows_poll        boolean not null default true,
+  allows_image       boolean not null default true,
+
+  -- counter caches (design: "BDU · 9 214 İZLƏYİCİ", "38 mövzu")
+  follower_count     integer not null default 0,
+  post_count         integer not null default 0,
+  last_post_at       timestamptz,
+
+  display_order      smallint not null default 0,
+  is_default_follow  boolean not null default false,
+  is_archived        boolean not null default false,
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now(),
+
+  constraint board_slug_uniq unique nulls not distinct (university_id, slug),
+  -- Scope integrity: a scoped board must name its scope object.
+  constraint board_scope_ck check (
+    (scope = 'national'   and university_id is null) or
+    (scope = 'university' and university_id is not null and faculty_id is null and course_id is null) or
+    (scope = 'faculty'    and faculty_id is not null) or
+    (scope = 'course'     and course_id  is not null) or
+    (scope = 'club'       and club_id    is not null)
+  )
+);
+create index board_university_idx on public.board (university_id, display_order) where not is_archived;
+create index board_course_idx     on public.board (course_id) where course_id is not null;
+create index board_lang_idx       on public.board (lang, university_id) where not is_archived;
+
+create table public.board_follow (
+  board_id       uuid not null references public.board(id) on delete cascade,
+  app_user_id    uuid not null references public.app_user(id) on delete cascade,
+  followed_at    timestamptz not null default now(),
+  is_muted       boolean not null default false,
+  primary key (board_id, app_user_id)
+);
+-- The home feed is "boards I follow", so the user-first index matters
+-- more than the board-first one.
+create index board_follow_user_idx on public.board_follow (app_user_id) where not is_muted;
+
+-- --------------------------------------------------------------------
+-- 09.1 Post
+-- --------------------------------------------------------------------
+create table public.post (
+  id                    uuid primary key default util.uuid_v7(),
+  board_id              uuid not null references public.board(id) on delete cascade,
+
+  -- Denormalised from board so the campus feed does not join. Kept in
+  -- sync by trigger; boards do not move between universities in practice.
+  university_id         uuid references ref.university(id) on delete cascade,
+  lang                  public.locale_code not null default 'az',
+
+  kind                  public.post_kind not null default 'text',
+  title                 text not null check (length(btrim(title)) > 0),
+  body                  text,
+
+  -- ---- rendered identity (NOT authorship) -------------------------
+  author_display_mode   public.author_display_mode not null default 'alias',
+  author_alias_number   integer check (author_alias_number >= 1),
+  author_tier           public.verification_tier not null default 'unverified',
+  -- Populated ONLY when the author chose to be identified (staff notice,
+  -- club announcement). NULL for every anonymous post, which is the
+  -- default and the design's only shown case.
+  author_app_user_id    uuid references public.app_user(id) on delete set null,
+
+  -- Alias allocation high-water mark for this thread. Incremented under
+  -- the row lock taken by internal.allocate_thread_alias(), which is
+  -- what makes concurrent first-comments race-free.
+  alias_high_water      integer not null default 1,
+
+  -- ---- counters ----------------------------------------------------
+  upvote_count          integer not null default 0,
+  downvote_count        integer not null default 0,
+  score                 integer not null default 0,           -- '▲ 211'
+  comment_count         integer not null default 0,           -- '▭ 62'
+  save_count            integer not null default 0,           -- '◇ 18'
+  view_count            integer not null default 0,
+  attachment_count      smallint not null default 0,
+  has_poll              boolean not null default false,
+  hot_rank              double precision not null default 0,
+
+  -- ---- state -------------------------------------------------------
+  is_pinned             boolean not null default false,
+  is_locked             boolean not null default false,
+  moderation_state      public.moderation_state not null default 'visible',
+  report_count          integer not null default 0,
+  created_at            timestamptz not null default now(),
+  edited_at             timestamptz,
+  last_comment_at       timestamptz,
+  deleted_at            timestamptz,
+
+  search_vector         tsvector generated always as (util.tsv_ab(lang::text, title, body)) stored,
+
+  constraint post_alias_shape_ck check (
+    (author_display_mode = 'alias'  and author_alias_number is not null and author_app_user_id is null) or
+    (author_display_mode <> 'alias' and author_app_user_id is not null)
+  )
+);
+
+comment on column public.post.author_app_user_id is
+  'NULL for anonymous posts. Non-null ONLY when the author deliberately posted under their handle. Anonymous authorship is in internal.post_author.';
+comment on column public.post.author_tier is
+  'Frozen at write time on purpose. Re-badging old posts after a tier upgrade would leak the upgrade and correlate posts across threads.';
+
+-- Board feed, POPULYAR tab + keyset pagination.
+create index post_board_hot_idx on public.post (board_id, hot_rank desc, id desc)
+  where deleted_at is null and moderation_state = 'visible';
+-- Board feed, YENİ tab.
+create index post_board_new_idx on public.post (board_id, created_at desc, id desc)
+  where deleted_at is null and moderation_state = 'visible';
+-- SORĞU tab.
+create index post_board_poll_idx on public.post (board_id, created_at desc)
+  where has_poll and deleted_at is null and moderation_state = 'visible';
+-- CAVABSIZ tab.
+create index post_board_unanswered_idx on public.post (board_id, created_at desc)
+  where comment_count = 0 and deleted_at is null and moderation_state = 'visible';
+-- "Kampus gündəmi": hot across every board of one university. hot_rank is
+-- time-anchored, so ORDER BY hot_rank DESC LIMIT n terminates early and
+-- no recency predicate is needed.
+create index post_campus_hot_idx on public.post (university_id, hot_rank desc)
+  where deleted_at is null and moderation_state = 'visible';
+-- Pinned rows are few; a partial index keeps them out of the main scan.
+create index post_pinned_idx on public.post (board_id, created_at desc)
+  where is_pinned and deleted_at is null;
+create index post_search_idx on public.post using gin (search_vector);
+
+-- Authorship map. One row per anonymous post. Never granted to clients.
+create table internal.post_author (
+  post_id       uuid primary key references public.post(id) on delete cascade,
+  app_user_id   uuid not null references public.app_user(id) on delete restrict,
+  created_at    timestamptz not null default now()
+);
+create index post_author_user_idx on internal.post_author (app_user_id, created_at desc);
+
+comment on table internal.post_author is
+  'The unmasking table for posts. Read paths: "my posts", edit/delete authorisation, karma, moderation. Never a feed read.';
+
+-- --------------------------------------------------------------------
+-- 09.2 Thread aliases — LAYER 3
+--
+-- Scoped to one post, never reused across posts (guaranteed by the
+-- composite key). Numbers are allocated from post.alias_high_water under
+-- that row's lock, so two students commenting simultaneously cannot get
+-- the same number.
+--
+-- The composer needs to show "ANONİM 5 KİMİ YAZ" BEFORE the write, so
+-- allocation supports a reservation with a TTL. Expired reservations are
+-- deleted but their numbers are NOT recycled: a recycled number would
+-- let an observer infer that a participant left, and would make two
+-- different people share one label in a cached client.
+-- --------------------------------------------------------------------
+create table internal.thread_alias (
+  post_id         uuid not null references public.post(id) on delete cascade,
+  app_user_id     uuid not null references public.app_user(id) on delete cascade,
+  alias_number    integer not null check (alias_number >= 1),
+  is_op           boolean not null default false,
+  state           public.alias_state not null default 'reserved',
+  reserved_until  timestamptz,
+  first_used_at   timestamptz,
+  created_at      timestamptz not null default now(),
+  primary key (post_id, app_user_id),
+  constraint thread_alias_number_uniq unique (post_id, alias_number),
+  constraint thread_alias_reservation_ck check (state <> 'reserved' or reserved_until is not null)
+);
+create index thread_alias_expiry_idx on internal.thread_alias (reserved_until)
+  where state = 'reserved';
+
+comment on table internal.thread_alias is
+  'LAYER 3. Alias numbers are per-thread and never reused. Gaps in the numbering are expected and intentional.';
+
+-- Allocate (or return the existing) alias for a participant in a thread.
+-- Idempotent: calling it twice for the same (post, user) returns the same
+-- number, which is what makes the composer preview honest.
+create or replace function internal.allocate_thread_alias(
+  p_post_id     uuid,
+  p_app_user_id uuid,
+  p_ttl         interval default interval '15 minutes',
+  p_activate    boolean default false
+) returns integer
+language plpgsql security definer set search_path = internal, public, pg_catalog, pg_temp as $$
+declare
+  v_alias integer;
+begin
+  select alias_number into v_alias
+    from internal.thread_alias
+   where post_id = p_post_id and app_user_id = p_app_user_id;
+
+  if v_alias is null then
+    -- The UPDATE takes a row lock on the post; concurrent allocators
+    -- serialise behind it. This is the whole race protection.
+    update public.post
+       set alias_high_water = alias_high_water + 1
+     where id = p_post_id
+     returning alias_high_water into v_alias;
+
+    if v_alias is null then
+      raise exception 'post % does not exist', p_post_id using errcode = 'foreign_key_violation';
+    end if;
+
+    insert into internal.thread_alias (post_id, app_user_id, alias_number, state, reserved_until, first_used_at)
+    values (p_post_id, p_app_user_id, v_alias,
+            case when p_activate then 'active' else 'reserved' end::public.alias_state,
+            case when p_activate then null else now() + p_ttl end,
+            case when p_activate then now() end);
+  elsif p_activate then
+    update internal.thread_alias
+       set state = 'active', reserved_until = null, first_used_at = coalesce(first_used_at, now())
+     where post_id = p_post_id and app_user_id = p_app_user_id;
+  else
+    update internal.thread_alias
+       set reserved_until = greatest(coalesce(reserved_until, now()), now() + p_ttl)
+     where post_id = p_post_id and app_user_id = p_app_user_id and state = 'reserved';
+  end if;
+
+  return v_alias;
+end$$;
+
+comment on function internal.allocate_thread_alias(uuid, uuid, interval, boolean) is
+  'Alias allocation storage primitive. The POLICY around it (who may post, rate limits, when a reservation is burned) belongs to the Identity Architect.';
+
+-- --------------------------------------------------------------------
+-- 09.3 Comments
+-- Design screen 06 shows one level of nesting with a rail. `path` is the
+-- materialised ancestor chain of per-thread sequence numbers, which
+-- gives threaded ordering from a plain btree and no recursive CTE.
+-- --------------------------------------------------------------------
+create table public.post_comment (
+  id                  uuid primary key default util.uuid_v7(),
+  post_id             uuid not null references public.post(id) on delete cascade,
+  parent_id           uuid references public.post_comment(id) on delete cascade,
+
+  seq_in_post         integer not null,                       -- monotonic per thread
+  path                integer[] not null,                     -- ancestors' seq + own seq
+  depth               smallint not null default 0 check (depth between 0 and 4),
+
+  author_display_mode public.author_display_mode not null default 'alias',
+  author_alias_number integer check (author_alias_number >= 1),
+  author_tier         public.verification_tier not null default 'unverified',
+  author_app_user_id  uuid references public.app_user(id) on delete set null,
+  is_op               boolean not null default false,          -- 'MÜƏLLİF' badge
+
+  body                text not null check (length(btrim(body)) > 0),
+  upvote_count        integer not null default 0,
+  downvote_count      integer not null default 0,
+  score               integer not null default 0,
+  reply_count         integer not null default 0,
+
+  moderation_state    public.moderation_state not null default 'visible',
+  report_count        integer not null default 0,
+  created_at          timestamptz not null default now(),
+  edited_at           timestamptz,
+  deleted_at          timestamptz,
+
+  constraint post_comment_seq_uniq unique (post_id, seq_in_post)
+);
+-- Threaded order: one index scan, already sorted.
+create index post_comment_thread_idx on public.post_comment (post_id, path);
+-- POPULYAR sort on the comment list.
+create index post_comment_top_idx on public.post_comment (post_id, score desc, created_at)
+  where parent_id is null and deleted_at is null;
+create index post_comment_parent_idx on public.post_comment (parent_id) where parent_id is not null;
+
+create table internal.comment_author (
+  comment_id    uuid primary key references public.post_comment(id) on delete cascade,
+  app_user_id   uuid not null references public.app_user(id) on delete restrict,
+  created_at    timestamptz not null default now()
+);
+create index comment_author_user_idx on internal.comment_author (app_user_id, created_at desc);
+
+-- --------------------------------------------------------------------
+-- 09.4 Votes
+-- These stay in `public` with an owner-only RLS policy, because the
+-- client legitimately needs "did I already vote on this" for the visible
+-- page and a round trip per post would be absurd. The policy makes a
+-- cross-user read impossible; the tallies live on the parent row.
+-- --------------------------------------------------------------------
+create table public.post_vote (
+  post_id       uuid not null references public.post(id) on delete cascade,
+  app_user_id   uuid not null references public.app_user(id) on delete cascade,
+  value         smallint not null check (value in (-1, 1)),
+  created_at    timestamptz not null default now(),
+  primary key (post_id, app_user_id)
+);
+create index post_vote_user_idx on public.post_vote (app_user_id, created_at desc);
+
+create table public.comment_vote (
+  comment_id    uuid not null references public.post_comment(id) on delete cascade,
+  app_user_id   uuid not null references public.app_user(id) on delete cascade,
+  value         smallint not null check (value in (-1, 1)),
+  created_at    timestamptz not null default now(),
+  primary key (comment_id, app_user_id)
+);
+create index comment_vote_user_idx on public.comment_vote (app_user_id, created_at desc);
+
+-- --------------------------------------------------------------------
+-- 09.5 Polls — design screen 05, "428 SƏS · 2 GÜN QALIB"
+-- --------------------------------------------------------------------
+create table public.poll (
+  post_id           uuid primary key references public.post(id) on delete cascade,
+  question          text,
+  is_multi_choice   boolean not null default false,
+  max_choices       smallint not null default 1 check (max_choices >= 1),
+  closes_at         timestamptz,
+  hide_results_until_vote boolean not null default false,
+  total_votes       integer not null default 0,               -- distinct voters
+  created_at        timestamptz not null default now()
+);
+
+create table public.poll_option (
+  id            uuid primary key default util.uuid_v7(),
+  post_id       uuid not null references public.poll(post_id) on delete cascade,
+  position      smallint not null,
+  label         text not null,
+  vote_count    integer not null default 0,
+  constraint poll_option_position_uniq unique (post_id, position)
+);
+create index poll_option_poll_idx on public.poll_option (post_id, position);
+
+create table public.poll_vote (
+  post_id       uuid not null references public.poll(post_id) on delete cascade,
+  option_id     uuid not null references public.poll_option(id) on delete cascade,
+  app_user_id   uuid not null references public.app_user(id) on delete cascade,
+  created_at    timestamptz not null default now(),
+  primary key (post_id, app_user_id, option_id)
+);
+
+-- --------------------------------------------------------------------
+-- 09.6 Attachments and saves
+-- --------------------------------------------------------------------
+create table public.post_attachment (
+  id            uuid primary key default util.uuid_v7(),
+  post_id       uuid not null references public.post(id) on delete cascade,
+  position      smallint not null default 0,
+  storage_path  text not null,
+  mime_type     text,
+  width         integer,
+  height        integer,
+  byte_size     bigint,
+  blurhash      text,
+  -- Screenshots of assignments are the common case (design screen 05).
+  -- EXIF must be stripped on upload; recorded here so the guarantee is
+  -- auditable rather than folkloric.
+  exif_stripped boolean not null default false,
+  created_at    timestamptz not null default now(),
+  constraint post_attachment_position_uniq unique (post_id, position)
+);
+
+create table public.post_save (
+  post_id       uuid not null references public.post(id) on delete cascade,
+  app_user_id   uuid not null references public.app_user(id) on delete cascade,
+  created_at    timestamptz not null default now(),
+  primary key (post_id, app_user_id)
+);
+create index post_save_user_idx on public.post_save (app_user_id, created_at desc);
+
+-- --------------------------------------------------------------------
+-- 09.7 View counting without a user column
+-- Writing (post_id, app_user_id, viewed_at) would build a reading-history
+-- table — a far better de-anonymisation dataset than the posts
+-- themselves. We aggregate deltas with no subject instead, and fold them
+-- into post.view_count on a schedule.
+-- --------------------------------------------------------------------
+create table internal.view_delta (
+  id            bigint generated always as identity primary key,
+  post_id       uuid not null references public.post(id) on delete cascade,
+  delta         integer not null check (delta > 0),
+  bucket_hour   timestamptz not null default date_trunc('hour', now()),
+  constraint view_delta_bucket_uniq unique (post_id, bucket_hour)
+);
+
+comment on table internal.view_delta is
+  'Deliberately subject-free. Never add app_user_id here: that would create a per-user reading history.';
+
+
+-- =====================================================================
+-- 10. REVIEWS — course x instructor x semester
+--
+-- Fixed criterion COLUMNS, not EAV. The four axes are a product decision
+-- baked into the UI (screen 07 renders exactly four labelled bars), so
+-- they are typed columns with CHECK ranges. Adding a fifth axis is a
+-- migration, and that is correct: it is a product change, and columns
+-- give us cheap SUM/COUNT aggregates that EAV would not.
+--
+-- Tag vocabulary is an array of ref.review_tag keys with a validation
+-- trigger + GIN index — flexible where flexibility is actually needed.
+-- =====================================================================
+
+create table public.review (
+  id                    uuid primary key default util.uuid_v7(),
+
+  -- The key. All three parts are required: a review of a professor that
+  -- does not say which course and which semester is not actionable, and
+  -- the design shows "2024/25 YAZ · CS 214" on every review card.
+  university_id         uuid not null references ref.university(id) on delete cascade,
+  course_id             uuid not null references ref.course(id) on delete cascade,
+  instructor_id         uuid not null references ref.instructor(id) on delete cascade,
+  term_id               uuid not null references ref.term(id) on delete cascade,
+
+  overall_rating        smallint not null check (overall_rating between 1 and 5),
+  quality               smallint not null check (quality between 1 and 5),               -- Dərs keyfiyyəti
+  fairness              smallint not null check (fairness between 1 and 5),              -- Ədalətli qiymət
+  workload              smallint not null check (workload between 1 and 5),              -- İş yükü
+  attendance_strictness smallint not null check (attendance_strictness between 1 and 5), -- Davamiyyət tələbi
+
+  tag_keys              text[] not null default '{}',
+  body                  text,
+  lang                  public.locale_code not null default 'az',
+
+  -- 'ANONİM · DOĞRULANMIŞ' badge. True only when the author's enrollment
+  -- in this section could be confirmed.
+  is_enrollment_verified boolean not null default false,
+  -- ...and only rendered when the cohort was large enough that the badge
+  -- does not identify the author. On a 6-person section, an enrolled
+  -- verified reviewer IS identifiable; this column is the gate.
+  verified_cohort_size  integer,
+
+  helpful_count         integer not null default 0,
+  report_count          integer not null default 0,
+  moderation_state      public.moderation_state not null default 'visible',
+  created_at            timestamptz not null default now(),
+  edited_at             timestamptz,
+  deleted_at            timestamptz,
+
+  search_vector         tsvector generated always as (util.tsv_ab(lang::text, body, null)) stored
+);
+
+-- Instructor profile page: written reviews, newest first, optionally
+-- filtered by course ("FƏNN: CS 214 ▾").
+create index review_instructor_idx on public.review (instructor_id, created_at desc)
+  where deleted_at is null and moderation_state = 'visible';
+create index review_instructor_course_idx on public.review (instructor_id, course_id, created_at desc)
+  where deleted_at is null and moderation_state = 'visible';
+create index review_course_idx on public.review (course_id, created_at desc)
+  where deleted_at is null and moderation_state = 'visible';
+create index review_term_idx on public.review (term_id);
+create index review_tags_idx on public.review using gin (tag_keys);
+create index review_search_idx on public.review using gin (search_vector);
+
+comment on column public.review.verified_cohort_size is
+  'Section size at write time. Render the DOĞRULANMIŞ badge only when this is at least ref.university.k_anon_min; otherwise the badge itself is the leak.';
+
+-- Tag validation: keys must exist in the vocabulary and be applicable.
+create or replace function public.tg_review_tags_valid() returns trigger
+language plpgsql as $$
+declare v_bad text;
+begin
+  if array_length(new.tag_keys, 1) > 8 then
+    raise exception 'at most 8 tags per review';
+  end if;
+  select t into v_bad
+    from unnest(new.tag_keys) as t
+   where not exists (
+     select 1 from ref.review_tag rt
+      where rt.key = t and rt.is_active and rt.applies_to in ('both', 'instructor', 'course')
+   )
+   limit 1;
+  if v_bad is not null then
+    raise exception 'unknown or inactive review tag: %', v_bad using errcode = 'foreign_key_violation';
+  end if;
+  return new;
+end$$;
+
+create trigger review_tags_valid
+  before insert or update of tag_keys on public.review
+  for each row execute function public.tg_review_tags_valid();
+
+-- --------------------------------------------------------------------
+-- 10.1 Review authorship — INTERNAL, and it carries the uniqueness key
+--
+-- "One review per student per course x instructor x semester" has to be
+-- enforced somewhere, and the author column is in `internal`. So the
+-- constraint lives here, which means the three key columns are
+-- duplicated onto this row. That denormalisation is the price of keeping
+-- authorship out of `public`; a trigger keeps the copy honest.
+-- --------------------------------------------------------------------
+create table internal.review_author (
+  review_id      uuid primary key references public.review(id) on delete cascade,
+  app_user_id    uuid not null references public.app_user(id) on delete restrict,
+  course_id      uuid not null,
+  instructor_id  uuid not null,
+  term_id        uuid not null,
+  created_at     timestamptz not null default now(),
+  constraint review_author_one_per_key unique (app_user_id, course_id, instructor_id, term_id)
+);
+create index review_author_user_idx on internal.review_author (app_user_id, created_at desc);
+
+comment on constraint review_author_one_per_key on internal.review_author is
+  'Invariant: one review per student per course x instructor x semester. Cannot live on public.review because public.review has no author column.';
+
+-- --------------------------------------------------------------------
+-- 10.2 Aggregates
+--
+-- Stored as integer SUMS and COUNTS with the averages as GENERATED
+-- columns. Sums are exactly maintainable by an incremental trigger;
+-- rolling averages are not (floating drift, and no way to undo an edit).
+-- Design screen 07 renders: 4.2 overall, "61 RƏY · 3 FƏNN", a 1..5
+-- histogram, four criterion averages, and the top tags.
+-- --------------------------------------------------------------------
+create table public.instructor_review_summary (
+  instructor_id         uuid primary key references ref.instructor(id) on delete cascade,
+  review_count          integer not null default 0,
+  course_count          integer not null default 0,           -- '3 FƏNN'
+  rating_sum            integer not null default 0,
+  rating_avg            numeric(3, 2) generated always as (
+                          case when review_count = 0 then null
+                               else round(rating_sum::numeric / review_count, 2) end) stored,
+  star_1                integer not null default 0,
+  star_2                integer not null default 0,
+  star_3                integer not null default 0,
+  star_4                integer not null default 0,
+  star_5                integer not null default 0,
+  quality_sum           integer not null default 0,
+  fairness_sum          integer not null default 0,
+  workload_sum          integer not null default 0,
+  attendance_sum        integer not null default 0,
+  quality_avg           numeric(3, 2) generated always as (
+                          case when review_count = 0 then null
+                               else round(quality_sum::numeric / review_count, 2) end) stored,
+  fairness_avg          numeric(3, 2) generated always as (
+                          case when review_count = 0 then null
+                               else round(fairness_sum::numeric / review_count, 2) end) stored,
+  workload_avg          numeric(3, 2) generated always as (
+                          case when review_count = 0 then null
+                               else round(workload_sum::numeric / review_count, 2) end) stored,
+  attendance_avg        numeric(3, 2) generated always as (
+                          case when review_count = 0 then null
+                               else round(attendance_sum::numeric / review_count, 2) end) stored,
+  -- [{key, count}] ordered desc. Recomputed periodically, not per write.
+  top_tags              jsonb not null default '[]'::jsonb,
+  updated_at            timestamptz not null default now()
+);
+create index instructor_review_summary_rank_idx on public.instructor_review_summary (rating_avg desc nulls last)
+  where review_count >= 5;
+
+create table public.course_review_summary (
+  course_id             uuid primary key references ref.course(id) on delete cascade,
+  review_count          integer not null default 0,
+  rating_sum            integer not null default 0,
+  rating_avg            numeric(3, 2) generated always as (
+                          case when review_count = 0 then null
+                               else round(rating_sum::numeric / review_count, 2) end) stored,
+  quality_sum           integer not null default 0,
+  fairness_sum          integer not null default 0,
+  workload_sum          integer not null default 0,
+  attendance_sum        integer not null default 0,
+  top_tags              jsonb not null default '[]'::jsonb,
+  updated_at            timestamptz not null default now()
+);
+
+-- The pair summary is what the class-detail sheet shows ("4.2 ★" next to
+-- the instructor for THIS course) and what the review list filter uses.
+create table public.course_instructor_review_summary (
+  course_id             uuid not null references ref.course(id) on delete cascade,
+  instructor_id         uuid not null references ref.instructor(id) on delete cascade,
+  review_count          integer not null default 0,
+  rating_sum            integer not null default 0,
+  rating_avg            numeric(3, 2) generated always as (
+                          case when review_count = 0 then null
+                               else round(rating_sum::numeric / review_count, 2) end) stored,
+  quality_sum           integer not null default 0,
+  fairness_sum          integer not null default 0,
+  workload_sum          integer not null default 0,
+  attendance_sum        integer not null default 0,
+  updated_at            timestamptz not null default now(),
+  primary key (course_id, instructor_id)
+);
+create index course_instructor_summary_instructor_idx
+  on public.course_instructor_review_summary (instructor_id, rating_avg desc nulls last);
+
+-- Helpful votes on a review (owner-only RLS, same reasoning as post_vote).
+create table public.review_helpful (
+  review_id     uuid not null references public.review(id) on delete cascade,
+  app_user_id   uuid not null references public.app_user(id) on delete cascade,
+  created_at    timestamptz not null default now(),
+  primary key (review_id, app_user_id)
+);
+
+
+-- =====================================================================
+-- 11. MARKETPLACE — listings, deals, trade ratings, chat
+--
+-- Unlike the forum, the marketplace is pseudonymous BY HANDLE, not by
+-- alias: the design shows "quru-püstə-19" with a ✓, a rating and a deal
+-- count. That is intentional — trade reputation requires a persistent
+-- identity. So listing.seller_id is a plain, public FK to app_user.
+-- =====================================================================
+
+create table public.listing (
+  id                 uuid primary key default util.uuid_v7(),
+  seller_id          uuid not null references public.app_user(id) on delete cascade,
+  university_id      uuid not null references ref.university(id) on delete cascade,
+  category_id        uuid not null references ref.marketplace_category(id) on delete restrict,
+  related_course_id  uuid references ref.course(id) on delete set null,   -- "the CS 214 textbook"
+
+  title              text not null check (length(btrim(title)) > 0),
+  description        text,
+  lang               public.locale_code not null default 'az',
+
+  price_minor        integer not null check (price_minor >= 0),           -- qəpik; 25 ₼ = 2500
+  currency           char(3) not null default 'AZN' check (currency ~ '^[A-Z]{3}$'),
+  is_negotiable      boolean not null default false,                      -- 'RAZILAŞMA OLAR'
+  condition          public.listing_condition not null default 'good',    -- 'VƏZİYYƏT: YAXŞI'
+
+  -- Category-specific chips ("QEYDLƏR VAR", "2 KİTAB"). Shape is governed
+  -- by ref.marketplace_category.attribute_schema.
+  attributes         jsonb not null default '{}'::jsonb,
+
+  -- Free-text handover points ("Baş korpusun qarşısında", "Elmlər
+  -- Akademiyası metrosu"). Array, not a geo type: students name
+  -- landmarks, not coordinates, and storing coordinates for a meetup is
+  -- a safety liability we do not want.
+  meetup_notes       text[] not null default '{}',
+
+  status             public.listing_status not null default 'active',
+  view_count         integer not null default 0,
+  save_count         integer not null default 0,
+  chat_count         integer not null default 0,
+  image_count        smallint not null default 0,
+
+  published_at       timestamptz not null default now(),
+  bumped_at          timestamptz not null default now(),
+  expires_at         timestamptz,
+  sold_at            timestamptz,
+  moderation_state   public.moderation_state not null default 'visible',
+  report_count       integer not null default 0,
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now(),
+  deleted_at         timestamptz,
+
+  search_vector      tsvector generated always as (util.tsv_ab(lang::text, title, description)) stored
+);
+
+-- Browse: university + active + category, newest bump first.
+create index listing_browse_idx on public.listing (university_id, category_id, bumped_at desc)
+  where status = 'active' and deleted_at is null and moderation_state = 'visible';
+-- Browse with a price sort / price range filter.
+create index listing_price_idx on public.listing (university_id, category_id, price_minor)
+  where status = 'active' and deleted_at is null;
+-- Attribute filters ("has notes", "2 volumes").
+create index listing_attributes_idx on public.listing using gin (attributes jsonb_path_ops);
+create index listing_search_idx     on public.listing using gin (search_vector);
+create index listing_seller_idx     on public.listing (seller_id, published_at desc) where deleted_at is null;
+create index listing_course_idx     on public.listing (related_course_id) where related_course_id is not null;
+
+create table public.listing_image (
+  id            uuid primary key default util.uuid_v7(),
+  listing_id    uuid not null references public.listing(id) on delete cascade,
+  position      smallint not null default 0,
+  storage_path  text not null,
+  width         integer,
+  height        integer,
+  byte_size     bigint,
+  blurhash      text,
+  exif_stripped boolean not null default false,
+  constraint listing_image_position_uniq unique (listing_id, position)
+);
+
+create table public.listing_save (
+  listing_id    uuid not null references public.listing(id) on delete cascade,
+  app_user_id   uuid not null references public.app_user(id) on delete cascade,
+  created_at    timestamptz not null default now(),
+  primary key (listing_id, app_user_id)
+);
+create index listing_save_user_idx on public.listing_save (app_user_id, created_at desc);
+
+-- --------------------------------------------------------------------
+-- 11.1 Deals and trade ratings — the source of "12 SÖVDƏLƏŞMƏ" and "4.8"
+-- --------------------------------------------------------------------
+create table public.deal (
+  id                 uuid primary key default util.uuid_v7(),
+  listing_id         uuid not null references public.listing(id) on delete restrict,
+  seller_id          uuid not null references public.app_user(id) on delete restrict,
+  buyer_id           uuid not null references public.app_user(id) on delete restrict,
+  state              public.deal_state not null default 'inquiry',
+  agreed_price_minor integer check (agreed_price_minor >= 0),
+  currency           char(3) not null default 'AZN',
+  agreed_at          timestamptz,
+  completed_at       timestamptz,
+  cancelled_at       timestamptz,
+  cancel_reason      text,
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now(),
+  constraint deal_parties_differ check (seller_id <> buyer_id),
+  -- One live deal per (listing, buyer); a re-inquiry reuses the row.
+  constraint deal_listing_buyer_uniq unique (listing_id, buyer_id)
+);
+create index deal_seller_idx on public.deal (seller_id, completed_at desc) where state = 'completed';
+create index deal_buyer_idx  on public.deal (buyer_id, created_at desc);
+
+create table public.trade_rating (
+  id            uuid primary key default util.uuid_v7(),
+  deal_id       uuid not null references public.deal(id) on delete cascade,
+  rater_id      uuid not null references public.app_user(id) on delete cascade,
+  ratee_id      uuid not null references public.app_user(id) on delete cascade,
+  rater_role    text not null check (rater_role in ('buyer', 'seller')),
+  score         smallint not null check (score between 1 and 5),
+  comment       text,
+  created_at    timestamptz not null default now(),
+  constraint trade_rating_once unique (deal_id, rater_id),
+  constraint trade_rating_parties_differ check (rater_id <> ratee_id)
+);
+create index trade_rating_ratee_idx on public.trade_rating (ratee_id, created_at desc);
+
+-- --------------------------------------------------------------------
+-- 11.2 Chat — "Satıcıya yaz"
+-- --------------------------------------------------------------------
+create table public.conversation (
+  id                 uuid primary key default util.uuid_v7(),
+  kind               public.conversation_kind not null default 'listing',
+  listing_id         uuid references public.listing(id) on delete set null,
+  deal_id            uuid references public.deal(id) on delete set null,
+  created_by         uuid not null references public.app_user(id) on delete cascade,
+  created_at         timestamptz not null default now(),
+  last_message_at    timestamptz,
+  message_count      integer not null default 0,
+  is_closed          boolean not null default false,
+  constraint conversation_listing_ck check (kind <> 'listing' or listing_id is not null)
+);
+create index conversation_listing_idx on public.conversation (listing_id) where listing_id is not null;
+
+create table public.conversation_participant (
+  conversation_id  uuid not null references public.conversation(id) on delete cascade,
+  app_user_id      uuid not null references public.app_user(id) on delete cascade,
+  role             text not null default 'member' check (role in ('seller', 'buyer', 'member')),
+  joined_at        timestamptz not null default now(),
+  last_read_at     timestamptz,
+  unread_count     integer not null default 0,
+  is_muted         boolean not null default false,
+  left_at          timestamptz,
+  primary key (conversation_id, app_user_id)
+);
+-- Inbox: my conversations, most recent first. The ordering column lives
+-- on `conversation`, so the inbox query is participant -> conversation;
+-- this index serves the participant lookup.
+create index conversation_participant_user_idx
+  on public.conversation_participant (app_user_id) where left_at is null;
+
+create table public.chat_message (
+  id               uuid primary key default util.uuid_v7(),
+  conversation_id  uuid not null references public.conversation(id) on delete cascade,
+  sender_id        uuid not null references public.app_user(id) on delete cascade,
+  kind             public.chat_message_kind not null default 'text',
+  body             text,
+  storage_path     text,
+  offer_price_minor integer,
+  created_at       timestamptz not null default now(),
+  edited_at        timestamptz,
+  deleted_at       timestamptz,
+  moderation_state public.moderation_state not null default 'visible',
+  constraint chat_message_content_ck check (body is not null or storage_path is not null or kind = 'system')
+);
+-- Message pagination is always "newest N in this conversation".
+create index chat_message_conversation_idx on public.chat_message (conversation_id, created_at desc);
+
+-- --------------------------------------------------------------------
+-- 11.3 Seller responsiveness — "100% CAVAB", "~2 saat CAVAB VAXTI"
+--
+-- A median is not incrementally maintainable, and response rate needs a
+-- rolling window (a seller who was responsive last year should not coast
+-- on it). Both are therefore RECOMPUTED on a schedule from this table,
+-- which the chat trigger keeps up to date with the raw facts.
+-- --------------------------------------------------------------------
+create table internal.seller_inquiry (
+  conversation_id     uuid primary key references public.conversation(id) on delete cascade,
+  seller_id           uuid not null references public.app_user(id) on delete cascade,
+  first_inquiry_at    timestamptz not null,
+  first_response_at   timestamptz,
+  response_seconds    integer generated always as (
+                        case when first_response_at is null then null
+                             else greatest(0, extract(epoch from (first_response_at - first_inquiry_at))::integer) end
+                      ) stored
+);
+create index seller_inquiry_seller_idx on internal.seller_inquiry (seller_id, first_inquiry_at desc);
+
+
+-- =====================================================================
+-- 12. VACANCIES AND EMPLOYERS (public side)
+-- The vacancy feed is public content. The APPLICATION is not — it lives
+-- in the career silo (section 13).
+-- =====================================================================
+
+create table public.employer (
+  id                 uuid primary key default util.uuid_v7(),
+  slug               text not null unique,
+  name               text not null,                          -- 'Azercell', 'Kapital Bank'
+  sector_id          uuid references ref.sector(id) on delete set null,
+  logo_initials      text,                                   -- 'AZC', 'KB', 'PB'
+  brand_color        text check (brand_color ~ '^#[0-9A-Fa-f]{6}$'),
+  logo_storage_path  text,
+  website            text,
+  city               text,
+  description        text,
+  is_verified        boolean not null default false,
+  is_active          boolean not null default true,
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now(),
+  name_folded        text generated always as (util.fold_text(name)) stored
+);
+create index employer_name_trgm_idx on public.employer using gin (name_folded extensions.gin_trgm_ops);
+
+-- Recruiter accounts are NOT anonymous and are NOT students. An auth
+-- account is either an app_user or a recruiter, never both — see the
+-- guard trigger in section 18.
+create table public.employer_recruiter (
+  id            uuid primary key default util.uuid_v7(),
+  employer_id   uuid not null references public.employer(id) on delete cascade,
+  auth_user_id  uuid not null references auth.users(id) on delete cascade,
+  full_name     text not null,
+  job_title     text,
+  role          text not null default 'member' check (role in ('owner', 'member')),
+  is_active     boolean not null default true,
+  created_at    timestamptz not null default now(),
+  constraint employer_recruiter_auth_uniq unique (auth_user_id)
+);
+
+create table public.vacancy (
+  id                   uuid primary key default util.uuid_v7(),
+  employer_id          uuid not null references public.employer(id) on delete cascade,
+  posted_by            uuid references public.employer_recruiter(id) on delete set null,
+
+  title                text not null,                        -- 'Frontend təcrübəçi (React)'
+  description          text,
+  lang                 public.locale_code not null default 'az',
+  kind                 public.vacancy_kind not null default 'internship',
+  work_mode            public.work_mode not null default 'onsite',
+  city                 text,                                 -- 'Bakı', 'Sumqayıt'
+  sector_id            uuid references ref.sector(id) on delete set null,
+
+  -- Every chip on the design card is a queryable column, not free text.
+  is_paid              boolean not null default false,       -- 'ÖDƏNİŞLİ'
+  stipend_minor        integer check (stipend_minor >= 0),   -- '700 ₼'
+  currency             char(3) not null default 'AZN',
+  duration_months      smallint check (duration_months > 0), -- '6 AY'
+  hours_per_week       smallint check (hours_per_week > 0),  -- '20 SAAT / HƏFTƏ'
+  min_study_year       smallint check (min_study_year between 1 and 8),  -- '3–4-CÜ KURS'
+  max_study_year       smallint check (max_study_year between 1 and 8),
+  required_skills      text[] not null default '{}',         -- 'SQL · PYTHON'
+  perks                text[] not null default '{}',         -- transport, conversion, flexible schedule
+  schedule_friendly    boolean not null default false,       -- 'CƏDVƏLƏ UYĞUN'
+  conversion_possible  boolean not null default false,       -- 'İŞƏ KEÇİD İMKANI'
+  transport_provided   boolean not null default false,       -- 'NƏQLİYYAT VAR'
+
+  -- Which universities may see it (empty = all).
+  target_university_ids uuid[] not null default '{}',
+
+  apply_via            text not null default 'kiksu' check (apply_via in ('kiksu', 'external')),
+  external_url         text,
+  apply_deadline       date,                                 -- powers the '3 GÜN' countdown chip
+  status               public.vacancy_status not null default 'active',
+  view_count           integer not null default 0,
+  application_count    integer not null default 0,
+  posted_at            timestamptz not null default now(),
+  updated_at           timestamptz not null default now(),
+  closed_at            timestamptz,
+
+  search_vector        tsvector generated always as (util.tsv_ab(lang::text, title, description)) stored,
+  constraint vacancy_year_range_ck check (max_study_year is null or min_study_year is null or max_study_year >= min_study_year),
+  constraint vacancy_apply_ck check (apply_via <> 'external' or external_url is not null)
+);
+
+-- Feed: active, in my city, of a chosen kind, newest first.
+create index vacancy_feed_idx on public.vacancy (city, kind, posted_at desc)
+  where status = 'active';
+-- Deadline chip + expiry sweeper.
+create index vacancy_deadline_idx on public.vacancy (apply_deadline)
+  where status = 'active' and apply_deadline is not null;
+create index vacancy_skills_idx     on public.vacancy using gin (required_skills);
+create index vacancy_university_idx on public.vacancy using gin (target_university_ids);
+create index vacancy_search_idx     on public.vacancy using gin (search_vector);
+create index vacancy_employer_idx   on public.vacancy (employer_id, posted_at desc);
+
+create table public.vacancy_save (
+  vacancy_id    uuid not null references public.vacancy(id) on delete cascade,
+  app_user_id   uuid not null references public.app_user(id) on delete cascade,
+  created_at    timestamptz not null default now(),
+  primary key (vacancy_id, app_user_id)
+);
+create index vacancy_save_user_idx on public.vacancy_save (app_user_id, created_at desc);
+
+
+-- =====================================================================
+-- 13. CAREER — LAYER 4, THE SILO
+--
+-- Design screen 09: "Müraciət yalnız karyera kimliyi ilə göndərilir —
+-- forum ləqəbin işəgötürənə görünmür."
+-- Design screen 10: "Aysel Rəhimova · CV yüklənib · GİZLİ".
+--
+-- HOW THE SILO IS ACTUALLY CLOSED
+-- career.career_profile is addressed by subject_key:
+--     HMAC-SHA256(pepper_career, 'kiksu:career:v1' || auth_uid)
+-- The career service computes it from the caller's session. The database
+-- cannot: the pepper is not in the database (not even in Vault, which is
+-- in-database). So no SQL statement can produce the join, no view can be
+-- built, and no ORM can be persuaded to traverse it.
+--
+-- CRITICAL: pepper_career MUST NOT equal pepper_identity, and the domain
+-- separation string must differ. If both silos used the same key, then
+--     career.career_profile JOIN identity.subject USING (subject_key)
+-- would fuse layer 1 and layer 4 in a single line of SQL. That mistake
+-- is the most likely way this design fails in practice.
+--
+-- What the database still enforces on top of that:
+--   * no FK from career.* into public.app_user or internal.* (event
+--     trigger, section 18);
+--   * no column in the career schema whose name resembles a user pointer
+--     (same event trigger);
+--   * no grants to anon / authenticated / service_role.
+-- =====================================================================
+
+create table career.career_profile (
+  id                    uuid primary key default util.uuid_v7(),
+  subject_key           bytea not null,
+  key_version           smallint not null default 1,
+
+  -- Real identity. Encrypted by the career service with an envelope key
+  -- from an external KMS; the database holds bytes it cannot read.
+  legal_name_ct         bytea not null,
+  legal_name_kid        text not null,
+  contact_email_ct      bytea,
+  contact_phone_ct      bytea,
+
+  -- Blind index for staff de-duplication ("is this the same person who
+  -- applied last year?") without decrypting: HMAC of the normalised
+  -- surname under yet another key.
+  surname_bidx          bytea,
+
+  -- Career-facing academic facts. These are RESTATED by the student, not
+  -- copied from identity.verified_identity — a copy would be a covert
+  -- channel between two layers that must not communicate.
+  university_id         uuid references ref.university(id) on delete set null,
+  faculty_id            uuid references ref.faculty(id) on delete set null,
+  program_name          text,
+  entry_year            smallint,
+  graduation_year       smallint,
+  headline              text,
+  locale                public.locale_code not null default 'az',
+
+  visibility            text not null default 'private'
+                        check (visibility in ('private', 'open_to_offers')),
+  cv_document_id        uuid,                                 -- FK added below
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now(),
+  deleted_at            timestamptz,
+
+  constraint career_profile_subject_uniq unique (subject_key),
+  constraint career_profile_key_len check (octet_length(subject_key) = 32)
+);
+
+comment on column career.career_profile.subject_key is
+  'HMAC(auth uid) under pepper_career. MUST use a different pepper AND a different domain string from identity.subject.subject_key, otherwise the two silos join on equality.';
+
+create table career.career_document (
+  id                 uuid primary key default util.uuid_v7(),
+  career_profile_id  uuid not null references career.career_profile(id) on delete cascade,
+  kind               career.document_kind not null default 'cv',
+  storage_path       text not null,                          -- private bucket, signed URLs only
+  filename_ct        bytea,
+  mime_type          text,
+  byte_size          bigint,
+  uploaded_at        timestamptz not null default now(),
+  deleted_at         timestamptz
+);
+create index career_document_profile_idx on career.career_document (career_profile_id);
+
+alter table career.career_profile
+  add constraint career_profile_cv_fk
+  foreign key (cv_document_id) references career.career_document(id) on delete set null;
+
+create table career.application (
+  id                 uuid primary key default util.uuid_v7(),
+  career_profile_id  uuid not null references career.career_profile(id) on delete cascade,
+  -- FK to a NON-identity public table. Permitted by the guard: a vacancy
+  -- is company data, not user data.
+  vacancy_id         uuid not null,
+  employer_id        uuid not null,
+  state              career.application_state not null default 'submitted',
+  cover_letter_ct    bytea,
+  cv_document_id     uuid references career.career_document(id) on delete set null,
+  submitted_at       timestamptz not null default now(),
+  employer_viewed_at timestamptz,
+  decided_at         timestamptz,
+  withdrawn_at       timestamptz,
+  constraint application_once unique (career_profile_id, vacancy_id)
+);
+create index application_vacancy_idx on career.application (vacancy_id, submitted_at desc);
+create index application_profile_idx on career.application (career_profile_id, submitted_at desc);
+
+comment on column career.application.vacancy_id is
+  'Plain uuid: public.vacancy lives in a schema the guard forbids career from referencing. Integrity is maintained by the career service. Trade-off documented in 01-schema-notes.md.';
+
+create table career.application_event (
+  id             uuid primary key default util.uuid_v7(),
+  application_id uuid not null references career.application(id) on delete cascade,
+  state          career.application_state not null,
+  actor          text not null check (actor in ('applicant', 'employer', 'system')),
+  note           text,
+  occurred_at    timestamptz not null default now()
+);
+create index application_event_app_idx on career.application_event (application_id, occurred_at);
+
+
+-- =====================================================================
+-- 14. EVENTS AND CLUBS
+-- Design screen 02: "Karyera günü — IT şirkətləri · 24 OKT · 10:00 ·
+-- AKT MƏRKƏZİ · 412 İŞTİRAKÇI".
+-- =====================================================================
+
+create table public.club (
+  id                 uuid primary key default util.uuid_v7(),
+  university_id      uuid not null references ref.university(id) on delete cascade,
+  slug               text not null,
+  name               text not null,
+  category           text,
+  description        text,
+  logo_storage_path  text,
+  owner_id           uuid references public.app_user(id) on delete set null,
+  member_count       integer not null default 0,
+  is_verified        boolean not null default false,
+  is_active          boolean not null default true,
+  created_at         timestamptz not null default now(),
+  constraint club_slug_uniq unique (university_id, slug)
+);
+
+create table public.club_member (
+  club_id       uuid not null references public.club(id) on delete cascade,
+  app_user_id   uuid not null references public.app_user(id) on delete cascade,
+  role          public.club_member_role not null default 'member',
+  joined_at     timestamptz not null default now(),
+  left_at       timestamptz,
+  primary key (club_id, app_user_id)
+);
+create index club_member_user_idx on public.club_member (app_user_id) where left_at is null;
+
+-- Deferred FK from board to club (board is created earlier in the file).
+alter table public.board
+  add constraint board_club_fk foreign key (club_id) references public.club(id) on delete cascade;
+
+create table public.campus_event (
+  id                 uuid primary key default util.uuid_v7(),
+  university_id      uuid references ref.university(id) on delete cascade,
+  club_id            uuid references public.club(id) on delete set null,
+  employer_id        uuid references public.employer(id) on delete set null,
+  kind               public.event_kind not null default 'other',
+  title              text not null,
+  description        text,
+  lang               public.locale_code not null default 'az',
+
+  starts_at          timestamptz not null,
+  ends_at            timestamptz,
+  venue_name         text,                                   -- 'AKT Mərkəzi'
+  room_id            uuid references ref.room(id) on delete set null,
+  address            text,
+  is_online          boolean not null default false,
+  join_url           text,
+
+  capacity           integer check (capacity > 0),
+  attendee_count     integer not null default 0,             -- '412 İŞTİRAKÇI'
+  cover_storage_path text,
+  created_by         uuid references public.app_user(id) on delete set null,
+  moderation_state   public.moderation_state not null default 'visible',
+  published_at       timestamptz,
+  created_at         timestamptz not null default now(),
+  constraint campus_event_time_ck check (ends_at is null or ends_at >= starts_at)
+);
+-- "What's on, soonest first" for my campus.
+create index campus_event_upcoming_idx on public.campus_event (university_id, starts_at)
+  where moderation_state = 'visible' and published_at is not null;
+create index campus_event_club_idx on public.campus_event (club_id, starts_at desc) where club_id is not null;
+
+create table public.event_rsvp (
+  event_id      uuid not null references public.campus_event(id) on delete cascade,
+  app_user_id   uuid not null references public.app_user(id) on delete cascade,
+  state         public.rsvp_state not null default 'going',
+  created_at    timestamptz not null default now(),
+  primary key (event_id, app_user_id)
+);
+create index event_rsvp_user_idx on public.event_rsvp (app_user_id, created_at desc);
+
+
+-- =====================================================================
+-- 15. MODERATION
+--
+-- Moderators work with HANDLES and content, never with layer 1. A
+-- moderator who needs the real person must go through
+-- identity.resolve_subject(), which logs. That separation is the reason
+-- moderation.* has no path into identity.*.
+-- =====================================================================
+
+-- Reports are filed by users, so the table lives in `public` with an
+-- owner-only read policy. Target is polymorphic by necessity (eight
+-- content types, one reporting UI); integrity is checked in the server
+-- layer and by a nightly orphan sweep.
+create table public.report (
+  id             uuid primary key default util.uuid_v7(),
+  reporter_id    uuid not null references public.app_user(id) on delete cascade,
+  target_type    public.report_target_type not null,
+  target_id      uuid not null,
+  reason_key     text not null references ref.report_reason(key),
+  details        text,
+  created_at     timestamptz not null default now(),
+  state          text not null default 'new' check (state in ('new', 'linked', 'dismissed')),
+  case_id        uuid,
+  constraint report_once_per_target unique (reporter_id, target_type, target_id)
+);
+create index report_target_idx on public.report (target_type, target_id, created_at desc);
+create index report_open_idx   on public.report (created_at) where state = 'new';
+
+create table moderation.staff (
+  id            uuid primary key default util.uuid_v7(),
+  auth_user_id  uuid not null unique references auth.users(id) on delete restrict,
+  display_name  text not null,
+  role          moderation.staff_role not null default 'moderator',
+  -- Scope a moderator to specific universities; empty = global.
+  university_scope uuid[] not null default '{}',
+  is_active     boolean not null default true,
+  created_at    timestamptz not null default now()
+);
+
+create table moderation.case (
+  id                uuid primary key default util.uuid_v7(),
+  subject_type      public.report_target_type not null,
+  subject_id        uuid not null,
+  -- The pseudonym under investigation. This is layer 2, which is as far
+  -- as moderation goes on its own authority.
+  subject_app_user_id uuid references public.app_user(id) on delete set null,
+  university_id     uuid references ref.university(id) on delete set null,
+  opened_by         text not null check (opened_by in ('report', 'automod', 'staff', 'appeal')),
+  state             moderation.case_state not null default 'open',
+  severity          smallint not null default 1 check (severity between 1 and 5),
+  assigned_to       uuid references moderation.staff(id) on delete set null,
+  report_count      integer not null default 0,
+  opened_at         timestamptz not null default now(),
+  first_response_at timestamptz,
+  resolved_at       timestamptz,
+  resolution_note   text,
+  constraint case_subject_uniq unique (subject_type, subject_id)
+);
+create index case_queue_idx on moderation.case (state, severity desc, opened_at)
+  where state in ('open', 'triage');
+create index case_user_idx on moderation.case (subject_app_user_id, opened_at desc);
+
+alter table public.report
+  add constraint report_case_fk foreign key (case_id) references moderation.case(id) on delete set null;
+
+create table moderation.action (
+  id                uuid primary key default util.uuid_v7(),
+  case_id           uuid not null references moderation.case(id) on delete cascade,
+  actor_staff_id    uuid references moderation.staff(id) on delete set null,
+  kind              moderation.action_kind not null,
+  target_app_user_id uuid references public.app_user(id) on delete set null,
+  target_type       public.report_target_type,
+  target_id         uuid,
+  reason_key        text references ref.report_reason(key),
+  duration          interval,
+  note              text,
+  -- Set when the action required unsealing layer 1; points at the audit
+  -- row so the two records can be reconciled during review.
+  identity_access_log_id uuid,
+  created_at        timestamptz not null default now()
+);
+create index action_case_idx on moderation.action (case_id, created_at);
+create index action_user_idx on moderation.action (target_app_user_id, created_at desc);
+
+create table moderation.appeal (
+  id             uuid primary key default util.uuid_v7(),
+  action_id      uuid not null references moderation.action(id) on delete cascade,
+  app_user_id    uuid not null references public.app_user(id) on delete cascade,
+  body           text not null,
+  state          text not null default 'open' check (state in ('open', 'upheld', 'overturned', 'withdrawn')),
+  decided_by     uuid references moderation.staff(id) on delete set null,
+  decided_at     timestamptz,
+  decision_note  text,
+  created_at     timestamptz not null default now(),
+  constraint appeal_once unique (action_id, app_user_id)
+);
+
+-- Sanctions the read paths must honour. Denormalised out of
+-- moderation.action so that "is this user muted right now" is one
+-- indexed lookup instead of an interval calculation over a history.
+create table public.user_sanction (
+  id             uuid primary key default util.uuid_v7(),
+  app_user_id    uuid not null references public.app_user(id) on delete cascade,
+  kind           text not null check (kind in ('mute', 'suspend', 'ban', 'shadowban', 'listing_ban', 'review_ban')),
+  scope_board_id uuid references public.board(id) on delete cascade,
+  starts_at      timestamptz not null default now(),
+  ends_at        timestamptz,
+  action_id      uuid references moderation.action(id) on delete set null,
+  is_active      boolean not null default true
+);
+create index user_sanction_active_idx on public.user_sanction (app_user_id, kind)
+  where is_active;
+
+
+-- =====================================================================
+-- 16. NOTIFICATIONS AND DEVICES
+--
+-- The payload deliberately stores IDs and an alias number, not rendered
+-- copy: the app renders in the user's current locale, and a notification
+-- must never contain a handle for an anonymous actor.
+-- =====================================================================
+
+create table public.notification (
+  id             uuid primary key default util.uuid_v7(),
+  recipient_id   uuid not null references public.app_user(id) on delete cascade,
+  kind_key       text not null references ref.notification_kind(key),
+  entity_type    text,
+  entity_id      uuid,
+  -- {"alias_number":5,"board_id":"...","excerpt":"..."} — never a handle
+  -- unless the actor posted under their handle.
+  payload        jsonb not null default '{}'::jsonb,
+  group_key      text,                                        -- collapse "3 new replies"
+  is_read        boolean not null default false,
+  read_at        timestamptz,
+  created_at     timestamptz not null default now(),
+  expires_at     timestamptz
+);
+-- Notification list: mine, newest first, unread badge count.
+create index notification_recipient_idx on public.notification (recipient_id, created_at desc);
+create index notification_unread_idx    on public.notification (recipient_id) where not is_read;
+create index notification_group_idx     on public.notification (recipient_id, group_key, created_at desc)
+  where group_key is not null;
+
+comment on table public.notification is
+  'Highest-growth table in the schema. Partition by created_at (monthly) once row count passes ~50M; the access pattern (recipient + recent) is partition-friendly.';
+
+create table public.notification_preference (
+  app_user_id   uuid not null references public.app_user(id) on delete cascade,
+  kind_key      text not null references ref.notification_kind(key),
+  push_enabled  boolean not null default true,
+  email_enabled boolean not null default false,
+  primary key (app_user_id, kind_key)
+);
+
+create table public.device_token (
+  id             uuid primary key default util.uuid_v7(),
+  app_user_id    uuid not null references public.app_user(id) on delete cascade,
+  platform       text not null check (platform in ('ios', 'android')),
+  push_token     text not null,
+  locale         public.locale_code not null default 'az',
+  quiet_hours_start time,
+  quiet_hours_end   time,
+  last_seen_at   timestamptz not null default now(),
+  revoked_at     timestamptz,
+  constraint device_token_uniq unique (push_token)
+);
+create index device_token_user_idx on public.device_token (app_user_id) where revoked_at is null;
+
+-- Blocks. Owner-private both ways: neither party may enumerate blocks.
+create table public.user_block (
+  blocker_id    uuid not null references public.app_user(id) on delete cascade,
+  blocked_id    uuid not null references public.app_user(id) on delete cascade,
+  created_at    timestamptz not null default now(),
+  primary key (blocker_id, blocked_id),
+  constraint user_block_not_self check (blocker_id <> blocked_id)
+);
