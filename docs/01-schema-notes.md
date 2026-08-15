@@ -146,14 +146,71 @@ Two ordering constraints that bite: `util.locale_text` must come **after** the
 enum declarations because it takes `public.locale_code` as a parameter, and
 all counter triggers must come after every table they touch.
 
+## Public profile projection (section 20)
+
+The karma-delta oracle is closed by removing the oracle, not by guarding it.
+
+**The attack.** The profile screen shows an exact karma integer. If any
+surface lets you read another user's karma on demand, you poll a target
+before and after a post appears, and a +1 delta links that stable pseudonym
+to that specific anonymous post with certainty. No exploit needed — just
+documented API surface and a clock.
+
+**The resolution, three parts:**
+
+1. **Exact karma is own-row only.** It lives in `public.app_user_card`,
+   which is `security_invoker = on` and therefore RLS-confined to your own
+   row. The design's `312 KARMA` still renders on your own profile because
+   it is yours. It appears in no cross-user surface.
+2. **Others see `contributor_level`** — a coarse badge on super-linear
+   buckets (50 / 250 / 1000 / 5000). At level 3 a user needs 750 more karma
+   to advance, so no realistic amount of posting moves the badge inside an
+   observation window.
+3. **The badge is materialised and refreshed on a delay**, by
+   `public.refresh_contributor_levels()` running daily off-peak, and never
+   within 24h of the karma change that caused it. Computing the level live
+   would restore the oracle at the bucket boundary: an observer watching a
+   user near 250 karma would still see the badge flip on a known post.
+   **The delay is the security control — never call this from a trigger.**
+
+**`public.public_profiles`** is now the only cross-user read of another
+person. It exposes six columns: `id`, `handle`, `avatar_id`, `university_id`
+(only when the user opted in *and* their cohort is ≥ 20, per the k-anonymity
+floor), `verification_status` (coarse: card / email / none), and
+`contributor_level`. It carries no karma, no `created_at` (account age
+correlates with cohort), no counts, and no `card_review_state` — a pending
+card review is a real-world event with a knowable timestamp.
+
+The view is `security_invoker = off` deliberately: it must read across users,
+which `app_user`'s own-row RLS forbids. **Safety comes from the column list,
+not from RLS, so adding a column to this view is a security change** and must
+be reviewed as one.
+
+Behind that, `authenticated` holds column-level `SELECT` on `app_user` for
+only seven safe columns. Even if a policy were later widened by mistake,
+karma, `created_at`, `card_review_state`, `auth_user_id`, `complaint_count`,
+`last_active_at` and `handle_changed_at` remain unreachable.
+
+### avatar_id rotates with the handle
+
+`avatar_id` is a generated column derived from the folded handle, not a
+stored random value. This is an anonymity property, not a cosmetic one: an
+avatar that persisted across a rename would link the old handle to the new
+one and defeat the entire point of the 14-day handle change. Verified — the
+same row moved from avatar 1 to avatar 10 when its handle changed.
+
+### Verified against the built database
+
+- `authenticated` may select exactly seven columns of `app_user`.
+- None of the sensitive columns are among them.
+- `public_profiles` contains no karma and no `created_at`.
+- Bucket boundaries land where intended.
+- `avatar_id` changes when the handle changes.
+
 ## Open questions
 
-1. **Are pseudonymous profiles publicly viewable by handle?** The design
-   shows `312 KARMA` on the profile. If profiles are viewable, polling a
-   target's karma while watching the forum links a stable pseudonym to a
-   specific anonymous post with certainty. This is the karma-delta oracle
-   from `02-identity-spec.md` §1, and the schema cannot resolve it — it is a
-   product decision. Until it is answered, `app_user` RLS exposes own-row only.
+1. ~~Are pseudonymous profiles publicly viewable by handle?~~ **RESOLVED.**
+   See *Public profile projection* below.
 2. **Timetable course colours.** The design uses at least six, two appearing
    once. Should these be a defined palette in `ref`, cycled deterministically?
 3. **National board moderation.** Campus boards can have campus moderators;
