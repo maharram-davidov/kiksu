@@ -1,6 +1,7 @@
 import { type MiddlewareConsumer, Module, type NestModule } from "@nestjs/common";
 import { APP_FILTER, APP_GUARD } from "@nestjs/core";
 import { ConfigModule } from "./config/config.module";
+import { DbModule } from "./common/db/db.module";
 import { AuthModule } from "./common/auth/auth.module";
 import { AuthGuard } from "./common/auth/auth.guard";
 import { KiksuExceptionFilter } from "./common/errors/http-exception.filter";
@@ -14,6 +15,7 @@ import { BootstrapModule } from "./modules/bootstrap/bootstrap.module";
 @Module({
   imports: [
     ConfigModule,
+    DbModule,
     AuthModule,
     PaginationModule,
     RateLimitModule,

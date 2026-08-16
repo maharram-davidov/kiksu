@@ -18,6 +18,15 @@ export class ConfigService {
     return this.env.PORT;
   }
 
+  /** SECURITY: server-only. Authenticates as a BYPASSRLS role; see SqlProvider. */
+  get databaseUrl(): string {
+    return this.env.DATABASE_URL;
+  }
+
+  get databasePoolMax(): number {
+    return this.env.DATABASE_POOL_MAX;
+  }
+
   get supabaseUrl(): string {
     return this.env.SUPABASE_URL;
   }

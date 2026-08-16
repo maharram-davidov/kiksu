@@ -22,6 +22,12 @@ export const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
 
   // --- Supabase project (04-infrastructure.md: project ref houicgsdduzzcarxkuuo, eu-central-1) ---
+  /**
+   * Postgres connection string for the server layer. SECURITY: server-only,
+   * and it authenticates as a BYPASSRLS role — see SqlProvider's class doc.
+   */
+  DATABASE_URL: z.string().url(),
+  DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
   SUPABASE_URL: z.string().url(),
   // Server-only. See the SECURITY note on the exported schema above.
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
