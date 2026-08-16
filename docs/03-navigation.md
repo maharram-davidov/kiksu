@@ -56,3 +56,51 @@ correct drawer destination marked active and a working back stack.
 ## Not in the drawer
 Auth and onboarding (`/(auth)/*`) render outside the drawer entirely — no drawer,
 no gesture, no header. The drawer mounts only after verification completes.
+
+## Dark mode — deferred to end of project
+
+Product decision. The theme plumbing is complete and every screen reads its
+colours through the theme, so enabling it later is a one-line change in
+`apps/mobile/src/theme/ThemeProvider.tsx` (`FOLLOW_DEVICE_APPEARANCE`).
+
+What is deliberately NOT done is the dark palette itself. `darkColors` is
+derived arithmetically from the light tokens and has no design source of
+truth. Shipping it now would put an undesigned theme in front of testers and
+attract feedback on something nobody has designed. The app therefore renders
+light regardless of the device setting.
+
+`useColorScheme` stays wired up on purpose, so the switch is exercised rather
+than resurrected when the palette lands. Re-enabling needs: the real palette
+in `theme/colors.ts`, the flag flipped, and the override toggle on PF-10.
+
+## Opt-in campus badge on national boards
+
+Confirmed. The composer on a **national** board shows an explicit checkbox:
+
+    [ ] Universitet nişanımı göstər  (Show my university badge, e.g. "BDU")
+
+Unchecked by default. It does not appear on university, faculty, course or
+club boards, where every reader is already in that campus and the badge would
+be redundant — the database rejects the attempt outright.
+
+Rules the client must honour:
+
+- The choice is **per post**, not a profile setting. Never pre-tick it from a
+  previous post; each disclosure is its own deliberate act.
+- `app_user.privacy_show_uni_badge` may set the checkbox's *initial* state,
+  but the per-post choice is authoritative for that post.
+- Once posted the badge is **frozen**. Editing a post must not re-derive it,
+  and transferring university must not re-badge old posts — that would leak
+  the transfer.
+- Comments do **not** carry a campus badge in this scope. See open questions.
+
+### The anonymity trade-off, stated plainly
+
+A single badged post is low risk: BDU has roughly twenty thousand students,
+so the disclosure narrows the field to a large cohort. The real cost is
+**repetition**. A user who ticks the box habitually makes their national-board
+posts linkable to one another by campus, which is exactly the cross-thread
+correlation the per-thread alias scheme exists to prevent.
+
+The UI should therefore treat this as a disclosure, not a preference: keep it
+unchecked, keep the label plain, and do not nudge people toward it.
