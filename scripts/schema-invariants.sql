@@ -133,5 +133,26 @@ begin
     raise exception 'INVARIANT 9 FAILED: exposed table(s) default to UUIDv7: %', v_cols;
   end if;
 
-  raise notice 'All 9 schema invariants hold.';
+  ---------------------------------------------------------------------
+  -- 10. No SECURITY DEFINER function in public is callable by anon or
+  --     authenticated except the RLS helpers. Postgres grants EXECUTE to
+  --     PUBLIC by default, so a new SECURITY DEFINER function is exposed
+  --     via PostgREST RPC unless explicitly revoked. The one that matters
+  --     is refresh_contributor_levels: letting a caller trigger it on
+  --     demand defeats the delay that closes the karma-delta oracle.
+  ---------------------------------------------------------------------
+  select string_agg(p.proname, ', ' order by p.proname) into v_cols
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.prosecdef
+     and (has_function_privilege('anon', p.oid, 'execute')
+       or has_function_privilege('authenticated', p.oid, 'execute'))
+     and p.proname not in ('current_app_user_id', 'current_university_id',
+                           'current_tier', 'can_read_board',
+                           'is_conversation_participant', 'is_enrolled_in_section');
+  if v_cols is not null then
+    raise exception 'INVARIANT 10 FAILED: SECURITY DEFINER function(s) callable by client roles: %', v_cols;
+  end if;
+
+  raise notice 'All 10 schema invariants hold.';
 end$$;

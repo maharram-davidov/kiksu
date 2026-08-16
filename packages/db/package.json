@@ -1,0 +1,8 @@
+{
+  "name": "@kiksu/db",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Generated Supabase database types for project houicgsdduzzcarxkuuo (Kiksu, eu-central-1). Regenerate with the Supabase MCP generate_typescript_types tool after every migration; do not hand-edit src/database.types.ts.",
+  "main": "./src/database.types.ts",
+  "types": "./src/database.types.ts"
+}
