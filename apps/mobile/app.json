@@ -8,13 +8,21 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "primaryColor": "#0F7A85",
+    "icon": "./assets/images/icon.png",
     "ios": {
       "bundleIdentifier": "az.kiksu.mobile",
       "supportsTablet": false
     },
     "android": {
       "package": "az.kiksu.mobile",
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#F1F0EC"
+      }
+    },
+    "web": {
+      "favicon": "./assets/images/favicon.png"
     },
     "plugins": ["expo-router"],
     "experiments": {

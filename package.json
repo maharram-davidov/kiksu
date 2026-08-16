@@ -1,11 +1,17 @@
 {
   "name": "kiksu",
   "private": true,
-  "workspaces": ["apps/*", "packages/*"],
-  "engines": { "node": ">=20" },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "overrides": {
     "react": "19.1.0",
-    "react-native": "0.81.5"
+    "react-native": "0.81.5",
+    "react-native-worklets": "0.5.1"
   },
   "scripts": {
     "mobile": "npm run start --workspace @kiksu/mobile",
