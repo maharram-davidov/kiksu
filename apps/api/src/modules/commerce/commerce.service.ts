@@ -15,6 +15,24 @@ import type { ListingDto, VacancyDto } from "./commerce.types";
 export class CommerceService {
   constructor(private readonly db: SqlProvider) {}
 
+  /**
+   * The columns both the list and the detail select.
+   *
+   * Shared so the two cannot drift: a seller card that showed a rating on the
+   * list and not on the detail would look like a bug in the seller, not in us.
+   */
+  private listingColumns() {
+    return this.db.sql`
+      l.id, l.title, l.description, cat.key as category_key, cat.name_az as category_name,
+      l.price_minor, l.currency, l.is_negotiable, l.condition::text as condition,
+      l.meetup_notes, crs.code as related_course_code, l.published_at,
+      s.handle, s.avatar_id, su.code as seller_university_code,
+      s.verification_tier::text as seller_tier,
+      s.trade_rating_avg, s.deal_count, s.response_rate_pct,
+      s.response_time_median_sec, s.complaint_count
+    `;
+  }
+
   async listListings(user: KiksuRequestContext, category?: string): Promise<ListingDto[]> {
     const { sql } = this.db;
     const rows = await sql<Array<Record<string, unknown>>>`
@@ -44,11 +62,31 @@ export class CommerceService {
     return rows.map((r) => this.toListing(r));
   }
 
+  /**
+   * One listing.
+   *
+   * A real single-row query rather than a scan of the list. The earlier
+   * shortcut — fetch the first 50 and find one — would 404 any listing past
+   * the 50th, which is a bug that only appears once the marketplace is busy
+   * enough to matter and looks like the listing was deleted.
+   */
   async getListing(user: KiksuRequestContext, id: string): Promise<ListingDto> {
-    const listings = await this.listListings(user);
-    const found = listings.find((l) => l.id === id);
-    if (!found) throw new NotFoundException("listing_not_found");
-    return found;
+    const { sql } = this.db;
+    const [row] = await sql<Array<Record<string, unknown>>>`
+      select ${this.listingColumns()}
+        from public.listing l
+        join ref.marketplace_category cat on cat.id = l.category_id
+        left join ref.course crs on crs.id = l.related_course_id
+        left join public.app_user s on s.id = l.seller_id
+        left join ref.university su on su.id = s.university_id
+       where l.id = ${id}
+         and l.university_id = ${user.univId}
+         and l.status in ('active', 'reserved', 'sold')
+         and l.moderation_state in ('visible', 'limited')
+         and l.deleted_at is null
+    `;
+    if (!row) throw new NotFoundException("listing_not_found");
+    return this.toListing(row);
   }
 
   async listVacancies(user: KiksuRequestContext, kind?: string): Promise<VacancyDto[]> {

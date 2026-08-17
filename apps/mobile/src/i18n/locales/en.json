@@ -215,5 +215,26 @@
     "notEnrolled": "You're not enrolled in this course",
     "credits": "credits",
     "loadFailed": "Couldn't load"
+  },
+  "listing": {
+    "condition": "Condition",
+    "conditionNew": "New",
+    "conditionLikeNew": "Like new",
+    "conditionGood": "Good",
+    "conditionFair": "Fair",
+    "conditionPoor": "Poor",
+    "meetup": "Meeting point",
+    "seller": "Seller",
+    "deals": "deals",
+    "response": "response",
+    "responseTime": "response time",
+    "complaints": "complaints",
+    "hours": "h",
+    "messageSeller": "Message the seller",
+    "chatNotBuilt": "Chat isn't built yet",
+    "safety": "Pay only when you meet. Kiksu does not guarantee transfers.",
+    "loadFailed": "Couldn't load this listing",
+    "noPhotos": "No photos",
+    "report": "Report"
   }
 }

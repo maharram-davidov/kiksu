@@ -212,5 +212,26 @@
     "notEnrolled": "Bu fənnə yazılmamısan",
     "credits": "kredit",
     "loadFailed": "Yüklənmədi"
+  },
+  "listing": {
+    "condition": "Vəziyyət",
+    "conditionNew": "Yeni",
+    "conditionLikeNew": "Təzə kimi",
+    "conditionGood": "Yaxşı",
+    "conditionFair": "Orta",
+    "conditionPoor": "Zəif",
+    "meetup": "Görüş yeri",
+    "seller": "Satıcı",
+    "deals": "sövdələşmə",
+    "response": "cavab",
+    "responseTime": "cavab vaxtı",
+    "complaints": "şikayət",
+    "hours": "saat",
+    "messageSeller": "Satıcıya yaz",
+    "chatNotBuilt": "Yazışma hələ hazır deyil",
+    "safety": "Ödənişi yalnız görüş zamanı edin. Kiksu köçürmələrə zəmanət vermir.",
+    "loadFailed": "Elan yüklənmədi",
+    "noPhotos": "Şəkil yoxdur",
+    "report": "Şikayət et"
   }
 }

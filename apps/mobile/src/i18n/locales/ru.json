@@ -215,5 +215,26 @@
     "notEnrolled": "Вы не записаны на этот курс",
     "credits": "кредитов",
     "loadFailed": "Не удалось загрузить"
+  },
+  "listing": {
+    "condition": "Состояние",
+    "conditionNew": "Новое",
+    "conditionLikeNew": "Как новое",
+    "conditionGood": "Хорошее",
+    "conditionFair": "Среднее",
+    "conditionPoor": "Плохое",
+    "meetup": "Место встречи",
+    "seller": "Продавец",
+    "deals": "сделок",
+    "response": "ответов",
+    "responseTime": "время ответа",
+    "complaints": "жалоб",
+    "hours": "ч",
+    "messageSeller": "Написать продавцу",
+    "chatNotBuilt": "Чат ещё не готов",
+    "safety": "Платите только при встрече. Kiksu не гарантирует переводы.",
+    "loadFailed": "Не удалось загрузить",
+    "noPhotos": "Нет фото",
+    "report": "Пожаловаться"
   }
 }

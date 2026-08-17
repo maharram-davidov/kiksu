@@ -180,3 +180,13 @@ export function useClassDetail(sectionId: string | null) {
     retry: 1,
   });
 }
+
+export function useListing(id: string | null) {
+  return useQuery({
+    queryKey: ["market", "listing", id],
+    queryFn: () => apiGet<Listing>(`/market/listings/${id}`),
+    enabled: Boolean(id),
+    staleTime: 60 * 1000,
+    retry: 1,
+  });
+}

@@ -1,5 +1,6 @@
 import React from "react";
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useListings } from "@/api/queries";
@@ -13,6 +14,7 @@ function formatPrice(minor: number): string {
 export default function MarketScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
+  const router = useRouter();
   const { data, isPending, error } = useListings();
 
   if (isPending) {
@@ -48,7 +50,16 @@ export default function MarketScreen() {
         <Text style={[styles.empty, { color: theme.colors.textPlaceholder }]}>{t("market.noListings")}</Text>
       }
       renderItem={({ item }) => (
-        <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+        <Pressable
+          onPress={() => router.push({ pathname: "/market/listing/[id]", params: { id: item.id } })}
+          style={({ pressed }) => [
+            styles.card,
+            {
+              backgroundColor: pressed ? theme.colors.surfaceAlt : theme.colors.surface,
+              borderColor: theme.colors.border,
+            },
+          ]}
+        >
           <View style={styles.topRow}>
             <Text style={[styles.cat, { color: theme.colors.textPlaceholder, fontFamily: theme.fontFamilies.mono }]}>
               {item.category_name.toUpperCase()}
@@ -92,7 +103,7 @@ export default function MarketScreen() {
               </Text>
             </View>
           ) : null}
-        </View>
+        </Pressable>
       )}
     />
   );

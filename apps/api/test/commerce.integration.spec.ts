@@ -59,6 +59,39 @@ suite("commerce service (integration)", () => {
     ]);
   });
 
+  it("fetches a single listing directly, not by scanning the list", async () => {
+    const listings = await service.listListings(user);
+    const one = listings.find((l) => l.title.startsWith("Piskunov"))!;
+    const direct = await service.getListing(user, one.id);
+    expect(direct.id).toBe(one.id);
+    expect(direct.seller!.handle).toBe(one.seller!.handle);
+  });
+
+  it("finds a listing that falls outside the list's page", async () => {
+    // The old implementation fetched the first 50 and searched them, so a
+    // listing past the 50th 404'd — a bug that only appears once the
+    // marketplace is busy and looks like the listing was deleted.
+    const [uni] = await sql`select id from ref.university where code = 'BDU'`;
+    const [seller] = await sql`select id from public.app_user where handle = 'quru-püstə-19'`;
+    const [cat] = await sql`select id from ref.marketplace_category where key = 'other'`;
+    const [buried] = await sql`
+      insert into public.listing (seller_id, university_id, category_id, title,
+                                  price_minor, currency, status, published_at)
+      values (${seller!.id}, ${uni!.id}, ${cat!.id}, 'Çox köhnə elan', 100, 'AZN',
+              'active', now() - interval '400 days')
+      returning id`;
+    const found = await service.getListing(user, buried!.id);
+    expect(found.title).toBe("Çox köhnə elan");
+  });
+
+  it("refuses a listing on another campus", async () => {
+    const listings = await service.listListings(user);
+    const [ada] = await sql`select id from ref.university where code = 'ADA'`;
+    await expect(
+      service.getListing({ ...user, univId: ada!.id }, listings[0]!.id),
+    ).rejects.toThrow();
+  });
+
   it("filters listings by category", async () => {
     const books = await service.listListings(user, "textbooks");
     expect(books.length).toBeGreaterThan(0);
