@@ -8,7 +8,20 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Slot } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
+
+/**
+ * One client for the app's lifetime. Defaults lean conservative because campus
+ * wifi is unreliable and a refetch storm on a flaky connection is worse than
+ * slightly stale data: no refetch on window focus, one retry, and per-query
+ * staleTime set where it actually matters (see src/api/queries.ts).
+ */
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { refetchOnWindowFocus: false, retry: 1 },
+  },
+});
 
 function ThemedStatusBar() {
   const theme = useTheme();
@@ -26,10 +39,12 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <ThemeProvider>
-          <ThemedStatusBar />
-          <Slot />
-        </ThemeProvider>
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider>
+            <ThemedStatusBar />
+            <Slot />
+          </ThemeProvider>
+        </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

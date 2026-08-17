@@ -45,5 +45,20 @@
     "cardPendingBadge": "KART: GÖZLƏYİR",
     "verifiedShort": "✓",
     "handleCaption": "FORUM LƏQƏBİ · 14 GÜNDƏN BİR DƏYİŞİLİR"
+  },
+  "timetable": {
+    "days": {
+      "mon": "B.E",
+      "tue": "Ç.A",
+      "wed": "Ç",
+      "thu": "C.A",
+      "fri": "C"
+    },
+    "noClasses": "Dərs yoxdur",
+    "signInNeeded": "Giriş tələb olunur",
+    "signInHint": "Cədvəli görmək üçün universitet hesabınızla doğrulamadan keçin.",
+    "loadFailed": "Cədvəl yüklənmədi",
+    "emptyTitle": "Cədvəliniz boşdur",
+    "emptyBody": "Bu semestr üçün heç bir fənnə yazılmamısınız."
   }
 }

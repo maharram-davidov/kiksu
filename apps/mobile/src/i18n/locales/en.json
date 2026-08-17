@@ -48,5 +48,20 @@
     "cardPendingBadge": "CARD: PENDING",
     "verifiedShort": "✓",
     "handleCaption": "FORUM HANDLE · CHANGEABLE EVERY 14 DAYS"
+  },
+  "timetable": {
+    "days": {
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri"
+    },
+    "noClasses": "No classes",
+    "signInNeeded": "Sign-in required",
+    "signInHint": "Verify your university account to see your timetable.",
+    "loadFailed": "Couldn't load your timetable",
+    "emptyTitle": "Your timetable is empty",
+    "emptyBody": "You aren't enrolled in any courses this semester."
   }
 }

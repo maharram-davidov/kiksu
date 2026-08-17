@@ -14,6 +14,7 @@
     "@kiksu/tokens": "*",
     "@react-navigation/drawer": "^7.13.8",
     "@react-navigation/native": "^7.3.16",
+    "@tanstack/react-query": "^5.101.4",
     "expo": "~54.0.0",
     "expo-constants": "~18.0.13",
     "expo-linking": "~8.0.12",

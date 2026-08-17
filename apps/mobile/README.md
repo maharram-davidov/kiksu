@@ -184,3 +184,34 @@ than guessed silently:
    drift, re-run `npm ls react react-native` from the repo root and confirm
    each shows exactly one deduped version before trusting the app boots
    cleanly.
+
+## Running against the API
+
+The Cədvəl screen now renders real data from `GET /v1/timetable/week`.
+
+1. Start a database and the API:
+
+       ./scripts/test-integration.sh   # or point DATABASE_URL at your own
+       cd apps/api && npm start
+
+2. Start the app. The client resolves the API host from the address Expo
+   already served the bundle from, so a physical phone reaches your Mac without
+   configuration. `localhost` would be the *phone* on a real device, which is
+   the usual reason this appears to hang. Override with `EXPO_PUBLIC_API_URL`
+   if your API is elsewhere.
+
+3. A token is required. Sessions come from Supabase Auth once the onboarding
+   screens exist; until then `setAuthToken()` in `src/api/client.ts` is the
+   development hook. It is in memory only and deliberately not persisted, so a
+   token cannot linger on a device.
+
+Without a token the screen renders a "Giriş tələb olunur" state rather than a
+generic failure — a 401 and an unreachable API mean different things to the
+reader and are distinguished.
+
+## Timezones
+
+The API returns wall-clock strings (`"14:05"`) plus the university's IANA zone,
+never instants. The grid component never constructs a `Date` from them: doing
+so would reinterpret 14:05 in the phone's zone and silently shift every class
+for a student who is travelling.
