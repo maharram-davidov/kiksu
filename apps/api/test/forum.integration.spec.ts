@@ -33,7 +33,15 @@ suite("forum service (integration)", () => {
     const cursors = new CursorService({
       cursorHmacSecret: "test-secret-at-least-32-chars-long-ok",
     } as never);
-    service = new ForumService({ sql } as never, cursors);
+    // Mirror SqlProvider's shape: the service uses both `sql` and
+    // `transaction()`, and the write paths depend on the latter being a real
+    // transaction so a failed insert rolls the alias allocation back with it.
+    const db = {
+      sql,
+      transaction: <T,>(fn: (tx: postgres.TransactionSql) => Promise<T>) =>
+        sql.begin(fn) as Promise<T>,
+    };
+    service = new ForumService(db as never, cursors);
 
     const [uni] = await sql`select id from ref.university where code = 'BDU'`;
     if (!uni) throw new Error("seed missing: BDU");
@@ -182,6 +190,100 @@ suite("forum service (integration)", () => {
     await expect(
       service.getPost({ ...user, univId: ada!.id }, headlinePostId),
     ).rejects.toThrow();
+  });
+
+  describe("writes", () => {
+    it("gives the thread author alias 1 and keeps authorship out of the public row", async () => {
+      const post = await service.createPost(user, {
+        board_slug: "bdu-serbest-sohbet",
+        title: "Test mövzusu: kitabxana saatları",
+        body: "Sınaq üçün yazılmışdır.",
+      });
+      expect(post.author.alias_number).toBe(1);
+      expect(post.author.is_op).toBe(true);
+
+      const [row] = await sql`select author_app_user_id from public.post where id = ${post.id}`;
+      expect(row!.author_app_user_id).toBeNull();          // rendered identity only
+      const [auth] = await sql`select app_user_id from internal.post_author where post_id = ${post.id}`;
+      expect(auth!.app_user_id).toBe(user.appUserId);      // real authorship, internal
+    });
+
+    it("assigns a commenter the next ordinal and keeps it stable on a second comment", async () => {
+      const post = await service.createPost(user, {
+        board_slug: "bdu-serbest-sohbet", title: "Alias sabitliyi testi",
+      });
+      const [otherUser] = await sql`
+        select id from public.app_user where handle = 'quru-püstə-19'`;
+      const other = { ...user, appUserId: otherUser!.id };
+
+      const first = await service.createComment(other, post.id, { body: "Birinci şərh" });
+      expect(first.author.alias_number).toBe(2);           // OP holds 1
+      expect(first.author.is_op).toBe(false);
+
+      const second = await service.createComment(other, post.id, { body: "İkinci şərh" });
+      expect(second.author.alias_number).toBe(2);          // same person, same ordinal
+    });
+
+    it("marks the OP's own comment with the MÜƏLLİF badge", async () => {
+      const post = await service.createPost(user, {
+        board_slug: "bdu-serbest-sohbet", title: "Müəllif nişanı testi",
+      });
+      const own = await service.createComment(user, post.id, { body: "Öz şərhim" });
+      expect(own.author.is_op).toBe(true);
+      expect(own.author.alias_number).toBe(1);
+    });
+
+    it("sets the campus badge from the caller, not from what the client claims", async () => {
+      const post = await service.createPost(user, {
+        board_slug: "milli-serbest", title: "Nişanlı milli post",
+        show_university_badge: true,
+      });
+      expect(post.author_university_code).toBe("BDU");     // the caller's own campus
+    });
+
+    it("silently drops the badge request on a campus board rather than failing", async () => {
+      const post = await service.createPost(user, {
+        board_slug: "bdu-serbest-sohbet", title: "Nişan kampus lövhəsində",
+        show_university_badge: true,
+      });
+      expect(post.author_university_code).toBeNull();
+    });
+
+    it("refuses a write to a board above the caller's tier", async () => {
+      await sql`update public.board set min_tier_to_post = 'card_verified'
+                 where slug = 'bdu-serbest-sohbet'`;
+      try {
+        await expect(service.createPost(user, {
+          board_slug: "bdu-serbest-sohbet", title: "Icazəsiz post",
+        })).rejects.toThrow();
+      } finally {
+        await sql`update public.board set min_tier_to_post = 'unverified'
+                   where slug = 'bdu-serbest-sohbet'`;
+      }
+    });
+
+    it("refuses a write to another campus's board", async () => {
+      const [ada] = await sql`select id from ref.university where code = 'ADA'`;
+      await expect(service.createPost({ ...user, univId: ada!.id }, {
+        board_slug: "bdu-serbest-sohbet", title: "Başqa kampusdan",
+      })).rejects.toThrow();
+    });
+
+    it("strands no ordinal when the write rolls back", async () => {
+      const post = await service.createPost(user, {
+        board_slug: "bdu-serbest-sohbet", title: "Geri qaytarma testi",
+      });
+      const before = await sql`select count(*)::int as n from internal.thread_alias
+                                where post_id = ${post.id}`;
+      // A comment that violates NOT NULL rolls the whole transaction back; the
+      // alias allocated inside it must roll back with it (identity spec §3.4).
+      await expect(
+        service.createComment(user, post.id, { body: null as unknown as string }),
+      ).rejects.toThrow();
+      const after = await sql`select count(*)::int as n from internal.thread_alias
+                               where post_id = ${post.id}`;
+      expect(after[0]!.n).toBe(before[0]!.n);
+    });
   });
 
   it("paginates by keyset and rejects a tampered cursor", async () => {

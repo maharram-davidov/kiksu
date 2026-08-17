@@ -7,6 +7,8 @@ Read endpoints for boards, feeds and threads.
 | `GET /v1/forum/boards` | Caller's campus boards plus the national tier |
 | `GET /v1/forum/boards/:slug/posts` | Board feed, keyset-paginated |
 | `GET /v1/forum/posts/:id` | Thread with comments and the caller's next alias |
+| `POST /v1/forum/posts` | Create a thread |
+| `POST /v1/forum/posts/:id/comments` | Add a comment |
 
 ## Authorship is unavailable here by construction
 
@@ -30,6 +32,27 @@ rather than consuming: showing an ordinal the caller might not use would leave a
 permanent gap, and a permanent gap announces that someone opened the composer
 and thought better of it (identity spec P3). Re-opening the thread returns the
 same ordinal — tested.
+
+## Writes happen in one transaction, and that is a requirement
+
+`internal.allocate_thread_alias()` takes a row lock on the post and returns an
+ordinal. Identity spec §3.4 requires that allocation to sit in the SAME
+transaction as the content insert, so a post that rolls back cannot strand an
+ordinal and leave a permanent gap in the rendered sequence. A gap announces that
+someone opened the composer and thought better of it (P3) — exactly what the
+alias scheme exists to hide. A test forces a failing insert and asserts the
+alias count is unchanged afterwards.
+
+Two further properties the writes enforce:
+
+- **The thread author must receive ordinal 1** (P4). `createPost` asserts it and
+  throws rather than trusting the allocator, so a regression surfaces as a
+  failed write instead of a mislabelled thread.
+- **The campus badge comes from the caller's own university**, never from a
+  value the client supplies. The database confines it to national boards; the
+  service confines it to the truth. Requesting it on a campus board is dropped
+  silently rather than erroring, since it is a display preference and failing
+  the whole post over it would be hostile.
 
 ## Pagination: two deviations from the conventions doc, both deliberate
 

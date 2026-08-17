@@ -3,7 +3,8 @@ import { SqlProvider } from "../../common/db/sql.provider";
 import { CursorService } from "../../common/pagination/cursor.service";
 import type { KiksuRequestContext } from "../../common/auth/request-context";
 import type {
-  BoardDto, CommentDto, PostDetailDto, PostPageDto, PostSummaryDto,
+  BoardDto, CommentDto, CreateCommentInput, CreatePostInput,
+  PostDetailDto, PostPageDto, PostSummaryDto,
 } from "./forum.types";
 
 /** Maps the DB tier enum onto the coarse badge the client renders. */
@@ -282,6 +283,136 @@ export class ForumService {
       })),
       your_next_alias: alias?.n ?? 1,
     };
+  }
+
+  /**
+   * Creates a thread.
+   *
+   * Everything here happens in ONE transaction, and that is a requirement
+   * rather than a convenience. `internal.allocate_thread_alias()` takes a row
+   * lock on the post and hands back an ordinal; identity spec §3.4 says
+   * allocation must be in the same transaction as the content insert, so that
+   * a post which rolls back cannot strand an ordinal and leave a permanent gap
+   * in the rendered sequence. A gap says "someone opened the composer and
+   * thought better of it" (P3), which is precisely what the scheme hides.
+   */
+  async createPost(user: KiksuRequestContext, input: CreatePostInput): Promise<PostDetailDto> {
+    const postId = await this.db.transaction(async (tx) => {
+      const [board] = await tx<Array<{ id: string; scope: string; university_id: string | null }>>`
+        select b.id, b.scope::text, b.university_id
+          from public.board b
+         where b.slug = ${input.board_slug}
+           and b.is_archived = false
+           and (b.university_id is null or b.university_id = ${user.univId})
+           and b.min_tier_to_post <= ${callerReadTier(user.tier)}::public.verification_tier
+      `;
+      // Same 404 whether the board is missing, off-campus, or above the
+      // caller's tier — see the note on getPost.
+      if (!board) throw new NotFoundException("board_not_found");
+
+      // The badge is only ever the CALLER's own university, never a value the
+      // client supplies. A trigger confines it to national boards; this
+      // confines it to the truth.
+      const badgeUniversity =
+        input.show_university_badge && board.scope === "national" ? user.univId : null;
+
+      const [row] = await tx<Array<{ id: string }>>`
+        insert into public.post (board_id, university_id, title, body,
+                                 author_display_mode, author_alias_number,
+                                 author_tier, author_university_id)
+        select ${board.id}, ${board.university_id}, ${input.title}, ${input.body ?? null},
+               'alias', 1, au.verification_tier, ${badgeUniversity}
+          from public.app_user au
+         where au.id = ${user.appUserId}
+        returning id
+      `;
+      if (!row) throw new NotFoundException("author_not_found");
+
+      // Authorship goes to internal, never onto the public row.
+      await tx`insert into internal.post_author (post_id, app_user_id)
+               values (${row.id}, ${user.appUserId})`;
+
+      const [alias] = await tx<Array<{ n: number }>>`
+        select internal.allocate_thread_alias(${row.id}::uuid, ${user.appUserId}::uuid,
+                                              interval '5 minutes', true) as n
+      `;
+      // The thread author must hold ordinal 1 (identity spec P4). Asserting it
+      // here rather than trusting it means a regression in the allocator
+      // surfaces as a failed write, not as a mislabelled thread.
+      if (alias?.n !== 1) {
+        throw new Error(`thread author must hold alias 1, got ${alias?.n}`);
+      }
+      await tx`update internal.thread_alias set is_op = true
+                where post_id = ${row.id} and app_user_id = ${user.appUserId}`;
+
+      return row.id;
+    });
+
+    return this.getPost(user, postId);
+  }
+
+  /** Adds a comment, allocating the author's per-thread alias in the same transaction. */
+  async createComment(
+    user: KiksuRequestContext, postId: string, input: CreateCommentInput,
+  ): Promise<CommentDto> {
+    return this.db.transaction(async (tx) => {
+      const [post] = await tx<Array<{ id: string }>>`
+        select p.id from public.post p
+          join public.board b on b.id = p.board_id
+         where p.id = ${postId}
+           and p.moderation_state in ('visible', 'limited')
+           and p.deleted_at is null
+           and (b.university_id is null or b.university_id = ${user.univId})
+           and b.min_tier_to_post <= ${callerReadTier(user.tier)}::public.verification_tier
+      `;
+      if (!post) throw new NotFoundException("post_not_found");
+
+      // Idempotent per (thread, user): someone who already spoke in this
+      // thread keeps the ordinal readers have already seen against them.
+      const [alias] = await tx<Array<{ n: number }>>`
+        select internal.allocate_thread_alias(${postId}::uuid, ${user.appUserId}::uuid,
+                                              interval '5 minutes', true) as n
+      `;
+
+      const [seq] = await tx<Array<{ next: number }>>`
+        select coalesce(max(seq_in_post), 0) + 1 as next
+          from public.post_comment where post_id = ${postId}
+      `;
+      const seqInPost = seq?.next ?? 1;
+
+      const [row] = await tx<Array<Record<string, string | number | boolean | Date>>>`
+        insert into public.post_comment (post_id, parent_id, seq_in_post, path, depth, body,
+                                         author_display_mode, author_alias_number, author_tier, is_op)
+        -- array[...] over a driver parameter infers text[]; the column is
+        -- integer[], so the cast has to be explicit.
+        select ${postId}, ${input.parent_id ?? null}, ${seqInPost},
+               array[${seqInPost}]::integer[], 0,
+               ${input.body}, 'alias', ${alias?.n ?? 1}, au.verification_tier,
+               exists (select 1 from internal.post_author pa
+                        where pa.post_id = ${postId} and pa.app_user_id = ${user.appUserId})
+          from public.app_user au
+         where au.id = ${user.appUserId}
+        returning id, author_alias_number, author_tier::text as author_tier, is_op,
+                  body, score, depth, created_at
+      `;
+      if (!row) throw new NotFoundException("author_not_found");
+
+      await tx`insert into internal.comment_author (comment_id, app_user_id)
+               values (${row.id as string}, ${user.appUserId})`;
+
+      return {
+        id: row.id as string,
+        author: {
+          alias_number: row.author_alias_number as number,
+          tier: tierBadge(row.author_tier as string),
+          is_op: row.is_op as boolean,
+        },
+        body: row.body as string,
+        score: row.score as number,
+        depth: row.depth as number,
+        created_at: (row.created_at as Date).toISOString(),
+      };
+    });
   }
 
   private toSummary(r: Record<string, unknown>): PostSummaryDto {

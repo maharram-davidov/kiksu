@@ -83,3 +83,21 @@ export interface PostDetailDto {
    */
   your_next_alias: number;
 }
+
+/** Body for creating a thread. */
+export interface CreatePostInput {
+  board_slug: string;
+  title: string;
+  body?: string;
+  /**
+   * Opt-in campus badge. National boards only; the database rejects it
+   * elsewhere. Per post, never inherited from a previous post — the design
+   * treats this as a disclosure, not a preference.
+   */
+  show_university_badge?: boolean;
+}
+
+export interface CreateCommentInput {
+  body: string;
+  parent_id?: string;
+}
