@@ -35,7 +35,7 @@ function buildGuard(claims: SupabaseJwtClaims, opts?: { recordSuspicious?: Retur
   const epochs = { getCurrentEpoch: vi.fn().mockResolvedValue(0) } as unknown as EpochService;
   const recordSuspiciousUserMetadata = opts?.recordSuspicious ?? vi.fn();
   const securityMetrics = { recordSuspiciousUserMetadata } as unknown as SecurityMetricsService;
-  const guard = new AuthGuard(new Reflector(), jwtVerifier, epochs, securityMetrics);
+  const guard = new AuthGuard(new Reflector(), jwtVerifier, epochs, securityMetrics, { devAuthAppUserId: undefined } as never);
   return { guard, securityMetrics, recordSuspiciousUserMetadata };
 }
 
@@ -126,7 +126,7 @@ describe("AuthGuard — the user_metadata trap (05-api-conventions.md §2.3)", (
     } as unknown as JwtVerifierService;
     const epochs = { getCurrentEpoch: vi.fn().mockResolvedValue(5) } as unknown as EpochService;
     const securityMetrics = { recordSuspiciousUserMetadata: vi.fn() } as unknown as SecurityMetricsService;
-    const guard = new AuthGuard(new Reflector(), jwtVerifier, epochs, securityMetrics);
+    const guard = new AuthGuard(new Reflector(), jwtVerifier, epochs, securityMetrics, { devAuthAppUserId: undefined } as never);
 
     const req: Record<string, unknown> = { headers: { authorization: "Bearer x" }, requestId: "req-6" };
 
@@ -139,7 +139,7 @@ describe("AuthGuard — the user_metadata trap (05-api-conventions.md §2.3)", (
     const securityMetrics = { recordSuspiciousUserMetadata: vi.fn() } as unknown as SecurityMetricsService;
     const reflector = new Reflector();
     vi.spyOn(reflector, "getAllAndOverride").mockReturnValue(true);
-    const guard = new AuthGuard(reflector, jwtVerifier, epochs, securityMetrics);
+    const guard = new AuthGuard(reflector, jwtVerifier, epochs, securityMetrics, { devAuthAppUserId: undefined } as never);
 
     const req: Record<string, unknown> = { headers: {}, requestId: "req-7" };
     await expect(guard.canActivate(makeContext(req))).resolves.toBe(true);
@@ -151,5 +151,44 @@ describe("AppError shape used by the guard", () => {
   it("carries the closed code so callers can assert on .code directly", () => {
     const err = new AppError("unauthenticated");
     expect(err.code).toBe("unauthenticated");
+  });
+});
+
+describe("development auth bypass", () => {
+  it("refuses to boot when the bypass is set in production", async () => {
+    const { parseEnv } = await import("../src/config/env.schema");
+    const base = {
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://u@h:5432/d",
+      DATABASE_URL_IDENTITY: "postgresql://u2@h:5432/d",
+      CREDENTIAL_PEPPER: "x".repeat(40),
+      CURSOR_HMAC_SECRET: "y".repeat(40),
+      SUPABASE_URL: "https://p.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "k",
+      SUPABASE_JWT_AUDIENCE: "authenticated",
+      IOS_STORE_URL: "https://apps.apple.com/app/id1",
+      ANDROID_STORE_URL: "https://play.google.com/store/apps/details?id=a",
+      MIN_SUPPORTED_CLIENT_IOS: "0.1.0",
+      MIN_SUPPORTED_CLIENT_ANDROID: "0.1.0",
+      RECOMMENDED_CLIENT_IOS: "0.1.0",
+      RECOMMENDED_CLIENT_ANDROID: "0.1.0",
+    } as NodeJS.ProcessEnv;
+
+    // Without the bypass, production config is fine.
+    expect(() => parseEnv(base)).not.toThrow();
+
+    // With it, boot must fail rather than silently accept every request.
+    expect(() =>
+      parseEnv({ ...base, DEV_AUTH_APP_USER_ID: "11111111-1111-1111-1111-111111111111" }),
+    ).toThrow(/production/i);
+  });
+
+  it("builds a context at the LOWEST useful tier, not the most privileged", async () => {
+    const { buildDevContext } = await import("../src/common/auth/dev-identity");
+    const ctx = buildDevContext("u-1", "uni-1", "auth-1");
+    // Developing as 'card' would hide tier-gating bugs, which this project has
+    // already shipped once.
+    expect(ctx.tier).toBe("email");
+    expect(ctx.role).toBe("student");
   });
 });

@@ -286,3 +286,26 @@ was read. Real environment variables always win over the file.
 Layer 1 boundary. `IdentitySqlProvider` warns about it and refuses outright in
 production, and the boundary itself is verified by invariant 1 against the real
 grants — not by the development setup.
+
+## The development auth bypass
+
+`scripts/dev-api.sh` sets `DEV_AUTH_APP_USER_ID`, which makes the API serve
+every authenticated route as one seeded student with no token at all.
+
+It exists because the API verifies tokens against a Supabase JWKS endpoint, and
+there is no such endpoint locally — without it, every authenticated route is
+unreachable and no screen can be built or demonstrated against real data.
+
+**Three independent gates, any one of which disables it:**
+
+1. `parseEnv()` **refuses to boot** if the variable is set while
+   `NODE_ENV=production`. A stray value in a real deployment crashes on startup
+   rather than silently accepting unauthenticated traffic as a real user.
+2. There is no default. An operator has to name a specific user id.
+3. `AuthGuard` logs a loud warning on every boot where it is active.
+
+A bypass that fails open is worse than no bypass. Two tests cover it: that
+production config parses fine without it and throws with it, and that the
+context it builds uses the **email** tier rather than `card` — developing
+against the most privileged identity hides tier-gating bugs, which this project
+has already shipped once.

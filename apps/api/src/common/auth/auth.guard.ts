@@ -12,6 +12,8 @@ import { JwtVerifierService } from "./jwt-verifier.service";
 import { IS_PUBLIC_KEY } from "./public.decorator";
 import type { KiksuRequestContext } from "./request-context";
 import { SecurityMetricsService } from "./security-metrics.service";
+import { ConfigService } from "../../config/config.service";
+import { buildDevContext } from "./dev-identity";
 
 declare module "express-serve-static-core" {
   interface Request {
@@ -44,7 +46,16 @@ export class AuthGuard implements CanActivate {
     private readonly jwtVerifier: JwtVerifierService,
     private readonly epochs: EpochService,
     private readonly securityMetrics: SecurityMetricsService,
-  ) {}
+    private readonly config: ConfigService,
+  ) {
+    if (this.config.devAuthAppUserId) {
+      this.logger.warn(
+        "DEVELOPMENT AUTH BYPASS ACTIVE — every authenticated route is served " +
+          `as app_user ${this.config.devAuthAppUserId} with no token. ` +
+          "parseEnv() refuses to boot if this is ever set in production.",
+      );
+    }
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
@@ -54,6 +65,19 @@ export class AuthGuard implements CanActivate {
     const req = context.switchToHttp().getRequest<Request>();
 
     if (isPublic) return true;
+
+    // Development bypass. parseEnv() has already refused to boot if this is
+    // set in production, so reaching here means NODE_ENV is not production AND
+    // an operator explicitly named a user. See dev-identity.ts.
+    const devAppUserId = this.config.devAuthAppUserId;
+    if (devAppUserId) {
+      req.kiksu = buildDevContext(
+        devAppUserId,
+        this.config.devAuthUniversityId ?? "",
+        `dev-auth-${devAppUserId}`,
+      );
+      return true;
+    }
 
     const token = extractBearerToken(req.headers.authorization);
     if (!token) {

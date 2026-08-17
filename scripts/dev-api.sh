@@ -74,6 +74,30 @@ echo "==> seeding"
 
 DB_URL="postgresql://postgres@127.0.0.1:$PGPORT/postgres"
 
+# Pick a seeded student to develop as. There is no Supabase JWKS endpoint
+# locally, so without this every authenticated route is unreachable and no
+# screen can be built against real data. parseEnv() refuses to boot if these
+# are ever set with NODE_ENV=production.
+DEV_IDS=$("${PSQL[@]}" -tAF' ' <<'IDQ'
+select au.id, au.university_id
+  from public.app_user au
+  join ref.university u on u.id = au.university_id and u.code = 'BDU'
+ order by au.handle limit 1;
+IDQ
+)
+DEV_APP_USER_ID=$(echo "$DEV_IDS" | awk '{print $1}')
+DEV_UNIVERSITY_ID=$(echo "$DEV_IDS" | awk '{print $2}')
+
+# Enrol that student in everything, so the timetable screen has content.
+"${PSQL[@]}" >/dev/null <<ENROLQ
+insert into public.enrollment (app_user_id, section_id, term_id, state)
+select '$DEV_APP_USER_ID', s.id, s.term_id, 'enrolled'
+  from ref.course_section s
+  join ref.course c on c.id = s.course_id
+ where c.university_id = '$DEV_UNIVERSITY_ID'
+on conflict do nothing;
+ENROLQ
+
 # Written fresh each run. Development values only — no real Supabase project is
 # involved, and the identity URL points at the same database because there are
 # no separate roles locally. That collapses the Layer 1 boundary, which
@@ -97,6 +121,11 @@ SUPABASE_JWT_AUDIENCE=authenticated
 IDEMPOTENCY_STORE=memory
 RATE_LIMIT_STORE=memory
 
+# DEVELOPMENT ONLY. Every request is served as this student, with no token.
+# parseEnv() refuses to boot if either is set while NODE_ENV=production.
+DEV_AUTH_APP_USER_ID=$DEV_APP_USER_ID
+DEV_AUTH_UNIVERSITY_ID=$DEV_UNIVERSITY_ID
+
 IOS_STORE_URL=https://apps.apple.com/az/app/kiksu/id000000000
 ANDROID_STORE_URL=https://play.google.com/store/apps/details?id=az.kiksu.mobile
 MIN_SUPPORTED_CLIENT_IOS=0.1.0
@@ -106,6 +135,7 @@ RECOMMENDED_CLIENT_ANDROID=0.1.0
 ENVEOF
 
 echo "==> database ready, .env written"
+echo "==> developing as app_user $DEV_APP_USER_ID (BDU, email tier, no token needed)"
 echo "==> API starting on http://localhost:$APIPORT  (Ctrl+C stops everything)"
 echo ""
 cd "$ROOT/apps/api"

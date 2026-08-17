@@ -36,6 +36,15 @@ export const envSchema = z.object({
   DATABASE_URL_IDENTITY: z.string().url(),
   /** SECURITY: server-only, KMS-held. Rotating it requires a versioned backfill. */
   CREDENTIAL_PEPPER: z.string().min(32),
+  /**
+   * DEVELOPMENT ONLY. When set, every request is treated as this app_user
+   * without any token. Boot is refused if this is present while NODE_ENV is
+   * production, so a stray value in a real deployment crashes on startup
+   * rather than silently accepting unauthenticated traffic.
+   */
+  DEV_AUTH_APP_USER_ID: z.string().uuid().optional(),
+  /** DEVELOPMENT ONLY. Campus the bypassed identity belongs to. */
+  DEV_AUTH_UNIVERSITY_ID: z.string().uuid().optional(),
   SUPABASE_URL: z.string().url(),
   // Server-only. See the SECURITY note on the exported schema above.
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
@@ -94,5 +103,16 @@ export function parseEnv(raw: NodeJS.ProcessEnv): Env {
       `Invalid environment configuration. Fix these before the server can boot:\n${issues}`,
     );
   }
+  // A development auth bypass must never survive into production. Refusing to
+  // boot is the only safe behaviour: warning and continuing would leave a
+  // deployment silently accepting unauthenticated requests as a real user, and
+  // that is exactly the sort of thing that gets noticed months later.
+  if (result.data.NODE_ENV === "production" && result.data.DEV_AUTH_APP_USER_ID) {
+    throw new Error(
+      "DEV_AUTH_APP_USER_ID is set while NODE_ENV=production. Refusing to " +
+        "boot: this bypass accepts every request as a real user without a token.",
+    );
+  }
+
   return result.data;
 }

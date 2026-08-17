@@ -33,6 +33,16 @@ export class ConfigService {
     return this.env.CREDENTIAL_PEPPER;
   }
 
+  /** DEVELOPMENT ONLY. See dev-identity.ts for the three gates on this. */
+  get devAuthAppUserId(): string | undefined {
+    return this.env.DEV_AUTH_APP_USER_ID;
+  }
+
+  /** DEVELOPMENT ONLY. Campus the bypassed identity is scoped to. */
+  get devAuthUniversityId(): string | undefined {
+    return this.env.DEV_AUTH_UNIVERSITY_ID;
+  }
+
   get databasePoolMax(): number {
     return this.env.DATABASE_POOL_MAX;
   }
