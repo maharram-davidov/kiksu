@@ -12,6 +12,7 @@ import { RequestIdMiddleware } from "./common/request/request-id.middleware";
 import { HealthModule } from "./modules/health/health.module";
 import { BootstrapModule } from "./modules/bootstrap/bootstrap.module";
 import { TimetableModule } from "./modules/timetable/timetable.module";
+import { ForumModule } from "./modules/forum/forum.module";
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { TimetableModule } from "./modules/timetable/timetable.module";
     HealthModule,
     BootstrapModule,
     TimetableModule,
+    ForumModule,
   ],
   providers: [
     // Fail-closed by default: every route requires a verified caller unless it opts

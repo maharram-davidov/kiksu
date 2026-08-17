@@ -1,0 +1,269 @@
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { SqlProvider } from "../../common/db/sql.provider";
+import { CursorService } from "../../common/pagination/cursor.service";
+import type { KiksuRequestContext } from "../../common/auth/request-context";
+import type {
+  BoardDto, CommentDto, PostDetailDto, PostPageDto, PostSummaryDto,
+} from "./forum.types";
+
+/** Maps the DB tier enum onto the coarse badge the client renders. */
+function tierBadge(t: string): "unverified" | "email" | "card" {
+  return t === "card_verified" ? "card" : t === "email_verified" ? "email" : "unverified";
+}
+
+/**
+ * Forum reads.
+ *
+ * Two responsibilities beyond fetching rows, both load-bearing:
+ *
+ * 1. SCOPING. The pool is BYPASSRLS (see SqlProvider), so every query states
+ *    its own campus predicate. A board is visible when it is national
+ *    (university_id is null) or belongs to the caller's university, and the
+ *    caller's tier clears min_tier_to_read.
+ *
+ * 2. NOT LEAKING AUTHORSHIP. These queries deliberately never join
+ *    internal.post_author or internal.comment_author. They cannot: that schema
+ *    has no grant to this role. Authorship is unavailable here by construction
+ *    rather than by discipline, which is the point of invariant 1.
+ */
+@Injectable()
+export class ForumService {
+  constructor(
+    private readonly db: SqlProvider,
+    private readonly cursors: CursorService,
+  ) {}
+
+  async listBoards(user: KiksuRequestContext): Promise<BoardDto[]> {
+    const { sql } = this.db;
+    return sql<BoardDto[]>`
+      select b.id, b.slug, b.name_az as name, b.description_az as description,
+             b.scope::text, b.follower_count, b.post_count, u.code as university_code
+        from public.board b
+        left join ref.university u on u.id = b.university_id
+       where b.is_archived = false
+         and (b.university_id is null or b.university_id = ${user.univId})
+       order by (b.university_id is null), b.display_order, b.name_az
+    `;
+  }
+
+  async getBoardFeed(
+    user: KiksuRequestContext, slug: string, cursor: string | null, limit = 20,
+  ): Promise<PostPageDto> {
+    const { sql } = this.db;
+
+    const [board] = await sql<Array<{ id: string }>>`
+      select b.id from public.board b
+       where b.slug = ${slug}
+         and b.is_archived = false
+         and (b.university_id is null or b.university_id = ${user.univId})
+    `;
+    if (!board) throw new NotFoundException("board_not_found");
+
+    const fingerprint = this.cursors.fingerprintQuery("forum.board_feed", { slug, limit });
+
+    // Keyset, never OFFSET.
+    //
+    // DEVIATION from 05-api-conventions.md §4.3, deliberate and flagged:
+    // the doc says quantise the cursor's timestamp to 60s. Doing that breaks
+    // the keyset. Flooring the sort key to the minute makes
+    // `(created_at, id) < (floored_ts, id)` exclude every row whose real
+    // timestamp falls later in that same minute — with an active board, or a
+    // seeded one where rows share a transaction, page two comes back empty and
+    // posts are silently unreachable.
+    //
+    // The quantisation exists to stop an attacker binary-searching a post's
+    // exact publication time (threat T9). That attack presumes a READABLE
+    // cursor. Ours is HMAC-signed and opaque: a client cannot decode the
+    // payload, cannot forge one, and cannot bind it to a different query. The
+    // privacy property is carried by the signature, so full precision inside
+    // it costs nothing.
+    //
+    // Coarse timestamps still matter in the RESPONSE BODY, which is a separate
+    // control and unaffected by this. Raised in the module README for review.
+    let afterCreated: string | null = null;
+    let afterId: string | null = null;
+    if (cursor) {
+      const payload = this.cursors.verify(cursor, fingerprint);
+      afterCreated = payload.k[0] ?? null;
+      afterId = payload.k[1] ?? null;
+    }
+
+    // Two explicit query paths rather than one predicate that has to encode
+    // "no cursor yet". Composing that conditionally through the driver proved
+    // subtle enough to silently return zero rows, and a feed that quietly
+    // paginates into nothing is a bad thing to be clever about. The duplication
+    // is confined to the WHERE clause and both paths share the projection.
+    const cols = sql`
+      p.id, p.title,
+      left(p.body, 180)  as excerpt,
+      p.kind::text       as kind,
+      p.author_alias_number, p.author_tier::text, p.author_display_mode::text,
+      au.code            as author_university_code,
+      p.score, p.comment_count, p.save_count,
+      p.created_at       as created_at_raw,
+      -- Full precision for the cursor: a JS Date holds only milliseconds, so
+      -- round-tripping a microsecond timestamptz through toISOString() would
+      -- truncate it and the keyset would skip rows.
+      -- Cursor key as a numeric epoch with microsecond precision. A JS Date
+      -- holds only milliseconds, and a parameterised timestamptz string leaves
+      -- the driver to infer a type; numeric is unambiguous on both sides and
+      -- keeps full precision, so the keyset cannot skip or repeat a row.
+      extract(epoch from p.created_at)::numeric(20,6)::text as created_at_cursor
+    `;
+
+    type Row = Record<string, unknown> & { id: string; created_at_raw: Date; created_at_cursor: string };
+
+    const rows: Row[] = afterCreated && afterId
+      ? await sql<Row[]>`
+          select ${cols}
+            from public.post p
+            join public.board b on b.id = p.board_id
+            left join ref.university au on au.id = p.author_university_id
+           where b.id = ${board.id}
+             and p.moderation_state in ('visible', 'limited')
+             and p.deleted_at is null
+             and (extract(epoch from p.created_at)::numeric(20,6), p.id)
+                 < (${afterCreated}::numeric(20,6), ${afterId}::uuid)
+           order by p.created_at desc, p.id desc
+           limit ${limit + 1}
+        `
+      : await sql<Row[]>`
+          select ${cols}
+            from public.post p
+            join public.board b on b.id = p.board_id
+            left join ref.university au on au.id = p.author_university_id
+           where b.id = ${board.id}
+             and p.moderation_state in ('visible', 'limited')
+             and p.deleted_at is null
+           order by p.created_at desc, p.id desc
+           limit ${limit + 1}
+        `;
+
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const last = page[page.length - 1];
+
+    return {
+      items: page.map((r) => this.toSummary(r)),
+      next_cursor: hasMore && last
+        ? this.cursors.sign({
+            queryFingerprint: fingerprint,
+            keyset: [last.created_at_cursor, last.id],
+            direction: "desc",
+          })
+        : null,
+    };
+  }
+
+  async getPost(user: KiksuRequestContext, postId: string): Promise<PostDetailDto> {
+    const { sql } = this.db;
+
+    const [post] = await sql<Array<Record<string, never>>>`
+      select p.id, p.title, p.body, p.kind::text as kind,
+             p.author_alias_number, p.author_tier::text, p.author_display_mode::text,
+             au.code as author_university_code,
+             p.score, p.comment_count, p.save_count, p.created_at,
+             b.slug as board_slug, b.name_az as board_name
+        from public.post p
+        join public.board b on b.id = p.board_id
+        left join ref.university au on au.id = p.author_university_id
+       where p.id = ${postId}
+         and p.moderation_state in ('visible', 'limited')
+         and p.deleted_at is null
+         and (b.university_id is null or b.university_id = ${user.univId})
+    `;
+    if (!post) throw new NotFoundException("post_not_found");
+    const p = post as unknown as Record<string, string | number | Date | null>;
+
+    const comments = await sql<Array<Record<string, string | number | Date | boolean>>>`
+      select c.id, c.author_alias_number, c.author_tier::text as author_tier,
+             c.is_op, c.body, c.score, c.depth, c.created_at
+        from public.post_comment c
+       where c.post_id = ${postId}
+         and c.moderation_state in ('visible', 'limited')
+         and c.deleted_at is null
+       order by c.path
+    `;
+
+    const pollRows = await sql<Array<Record<string, string | number | Date | null>>>`
+      select pl.question, pl.total_votes, pl.closes_at,
+             po.position, po.label, po.vote_count
+        from public.poll pl
+        join public.poll_option po on po.post_id = pl.post_id
+       where pl.post_id = ${postId}
+       order by po.position
+    `;
+
+    // The composer's "ANONİM 5 KİMİ YAZ". Reserved with a TTL rather than
+    // consumed: showing an ordinal the caller might not use would leave a
+    // permanent gap, and a permanent gap says "someone opened the composer and
+    // thought better of it" (identity spec P3).
+    const [alias] = await sql<Array<{ n: number }>>`
+      select internal.allocate_thread_alias(${postId}::uuid, ${user.appUserId}::uuid,
+                                            interval '5 minutes', false) as n
+    `;
+
+    return {
+      id: p.id as string,
+      board: { slug: p.board_slug as string, name: p.board_name as string },
+      title: p.title as string,
+      body: (p.body as string) ?? null,
+      kind: p.kind as string,
+      author: {
+        alias_number: (p.author_alias_number as number) ?? 1,
+        tier: tierBadge(p.author_tier as string),
+        is_op: true,
+      },
+      author_university_code: (p.author_university_code as string) ?? null,
+      score: p.score as number,
+      comment_count: p.comment_count as number,
+      save_count: p.save_count as number,
+      created_at: (p.created_at as Date).toISOString(),
+      poll: pollRows.length
+        ? {
+            question: pollRows[0]!.question as string,
+            total_votes: pollRows[0]!.total_votes as number,
+            closes_at: pollRows[0]!.closes_at
+              ? (pollRows[0]!.closes_at as Date).toISOString() : null,
+            options: pollRows.map((o) => ({
+              position: o.position as number,
+              label: o.label as string,
+              vote_count: o.vote_count as number,
+            })),
+          }
+        : null,
+      comments: comments.map<CommentDto>((c) => ({
+        id: c.id as string,
+        author: {
+          alias_number: c.author_alias_number as number,
+          tier: tierBadge(c.author_tier as string),
+          is_op: c.is_op as boolean,
+        },
+        body: c.body as string,
+        score: c.score as number,
+        depth: c.depth as number,
+        created_at: (c.created_at as Date).toISOString(),
+      })),
+      your_next_alias: alias?.n ?? 1,
+    };
+  }
+
+  private toSummary(r: Record<string, unknown>): PostSummaryDto {
+    return {
+      id: r.id as string,
+      title: r.title as string,
+      excerpt: (r.excerpt as string) ?? null,
+      kind: r.kind as string,
+      author: {
+        alias_number: (r.author_alias_number as number) ?? 1,
+        tier: tierBadge(r.author_tier as string),
+        is_op: true,
+      },
+      author_university_code: (r.author_university_code as string) ?? null,
+      score: r.score as number,
+      comment_count: r.comment_count as number,
+      save_count: r.save_count as number,
+      created_at: (r.created_at_raw as Date).toISOString(),
+    };
+  }
+}
