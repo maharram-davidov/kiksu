@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "./client";
-import type { Attendance, Board, PostDetail, PostPage, WeekGrid } from "./types";
+import type { Attendance, Board, PostDetail, PostPage, Today, WeekGrid } from "./types";
 
 export function useWeekGrid() {
   return useQuery({
@@ -47,6 +47,18 @@ export function usePost(id: string) {
     queryKey: ["forum", "post", id],
     queryFn: () => apiGet<PostDetail>(`/forum/posts/${encodeURIComponent(id)}`),
     staleTime: 30 * 1000,
+    retry: 1,
+  });
+}
+
+export function useToday() {
+  return useQuery({
+    queryKey: ["today"],
+    queryFn: () => apiGet<Today>("/today"),
+    // "What is left today" goes stale as the day moves, so this is short and
+    // refetches when the app comes back to the foreground.
+    staleTime: 60 * 1000,
+    refetchOnMount: true,
     retry: 1,
   });
 }

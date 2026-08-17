@@ -79,5 +79,17 @@
     "writeAs": "Написать как {{alias}}",
     "pollTotal": "{{count}} голосов",
     "remaining": "осталось"
+  },
+  "today": {
+    "remaining": "Оставшиеся занятия",
+    "deadlines": "Ближайшие дедлайны",
+    "hot": "Кампус сегодня",
+    "inProgress": "СЕЙЧАС ИДЁТ",
+    "inMinutes": "ЧЕРЕЗ {{count}} МИН",
+    "tomorrow": "ЗАВТРА",
+    "today": "СЕГОДНЯ",
+    "daysLeft": "{{count}} ДН",
+    "noClassesToday": "Сегодня занятий нет",
+    "loadFailed": "Не удалось загрузить"
   }
 }

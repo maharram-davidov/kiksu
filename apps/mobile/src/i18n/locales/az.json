@@ -76,5 +76,17 @@
     "writeAs": "{{alias}} kimi yaz",
     "pollTotal": "{{count}} səs",
     "remaining": "qalıb"
+  },
+  "today": {
+    "remaining": "Qalan dərslər",
+    "deadlines": "Yaxın son tarixlər",
+    "hot": "Kampus gündəmi",
+    "inProgress": "İNDİ DAVAM EDİR",
+    "inMinutes": "{{count}} DƏQ SONRA",
+    "tomorrow": "SABAH",
+    "today": "BU GÜN",
+    "daysLeft": "{{count}} GÜN",
+    "noClassesToday": "Bu gün dərs yoxdur",
+    "loadFailed": "Yüklənmədi"
   }
 }

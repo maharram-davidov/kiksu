@@ -79,5 +79,17 @@
     "writeAs": "Write as {{alias}}",
     "pollTotal": "{{count}} votes",
     "remaining": "left"
+  },
+  "today": {
+    "remaining": "Remaining classes",
+    "deadlines": "Upcoming deadlines",
+    "hot": "Campus today",
+    "inProgress": "IN PROGRESS",
+    "inMinutes": "IN {{count}} MIN",
+    "tomorrow": "TOMORROW",
+    "today": "TODAY",
+    "daysLeft": "{{count}} DAYS",
+    "noClassesToday": "No classes today",
+    "loadFailed": "Couldn't load"
   }
 }

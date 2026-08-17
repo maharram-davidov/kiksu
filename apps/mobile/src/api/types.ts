@@ -109,3 +109,43 @@ export interface PostDetail {
   /** The ordinal this reader would get if they commented. "ANONİM 5 KİMİ YAZ". */
   your_next_alias: number;
 }
+
+export interface TodayClass {
+  section_id: string;
+  course_code: string;
+  course_title: string;
+  starts_at: string;
+  ends_at: string;
+  room: string | null;
+  campus: string | null;
+  instructor: string | null;
+  /** Computed server-side in the university's zone, never from the phone clock. */
+  starts_in_minutes: number;
+  is_in_progress: boolean;
+}
+
+export interface TodayDeadline {
+  id: string;
+  title: string;
+  course_code: string;
+  due_at: string;
+  days_left: number;
+}
+
+export interface TodayPost {
+  id: string;
+  title: string;
+  board_name: string;
+  board_slug: string;
+  score: number;
+  comment_count: number;
+}
+
+export interface Today {
+  date: string;
+  weekday: number;
+  timezone: string;
+  remaining_classes: TodayClass[];
+  deadlines: TodayDeadline[];
+  hot_posts: TodayPost[];
+}
