@@ -317,6 +317,15 @@ export class OnboardingService {
     `;
     if (!appUser) throw new NotFoundException("provisioning_failed");
 
+    // Open the handle's first tenancy. internal.handle_history is what makes a
+    // block survive a later rename, so it has to start at provisioning rather
+    // than at the first rotation.
+    await this.db.sql`
+      insert into internal.handle_history (app_user_id, handle)
+      values (${appUser.id}, ${handle})
+      on conflict do nothing
+    `;
+
     // The sealed link. One subject, one app_user — enforced by the unique
     // constraints on identity.app_user_link, not by this code being careful.
     // The subject already exists (created at start); bind the credential and

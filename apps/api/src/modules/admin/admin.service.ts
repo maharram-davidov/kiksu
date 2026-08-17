@@ -146,6 +146,11 @@ export class AdminService {
       returning id, handle`;
     if (!appUser) throw new BadRequestException("provisioning_failed");
 
+    await this.db.sql`
+      insert into internal.handle_history (app_user_id, handle)
+      values (${appUser.id}, ${appUser.handle})
+      on conflict do nothing`;
+
     await this.identity.sql`
       insert into identity.app_user_link (subject_id, app_user_id)
       values (${decided.subjectId}, ${appUser.id})
