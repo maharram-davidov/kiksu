@@ -1,9 +1,60 @@
 # Onboarding module
 
-**Status: identity primitives only.** The endpoints and the verification state
-machine are not built yet. What is here is the security-critical core they will
-depend on, done first and tested hard, because these are the pieces that cannot
-be quietly fixed later.
+University picker and the university-email verification route, plus the
+identity primitives underneath them.
+
+| Endpoint | |
+|---|---|
+| `GET /v1/onboarding/universities` | Public. The picker, with the sample address the design shows |
+| `POST /v1/onboarding/verify/email/start` | Public. Sends a 6-digit code |
+| `POST /v1/onboarding/verify/email/confirm` | Confirms and provisions the pseudonym |
+
+**Not built:** the student-card route, invite codes, re-verification and the
+graduate tier. The card route needs the private evidence bucket and a human
+review queue; the schema has the columns (`evidence_path`, `evidence_sha256`,
+`evidence_purge_at`, `sla_due_at`) and nothing writes them yet.
+
+## Two connections, on purpose
+
+Verification is the only module that touches `identity.*`, and it does so
+through a **separate pool** (`IdentitySqlProvider`) authenticating as
+`kiksu_identity_svc`. The main pool has no grant on that schema and must never
+gain one — invariant 1 fails the build if it does.
+
+That split is what makes the boundary real rather than aspirational: a SQL
+injection or a careless join anywhere in forum or timetable code cannot reach
+identity data, because the connection those modules hold is not permitted to
+see it. `DATABASE_URL_IDENTITY` must therefore be a genuinely distinct
+credential; the provider refuses to boot in production if it equals
+`DATABASE_URL`, and warns loudly elsewhere.
+
+## What the flow does and does not reveal
+
+- **Start is uninformative about membership.** The response is identical
+  whether or not the address already has an account. Differentiating would make
+  this an oracle for "is this classmate on Kiksu", which is a de-anonymisation
+  primitive.
+- **An unrecognised domain IS reported**, because the student needs to know
+  their university is not onboarded yet, and a domain is not personal data.
+- **Confirm failures are undifferentiated.** Wrong code, expired code and no
+  attempt all return the same error; distinguishing them hands an attacker a
+  search signal. Five failures expire the attempt.
+- **The code is never stored**, only its HMAC, and it is never returned in a
+  response. A test asserts the stored value does not contain the code.
+
+## The sealed link
+
+`public.app_user` records nothing about which subject it came from. The mapping
+lives only in `identity.app_user_link`, readable only by this service. A test
+asserts both halves: no `subject_id` column on the public row, and a link row
+that does exist inside `identity`.
+
+## Not done
+
+**No mail delivery.** `startEmailVerification` creates the attempt and stores
+the challenge, but nothing sends it. The code is exposed on the service as
+`pendingCodeForDevelopment` purely so the flow is testable; that field must not
+survive into production, and wiring a provider is the next step for this module.
 
 ## `credential-hash.ts` — one verified person, one account
 

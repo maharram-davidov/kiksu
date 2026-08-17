@@ -23,6 +23,16 @@ export class ConfigService {
     return this.env.DATABASE_URL;
   }
 
+  /** SECURITY: server-only. Distinct least-privilege credential; see IdentitySqlProvider. */
+  get identityDatabaseUrl(): string {
+    return this.env.DATABASE_URL_IDENTITY;
+  }
+
+  /** SECURITY: server-only, KMS-held. Never log, never return. */
+  get credentialPepper(): string {
+    return this.env.CREDENTIAL_PEPPER;
+  }
+
   get databasePoolMax(): number {
     return this.env.DATABASE_POOL_MAX;
   }

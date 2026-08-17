@@ -28,6 +28,14 @@ export const envSchema = z.object({
    */
   DATABASE_URL: z.string().url(),
   DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
+  /**
+   * Verification-service connection. MUST be a distinct least-privilege
+   * credential (kiksu_identity_svc); sharing DATABASE_URL collapses the
+   * Layer 1 boundary. See IdentitySqlProvider.
+   */
+  DATABASE_URL_IDENTITY: z.string().url(),
+  /** SECURITY: server-only, KMS-held. Rotating it requires a versioned backfill. */
+  CREDENTIAL_PEPPER: z.string().min(32),
   SUPABASE_URL: z.string().url(),
   // Server-only. See the SECURITY note on the exported schema above.
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),

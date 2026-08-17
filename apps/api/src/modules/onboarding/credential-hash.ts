@@ -16,7 +16,12 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  * breaking every existing account at once.
  */
 
-const VERSION = "v1";
+/**
+ * The pepper generation. The identity schema stores this in a `key_version`
+ * smallint column beside each digest rather than as a string prefix, so a
+ * rotation writes new rows at version 2 while version 1 rows stay verifiable.
+ */
+export const CREDENTIAL_KEY_VERSION = 1;
 
 /**
  * Azerbaijani has a dotted/dotless i distinction: I/ı and İ/i are four
@@ -47,8 +52,11 @@ export function normaliseCredential(raw: string): string {
 
 export type CredentialKind = "university_email" | "student_card" | "phone";
 
-/** Deterministic keyed digest of a credential. Stable across devices and locales. */
-export function hashCredential(kind: CredentialKind, raw: string, pepper: string): string {
+/**
+ * Deterministic keyed digest of a credential, as raw bytes for the schema's
+ * `bytea` columns. Stable across devices and locales.
+ */
+export function hashCredentialBytes(kind: CredentialKind, raw: string, pepper: string): Buffer {
   if (!pepper || pepper.length < 32) {
     // Fail loudly at the call site rather than silently hashing under a weak
     // key: a short pepper is brute-forceable and would make the digests
@@ -56,10 +64,19 @@ export function hashCredential(kind: CredentialKind, raw: string, pepper: string
     throw new Error("credential pepper must be at least 32 characters");
   }
   const normalised = normaliseCredential(raw);
-  const digest = createHmac("sha256", pepper)
-    .update(`${VERSION}:${kind}:${normalised}`)
-    .digest("hex");
-  return `${VERSION}:${digest}`;
+  return createHmac("sha256", pepper)
+    .update(`${CREDENTIAL_KEY_VERSION}:${kind}:${normalised}`)
+    .digest();
+}
+
+/** Hex form, for logs and tests. Never store this — the columns are bytea. */
+export function hashCredential(kind: CredentialKind, raw: string, pepper: string): string {
+  return `v${CREDENTIAL_KEY_VERSION}:${hashCredentialBytes(kind, raw, pepper).toString("hex")}`;
+}
+
+/** HMAC of a one-time code. The code itself is never stored. */
+export function hashChallenge(code: string, pepper: string): Buffer {
+  return createHmac("sha256", pepper).update(`otp:${code}`).digest();
 }
 
 /** Constant-time comparison, so digest checks do not leak via timing. */

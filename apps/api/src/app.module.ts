@@ -13,6 +13,7 @@ import { HealthModule } from "./modules/health/health.module";
 import { BootstrapModule } from "./modules/bootstrap/bootstrap.module";
 import { TimetableModule } from "./modules/timetable/timetable.module";
 import { ForumModule } from "./modules/forum/forum.module";
+import { OnboardingModule } from "./modules/onboarding/onboarding.module";
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { ForumModule } from "./modules/forum/forum.module";
     BootstrapModule,
     TimetableModule,
     ForumModule,
+    OnboardingModule,
   ],
   providers: [
     // Fail-closed by default: every route requires a verified caller unless it opts
