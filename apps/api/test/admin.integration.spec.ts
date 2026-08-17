@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import postgres from "postgres";
+import { DbEpochService } from "../src/common/auth/epoch.service";
 import { AdminService } from "../src/modules/admin/admin.service";
 import { OnboardingService } from "../src/modules/onboarding/onboarding.service";
 
@@ -20,8 +21,9 @@ suite("admin queues (integration)", () => {
       sql,
       transaction: <T,>(fn: (tx: postgres.TransactionSql) => Promise<T>) => sql.begin(fn) as Promise<T>,
     };
-    admin = new AdminService(db as never, db as never);
-    onboarding = new OnboardingService(db as never, db as never, { credentialPepper: PEPPER } as never);
+    const epochs = new DbEpochService(db as never);
+    admin = new AdminService(db as never, db as never, epochs);
+    onboarding = new OnboardingService(db as never, db as never, { credentialPepper: PEPPER } as never, epochs);
 
     const [uni] = await sql`select id from ref.university where code = 'BDU'`;
     uniId = uni!.id;

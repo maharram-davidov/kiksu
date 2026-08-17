@@ -2,7 +2,7 @@ import { Module } from "@nestjs/common";
 import { createRemoteJWKSet, type JWTVerifyGetKey } from "jose";
 import { ConfigService } from "../../config/config.service";
 import { AuthGuard } from "./auth.guard";
-import { EpochService, NoopEpochService } from "./epoch.service";
+import { DbEpochService, EpochService } from "./epoch.service";
 import { JWKS_RESOLVER, JwtVerifierService } from "./jwt-verifier.service";
 import { SecurityMetricsService } from "./security-metrics.service";
 
@@ -14,10 +14,12 @@ import { SecurityMetricsService } from "./security-metrics.service";
       inject: [ConfigService],
     },
     JwtVerifierService,
-    // See the SECURITY warning on NoopEpochService: this must be replaced with a
-    // Redis/LISTEN-NOTIFY-backed implementation before production traffic depends on
-    // token revocation actually working.
-    { provide: EpochService, useClass: NoopEpochService },
+    // Backed by internal.auth_epoch. Bound unconditionally, including under the
+    // development bypass: the guard short-circuits before the epoch check there,
+    // but tier grants still have to bump, or the counter is wrong the first time
+    // a real token is minted. Redis and LISTEN/NOTIFY are still not built — see
+    // the class doc for what that costs and why it stays inside §7.4's target.
+    { provide: EpochService, useClass: DbEpochService },
     SecurityMetricsService,
     AuthGuard,
   ],

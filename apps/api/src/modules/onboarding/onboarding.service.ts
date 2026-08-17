@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { randomInt } from "node:crypto";
+import { EpochService } from "../../common/auth/epoch.service";
+import { dbTierToToken, type TokenTier } from "../../common/auth/tier-vocabulary";
 import { IdentitySqlProvider } from "../../common/db/identity-sql.provider";
 import { SqlProvider } from "../../common/db/sql.provider";
 import { ConfigService } from "../../config/config.service";
@@ -30,6 +32,7 @@ export class OnboardingService {
     private readonly db: SqlProvider,
     private readonly identity: IdentitySqlProvider,
     private readonly config: ConfigService,
+    private readonly epochs: EpochService,
   ) {}
 
   /** Public: the university picker, before the caller has any identity. */
@@ -257,7 +260,7 @@ export class OnboardingService {
    */
   async confirmEmailVerification(
     email: string, code: string, authUserId: string,
-  ): Promise<{ app_user_id: string; handle: string; tier: string }> {
+  ): Promise<{ app_user_id: string; handle: string; tier: TokenTier }> {
     const pepper = this.config.credentialPepper;
     const normalised = normaliseCredential(email);
     const credentialHmac = hashCredentialBytes("university_email", normalised, pepper);
@@ -346,6 +349,20 @@ export class OnboardingService {
       `;
     });
 
-    return { app_user_id: appUser.id, handle, tier: "email_verified" };
+    // Tier grant, one of the eight epoch-bump triggers in identity spec §7.3.
+    //
+    // It matters here specifically because the caller is about to refresh: the
+    // access token in their hand was minted BEFORE this app_user existed, so it
+    // carries no claims at all. Bumping now means that if a token somehow was
+    // minted mid-flight against a half-provisioned row, it is already stale by
+    // the time the client refreshes and cannot be replayed.
+    await this.epochs.bump(appUser.id, "tier_grant");
+
+    // The TOKEN vocabulary, not the database one. The client renders this as a
+    // badge and compares it against the tier claim it will see on every
+    // subsequent token, so returning 'email_verified' here — as this did — meant
+    // the app saw a different string depending on whether it had just signed up
+    // or just restarted. See common/auth/tier-vocabulary.ts.
+    return { app_user_id: appUser.id, handle, tier: dbTierToToken("email_verified") };
   }
 }

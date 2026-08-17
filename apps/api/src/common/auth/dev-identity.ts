@@ -1,5 +1,6 @@
 import { Logger } from "@nestjs/common";
 import type { KiksuRequestContext } from "./request-context";
+import { dbTierToToken } from "./tier-vocabulary";
 
 /**
  * A DEVELOPMENT-ONLY identity, used when no real Supabase project is reachable.
@@ -59,7 +60,13 @@ export function buildDevContext(
     // Deliberately the lowest useful tier rather than 'card'. Developing
     // against the most privileged identity hides tier-gating bugs, which is
     // exactly the class of bug this project has already shipped once.
-    tier: "email",
+    //
+    // Routed through the vocabulary mapping rather than written as the literal
+    // 'email' it produces. This function is one of the two places that emit a
+    // tier claim without passing through internal.token_claims, and having it
+    // hardcode a token-vocabulary string is how the two vocabularies drifted
+    // apart in the first place.
+    tier: dbTierToToken("email_verified"),
     role: "student",
     univId: universityId,
     epoch: 1,

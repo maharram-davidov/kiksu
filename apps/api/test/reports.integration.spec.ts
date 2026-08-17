@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import postgres from "postgres";
+import { DbEpochService } from "../src/common/auth/epoch.service";
 import { ReportsService } from "../src/modules/reports/reports.service";
 import { AdminService } from "../src/modules/admin/admin.service";
 import type { KiksuRequestContext } from "../src/common/auth/request-context";
@@ -31,7 +32,7 @@ suite("report flow (integration)", () => {
       transaction: <T,>(fn: (tx: postgres.TransactionSql) => Promise<T>) => sql.begin(fn) as Promise<T>,
     };
     reports = new ReportsService(db as never);
-    admin = new AdminService(db as never, db as never);
+    admin = new AdminService(db as never, db as never, new DbEpochService(db as never));
 
     const [uni] = await sql`select id from ref.university where code = 'BDU'`;
     uniId = uni!.id;

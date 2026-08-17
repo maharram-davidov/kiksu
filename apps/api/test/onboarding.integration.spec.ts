@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import postgres from "postgres";
+import { DbEpochService } from "../src/common/auth/epoch.service";
 import { OnboardingService } from "../src/modules/onboarding/onboarding.service";
 
 /**
@@ -29,6 +30,7 @@ suite("onboarding (integration)", () => {
     service = new OnboardingService(
       pool as never, pool as never,
       { credentialPepper: PEPPER } as never,
+      new DbEpochService(pool as never),
     );
   });
 
@@ -67,7 +69,10 @@ suite("onboarding (integration)", () => {
     const [authUser] = await sql`insert into auth.users (id) values (gen_random_uuid()) returning id`;
 
     const result = await service.confirmEmailVerification(email, code, authUser!.id);
-    expect(result.tier).toBe("email_verified");
+    // The TOKEN vocabulary, not the database's 'email_verified'. The client
+    // compares this against the tier claim on every subsequent token, so the
+    // two have to be the same string. See common/auth/tier-vocabulary.ts.
+    expect(result.tier).toBe("email");
     // Generated, never chosen: adjective-noun-number.
     expect(result.handle).toMatch(/^[a-zəğıöşüç]+-[a-zəğıöşüç]+-\d{2}$/u);
   });
@@ -102,7 +107,7 @@ suite("onboarding (integration)", () => {
     const result = await service.confirmEmailVerification(
       "İLKİN.TEST@std.bsu.edu.az", code, authUser!.id,
     );
-    expect(result.tier).toBe("email_verified");
+    expect(result.tier).toBe("email");
   });
 
   it("mints a dev auth subject that a confirm can bind to", async () => {

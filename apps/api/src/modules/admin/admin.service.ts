@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { EpochService } from "../../common/auth/epoch.service";
 import { IdentitySqlProvider } from "../../common/db/identity-sql.provider";
 import { SqlProvider } from "../../common/db/sql.provider";
 import { generateHandle } from "../onboarding/handle-generator";
@@ -41,6 +42,7 @@ export class AdminService {
   constructor(
     private readonly db: SqlProvider,
     private readonly identity: IdentitySqlProvider,
+    private readonly epochs: EpochService,
   ) {}
 
   /**
@@ -123,6 +125,15 @@ export class AdminService {
         update public.app_user set verification_tier = 'card_verified'
          where id = ${decided.existing}
         returning handle`;
+
+      // Tier grant (identity spec §7.3). This is the bump that matters most of
+      // the eight: without it the student holds a token claiming tier 'email'
+      // for up to its full 900s TTL, so the ANONİM KART badge they were just
+      // granted does not appear and every card-gated write keeps being refused
+      // — with no error a human could act on, because nothing is actually
+      // wrong. Bumping forces a refresh on the next request instead.
+      await this.epochs.bump(decided.existing, "tier_grant");
+
       return { state: "verified", handle: row?.handle ?? null };
     }
 

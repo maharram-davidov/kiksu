@@ -22,7 +22,7 @@ alternates. All UI copy is Azerbaijani first.
       apps/scraper                work.az vacancy scraper
       packages/db                 generated Supabase types
       packages/tokens             design tokens from the design file
-      supabase/migrations         21 migrations
+      supabase/migrations         22 migrations
       docs/                       the contracts — read before changing anything
       scripts/                    verification and dev tooling
       design/kiksu-mobile-screens.html   the 10 designed screens
@@ -44,9 +44,9 @@ verification is logged behind the same gate.
 
 ## Verification — run these, they are the point
 
-    ./scripts/verify-schema.sh        # applies the monolith, asserts 10 invariants
-    ./scripts/verify-migrations.sh    # same via the 21 split migrations
-    ./scripts/test-integration.sh     # stands up Postgres + seeds, runs 209 tests
+    ./scripts/verify-schema.sh        # applies the monolith, asserts 11 invariants
+    ./scripts/verify-migrations.sh    # same via the 22 split migrations
+    ./scripts/test-integration.sh     # stands up Postgres + seeds, runs 226 tests
     ./scripts/seed-local.sh           # seeds twice, proves idempotency
 
 `npx vitest run` alone gives 64 unit tests; integration tests skip without
@@ -72,13 +72,15 @@ and instant to catch by execution.
 4. **`career.*`** — **now unused.** Careers became aggregation-only, so Kiksu
    collects no real names at all. Tables kept, invariant 2 still guards them.
 
-### 10 schema invariants, enforced in CI
+### 11 schema invariants, enforced in CI
 
 `scripts/schema-invariants.sql`. They are negative-tested — each one has been
 verified to actually fail when violated. Highlights: client roles cannot reach
 sealed schemas; no FK from `career` to `app_user`; RLS on every public table;
 `public_profiles` exposes exactly six columns; no exposed table mints a
-UUIDv7 primary key (a v7 id leaks its creation timestamp).
+UUIDv7 primary key (a v7 id leaks its creation timestamp); the token-mint hook
+role cannot reach a sealed schema and its claims projection is exactly six
+columns.
 
 ### Load-bearing decisions
 
@@ -116,8 +118,26 @@ screens render real data.
 
 ## What is NOT built
 
-- **No real Supabase Auth.** The session provider has a one-line seam; the app
-  depends on the dev bypass.
+- **Supabase Auth is half wired.** The SERVER half is done: migration 0021
+  adds `internal.auth_epoch`, the six-column `internal.token_claims`
+  projection and `auth_hooks.custom_access_token_hook`, so a real token now
+  gets the claims `AuthGuard` has always verified, and `DbEpochService`
+  makes revocation work. **The CLIENT half is not.** `@supabase/supabase-js`
+  is still not a dependency of the mobile app, nothing calls
+  `signInAnonymously()`, no token is stored on the device, and the app still
+  depends on the dev bypass. The hook is also not yet registered in the
+  Supabase project's auth settings — that is a dashboard action, not SQL, and
+  until it happens the hook exists but never runs.
+- **No Redis or `LISTEN/NOTIFY` for epoch invalidation.** `DbEpochService`
+  caches in-process for 30s, so cross-instance revocation lands within 30s
+  rather than the sub-second §7.4 describes. Inside the spec's stated ≤60s
+  target, short of its design.
+- **`graduate` and `expired` tiers are unreachable.** No graduation
+  transition and no credential-expiry job exist, so no row can produce them.
+  Deliberately not faked from `status` — suspension is not expiry.
+- **Account sanctions do nothing.** `decideModeration` accepts `mute`,
+  `suspend`, `ban` and `shadowban`, writes an audit row, and never touches
+  `app_user.status`. A banned student keeps posting.
 - **No mail delivery.** OTP is logged behind the dev gate only.
 - **No tier 2 moderation** (LLM pass) — deferred by decision. Abuse and
   defamation are caught only by human reports.

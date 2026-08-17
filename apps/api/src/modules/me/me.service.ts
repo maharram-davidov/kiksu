@@ -127,6 +127,14 @@ export class MeService {
    *     `sakit-pərvanə-37` to someone else the day after its owner dropped it
    *     would let a stranger inherit a reputation, or impersonate one — the
    *     identity spec's reason for a long quarantine.
+   *
+   * Deliberately does NOT bump the revocation epoch, unlike every other change
+   * to who someone is. The handle is excluded from the access token by identity
+   * spec §7.2 — precisely because a stale token would render the previous
+   * handle and become a rename oracle — so no live token carries a value this
+   * rotation invalidates. Adding a bump here would log the user out of every
+   * device to no purpose, and a forced re-authentication timed to the moment
+   * someone changed their pseudonym is itself a small signal about them.
    */
   async rotateHandle(user: KiksuRequestContext): Promise<{ handle: string }> {
     return this.db.transaction(async (tx) => {
