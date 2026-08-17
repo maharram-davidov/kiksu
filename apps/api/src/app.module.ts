@@ -21,6 +21,7 @@ import { AdminModule } from "./modules/admin/admin.module";
 import { ReportsModule } from "./modules/reports/reports.module";
 import { MeModule } from "./modules/me/me.module";
 import { ChatModule } from "./modules/chat/chat.module";
+import { IngestModule } from "./modules/ingest/ingest.module";
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { ChatModule } from "./modules/chat/chat.module";
     ReportsModule,
     MeModule,
     ChatModule,
+    IngestModule,
   ],
   providers: [
     // Fail-closed by default: every route requires a verified caller unless it opts
