@@ -13,7 +13,12 @@ suite("commerce service (integration)", () => {
 
   beforeAll(async () => {
     sql = postgres(url!, { prepare: false, onnotice: () => {} });
-    service = new CommerceService({ sql } as never);
+    // Mirror SqlProvider: creation runs in a transaction.
+    const db = {
+      sql,
+      transaction: <T,>(fn: (tx: postgres.TransactionSql) => Promise<T>) => sql.begin(fn) as Promise<T>,
+    };
+    service = new CommerceService(db as never);
     const [uni] = await sql`select id from ref.university where code = 'BDU'`;
     if (!uni) throw new Error("seed missing: BDU");
     user = {
@@ -102,6 +107,102 @@ suite("commerce service (integration)", () => {
     const [ada] = await sql`select id from ref.university where code = 'ADA'`;
     const listings = await service.listListings({ ...user, univId: ada!.id });
     expect(listings).toHaveLength(0);
+  });
+
+  describe("creating a listing", () => {
+    let seller: KiksuRequestContext;
+
+    beforeAll(async () => {
+      const [uni] = await sql`select id from ref.university where code = 'BDU'`;
+      const [au] = await sql`insert into auth.users (id) values (gen_random_uuid()) returning id`;
+      const [u] = await sql`
+        insert into public.app_user (auth_user_id, handle, university_id, verification_tier, status)
+        values (${au!.id}, 'satici-testi-01', ${uni!.id}, 'email_verified', 'active')
+        returning id`;
+      seller = { ...user, appUserId: u!.id };
+    });
+
+    it("creates a listing and returns it fully formed", async () => {
+      const l = await service.createListing(seller, {
+        categoryKey: "textbooks",
+        title: "Diskret riyaziyyat konspekti",
+        description: "Öz əlyazmam, imtahana hazırlaşmaq üçün kifayətdir.",
+        priceMinor: 1500,
+        isNegotiable: true,
+        condition: "good",
+        meetupNotes: ["Baş korpus, dərslər arası."],
+        relatedCourseId: undefined,
+      });
+      expect(l.price_minor).toBe(1500);          // 15 ₼, never a float
+      expect(l.is_negotiable).toBe(true);
+      expect(l.seller!.handle).toBe("satici-testi-01");
+      expect(l.meetup_notes).toContain("Baş korpus, dərslər arası.");
+    });
+
+    it("rejects an unknown category", async () => {
+      await expect(service.createListing(seller, {
+        categoryKey: "spaceships", title: "Test", priceMinor: 100,
+        isNegotiable: false, condition: "good", meetupNotes: [],
+      })).rejects.toThrow();
+    });
+
+    it("rejects a price beyond the ceiling, since zeros are easy to fumble", async () => {
+      await expect(service.createListing(seller, {
+        categoryKey: "other", title: "Mistyped", priceMinor: 999_999_00,
+        isNegotiable: false, condition: "good", meetupNotes: [],
+      })).rejects.toThrow();
+    });
+
+    it("rejects a course from another campus", async () => {
+      const [ada] = await sql`select id from ref.university where code = 'ADA'`;
+      const [course] = await sql`select id from ref.course limit 1`;
+      await expect(service.createListing({ ...seller, univId: ada!.id }, {
+        categoryKey: "textbooks", title: "Test", priceMinor: 100,
+        isNegotiable: false, condition: "good", meetupNotes: [],
+        relatedCourseId: course!.id,
+      })).rejects.toThrow();
+    });
+
+    it("opens a case for a phone number but leaves the listing VISIBLE", async () => {
+      const l = await service.createListing(seller, {
+        categoryKey: "electronics",
+        title: "Kalkulyator satılır",
+        description: "Maraqlananlar 0505551234 nömrəsinə yazsın.",
+        priceMinor: 4000, isNegotiable: false, condition: "good", meetupNotes: [],
+      });
+
+      const [row] = await sql`select moderation_state::text as s from public.listing where id = ${l.id}`;
+      // Deliberately NOT limited, unlike a forum post: in-app chat does not
+      // exist, so a phone number is currently the only way a buyer can reach a
+      // seller. Limiting would make the marketplace unusable rather than safer.
+      expect(row!.s).toBe("visible");
+
+      const [c] = await sql`
+        select opened_by, severity from moderation.mod_case where subject_id = ${l.id}`;
+      // A human still gets to look at it.
+      expect(c!.opened_by).toBe("automod");
+      expect(c!.severity).toBe(5);
+    });
+
+    it("opens no case for an ordinary listing", async () => {
+      const l = await service.createListing(seller, {
+        categoryKey: "furniture", title: "Kitab rəfi",
+        description: "İki illik istifadə, möhkəmdir.",
+        priceMinor: 3000, isNegotiable: true, condition: "fair", meetupNotes: [],
+      });
+      const cases = await sql`select id from moderation.mod_case where subject_id = ${l.id}`;
+      expect(cases).toHaveLength(0);
+    });
+
+    it("shows a new listing on the seller's own campus and nowhere else", async () => {
+      const l = await service.createListing(seller, {
+        categoryKey: "other", title: "Kampus yoxlaması",
+        priceMinor: 500, isNegotiable: false, condition: "good", meetupNotes: [],
+      });
+      const [ada] = await sql`select id from ref.university where code = 'ADA'`;
+      await expect(service.getListing({ ...seller, univId: ada!.id }, l.id)).rejects.toThrow();
+      await expect(service.getListing(seller, l.id)).resolves.toBeTruthy();
+    });
   });
 
   it("returns the design's vacancies with deadlines counted in whole days", async () => {

@@ -263,3 +263,8 @@ export interface ClassDetail {
   /** Null when not enrolled — the sheet hides absence recording. */
   enrollment_id: string | null;
 }
+
+
+export interface MarketCategory { id: string; key: string; name: string }
+
+export type ListingCondition = "new" | "like_new" | "good" | "fair" | "poor";

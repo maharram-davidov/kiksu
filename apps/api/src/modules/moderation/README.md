@@ -42,6 +42,21 @@ layer that fails open is worse than one that is honestly missing.** The seam is
 `ModerationService.classifyOnWrite`, which already returns a shape that
 accommodates a second tier.
 
+### Listings are a deliberate exception
+
+Forum posts and reviews containing a phone number are **limited immediately**.
+Listings are **not** — they open a case for a human and stay visible.
+
+That is not an inconsistency. In-app deal chat does not exist yet, so a phone
+number is currently the only way a buyer can reach a seller. Limiting on
+contact details would make the marketplace unusable rather than safer, and an
+unusable marketplace pushes the same conversation to WhatsApp where Kiksu can
+see none of it.
+
+**This should flip to limiting the moment deal chat ships.** The exception
+exists because there is no alternative, not because posting a number in a
+listing is fine. The composer already warns before the seller types it.
+
 ### What that means in the meantime
 
 Abuse, harassment, and criticism of a lecturer that has tipped into something

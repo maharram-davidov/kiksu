@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { SqlProvider } from "../../common/db/sql.provider";
 import type { KiksuRequestContext } from "../../common/auth/request-context";
-import type { ListingDto, VacancyDto } from "./commerce.types";
+import { runRules, worstSeverity } from "../moderation/rules";
+import type { CategoryDto, CreateListingInput, ListingDto, VacancyDto } from "./commerce.types";
 
 /**
  * Marketplace and vacancy reads.
@@ -87,6 +88,81 @@ export class CommerceService {
     `;
     if (!row) throw new NotFoundException("listing_not_found");
     return this.toListing(row);
+  }
+
+  async listCategories(): Promise<CategoryDto[]> {
+    return this.db.sql<CategoryDto[]>`
+      select id, key, name_az as name from ref.marketplace_category
+       where is_active order by display_order, name_az
+    `;
+  }
+
+  /**
+   * Creates a listing.
+   *
+   * MODERATION DECISION, and it is a deliberate departure from how forum posts
+   * are treated. The tier 1 rules fire on a phone number in a listing exactly
+   * as they do in a post — but in-app chat does not exist yet, so a phone
+   * number is currently the ONLY way a buyer can reach a seller. Auto-limiting
+   * on contact details would make the marketplace unusable rather than safer.
+   *
+   * So listings open a moderation case for a human to look at, and stay
+   * visible. This should flip to limiting the moment deal chat ships, and the
+   * README says so: the reason it is tolerated is the absence of an
+   * alternative, not a judgement that posting a number is fine.
+   */
+  async createListing(
+    user: KiksuRequestContext, input: CreateListingInput,
+  ): Promise<ListingDto> {
+    const id = await this.db.transaction(async (tx) => {
+      const [cat] = await tx<Array<{ id: string }>>`
+        select id from ref.marketplace_category where key = ${input.categoryKey} and is_active`;
+      if (!cat) throw new BadRequestException("unknown_category");
+
+      if (input.priceMinor < 0 || input.priceMinor > 100_000_00) {
+        // A ceiling, because a mistyped price is far more likely than a
+        // hundred-thousand-manat textbook and the zeros are easy to fumble.
+        throw new BadRequestException("price_out_of_range");
+      }
+
+      if (input.relatedCourseId) {
+        const [course] = await tx`
+          select 1 from ref.course
+           where id = ${input.relatedCourseId} and university_id = ${user.univId}`;
+        if (!course) throw new BadRequestException("unknown_course");
+      }
+
+      const [row] = await tx<Array<{ id: string }>>`
+        insert into public.listing
+          (seller_id, university_id, category_id, related_course_id, title, description,
+           price_minor, currency, is_negotiable, condition, meetup_notes, status, published_at)
+        values (${user.appUserId}, ${user.univId}, ${cat.id},
+                ${input.relatedCourseId ?? null}, ${input.title}, ${input.description ?? null},
+                ${input.priceMinor}, 'AZN', ${input.isNegotiable},
+                ${input.condition}::public.listing_condition, ${input.meetupNotes},
+                'active', now())
+        returning id
+      `;
+      if (!row) throw new BadRequestException("listing_failed");
+
+      // Classify, but do not limit — see the note on this method.
+      const hits = runRules([input.title, input.description, ...input.meetupNotes].join("\n"));
+      if (hits.length > 0) {
+        await tx`
+          insert into moderation.mod_case
+            (subject_type, subject_id, university_id, opened_by, state, severity,
+             report_count, resolution_note)
+          values ('listing', ${row.id}, ${user.univId}, 'automod', 'open',
+                  ${worstSeverity(hits) ?? 1}, 0,
+                  ${hits.map((h) => `${h.rule}: ${h.note}`).join(" ")})
+          on conflict do nothing
+        `;
+      }
+
+      return row.id;
+    });
+
+    return this.getListing(user, id);
   }
 
   async listVacancies(user: KiksuRequestContext, kind?: string): Promise<VacancyDto[]> {

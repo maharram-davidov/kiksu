@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, apiPost } from "./client";
 import type {
-  Attendance, Board, ClassDetail, Listing, MyProfile, PostDetail, PostPage, Today, Vacancy, WeekGrid,
+  Attendance, Board, ClassDetail, Listing, MarketCategory, MyProfile, PostDetail, PostPage,
+  Today, Vacancy, WeekGrid,
 } from "./types";
 
 export function useWeekGrid() {
@@ -188,5 +189,13 @@ export function useListing(id: string | null) {
     enabled: Boolean(id),
     staleTime: 60 * 1000,
     retry: 1,
+  });
+}
+
+export function useMarketCategories() {
+  return useQuery({
+    queryKey: ["market", "categories"],
+    queryFn: () => apiGet<MarketCategory[]>("/market/categories"),
+    staleTime: 60 * 60 * 1000,
   });
 }

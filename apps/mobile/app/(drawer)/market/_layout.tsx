@@ -16,6 +16,7 @@ export default function MarketLayout() {
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="listing/[id]" />
+      <Stack.Screen name="new" options={{ presentation: "modal" }} />
     </Stack>
   );
 }

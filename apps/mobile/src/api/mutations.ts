@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiPatch, apiPost } from "./client";
-import type { Comment, MyProfile, PostDetail, PrivacyKey } from "./types";
+import type { Comment, Listing, ListingCondition, MyProfile, PostDetail, PrivacyKey } from "./types";
 
 /**
  * Optimistic vote.
@@ -119,5 +119,27 @@ export function useRecordAbsence(sectionId: string) {
       qc.invalidateQueries({ queryKey: ["timetable", "section", sectionId] });
       qc.invalidateQueries({ queryKey: ["timetable", "attendance"] });
     },
+  });
+}
+
+/** Creating a listing is never optimistic: the server assigns the id. */
+export function useCreateListing() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      categoryKey: string; title: string; description?: string;
+      priceMinor: number; isNegotiable: boolean; condition: ListingCondition;
+      meetupNotes: string[];
+    }) =>
+      apiPost<Listing>("/market/listings", {
+        category_key: input.categoryKey,
+        title: input.title,
+        description: input.description,
+        price_minor: input.priceMinor,
+        is_negotiable: input.isNegotiable,
+        condition: input.condition,
+        meetup_notes: input.meetupNotes,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["market", "listings"] }),
   });
 }

@@ -59,3 +59,22 @@ export interface VacancyDto {
   days_left: number | null;
   employer: { slug: string; name: string; logo_initials: string | null; brand_color: string | null };
 }
+
+
+export interface CategoryDto {
+  id: string;
+  key: string;
+  name: string;
+}
+
+export interface CreateListingInput {
+  categoryKey: string;
+  title: string;
+  description?: string;
+  /** Minor units. The client converts manat to qəpik before sending. */
+  priceMinor: number;
+  isNegotiable: boolean;
+  condition: string;
+  meetupNotes: string[];
+  relatedCourseId?: string;
+}

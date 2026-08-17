@@ -233,5 +233,25 @@
     "loadFailed": "Elan yüklənmədi",
     "noPhotos": "Şəkil yoxdur",
     "report": "Şikayət et"
+  },
+  "sell": {
+    "sell": "Elan yerləşdir",
+    "newListing": "Yeni elan",
+    "category": "Kateqoriya",
+    "titleField": "Başlıq",
+    "titlePlaceholder": "Nə satırsan?",
+    "descField": "Təsvir",
+    "descPlaceholder": "Vəziyyəti, nə vaxt alındığı, çatışmazlıqlar…",
+    "priceField": "Qiymət",
+    "negotiable": "Razılaşma olar",
+    "conditionField": "Vəziyyət",
+    "meetupField": "Görüş yeri",
+    "meetupPlaceholder": "Məsələn: Baş korpusun qarşısı",
+    "publish": "Yerləşdir",
+    "publishing": "Yerləşdirilir…",
+    "published": "Elan yerləşdirildi",
+    "failed": "Yerləşdirilmədi",
+    "freeHint": "0 yazsan, pulsuz sayılacaq",
+    "contactWarning": "Nömrə və ya e-poçt yazma. Alıcı ilə Kiksu üzərindən razılaşın və ödənişi görüş zamanı edin."
   }
 }

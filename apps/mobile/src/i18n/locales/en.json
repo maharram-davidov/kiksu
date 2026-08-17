@@ -236,5 +236,25 @@
     "loadFailed": "Couldn't load this listing",
     "noPhotos": "No photos",
     "report": "Report"
+  },
+  "sell": {
+    "sell": "Post a listing",
+    "newListing": "New listing",
+    "category": "Category",
+    "titleField": "Title",
+    "titlePlaceholder": "What are you selling?",
+    "descField": "Description",
+    "descPlaceholder": "Condition, when you bought it, any faults…",
+    "priceField": "Price",
+    "negotiable": "Negotiable",
+    "conditionField": "Condition",
+    "meetupField": "Meeting point",
+    "meetupPlaceholder": "e.g. in front of the main building",
+    "publish": "Publish",
+    "publishing": "Publishing…",
+    "published": "Listing published",
+    "failed": "Couldn't publish",
+    "freeHint": "Enter 0 to give it away",
+    "contactWarning": "Don't include a phone number or email. Arrange through Kiksu and pay when you meet."
   }
 }

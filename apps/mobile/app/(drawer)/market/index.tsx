@@ -33,11 +33,13 @@ export default function MarketScreen() {
   }
 
   return (
+    <View style={{ flex: 1 }}>
     <FlatList
       style={{ backgroundColor: theme.colors.background }}
       contentContainerStyle={{ padding: 16, gap: 10 }}
       data={data}
       keyExtractor={(l) => l.id}
+      ListFooterComponent={<View style={{ height: 72 }} />}
       ListHeaderComponent={
         // The design puts this on the listing screen. Kiksu holds no money and
         // arbitrates no disputes, so saying it plainly and early is the only
@@ -106,6 +108,13 @@ export default function MarketScreen() {
         </Pressable>
       )}
     />
+    <Pressable
+      onPress={() => router.push("/market/new")}
+      style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+    >
+      <Text style={[styles.fabText, { color: theme.colors.onPrimary }]}>+ {t("sell.sell")}</Text>
+    </Pressable>
+    </View>
   );
 }
 
@@ -124,4 +133,9 @@ const styles = StyleSheet.create({
   seller: { borderTopWidth: 1, paddingTop: 8, marginTop: 2, gap: 2 },
   handle: { fontSize: 12, fontWeight: "600" },
   sellerMeta: { fontSize: 10 },
+  fab: {
+    position: "absolute", right: 16, bottom: 20,
+    paddingHorizontal: 18, paddingVertical: 13, borderRadius: 26,
+  },
+  fabText: { fontSize: 14, fontWeight: "700" },
 });
