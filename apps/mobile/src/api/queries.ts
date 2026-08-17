@@ -114,3 +114,28 @@ export function confirmEmailVerification(email: string, code: string, authUserId
     { email, code, auth_user_id: authUserId },
   );
 }
+
+export function submitCardVerification(input: {
+  universityId: string; authUserId: string; evidencePath: string; evidenceSha256: string;
+}) {
+  return apiPost<{ state: string; sla_due_at: string }>("/onboarding/verify/card", {
+    university_id: input.universityId,
+    auth_user_id: input.authUserId,
+    evidence_path: input.evidencePath,
+    evidence_sha256: input.evidenceSha256,
+  });
+}
+
+export function useVerificationStatus(authUserId: string) {
+  return useQuery({
+    queryKey: ["onboarding", "status", authUserId],
+    queryFn: () =>
+      apiGet<{ state: string; method: string | null; sla_due_at: string | null }>(
+        `/onboarding/verify/status?auth_user_id=${encodeURIComponent(authUserId)}`,
+      ),
+    enabled: authUserId.length > 0,
+    // A human is deciding, so polling hard achieves nothing but battery drain.
+    refetchInterval: 30_000,
+    retry: 1,
+  });
+}

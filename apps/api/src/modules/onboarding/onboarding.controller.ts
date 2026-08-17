@@ -1,10 +1,21 @@
-import { Body, Controller, Get, HttpCode, NotFoundException, Post } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, NotFoundException, Post, Query } from "@nestjs/common";
 import { z } from "zod";
 import { Public } from "../../common/auth/public.decorator";
 import { OnboardingService, type UniversityDto } from "./onboarding.service";
 import { ConfigService } from "../../config/config.service";
 
 const startBody = z.object({ email: z.string().email().max(254) });
+const cardBody = z.object({
+  university_id: z.string().uuid(),
+  auth_user_id: z.string().uuid(),
+  /** Path in the PRIVATE evidence bucket. The image never passes through the API. */
+  evidence_path: z.string().min(1).max(512),
+  /** Hex SHA-256 of the uploaded bytes, so a later swap is detectable. */
+  evidence_sha256: z.string().regex(/^[0-9a-f]{64}$/),
+});
+
+const statusQuery = z.object({ auth_user_id: z.string().uuid() });
+
 const confirmBody = z.object({
   email: z.string().email().max(254),
   code: z.string().regex(/^\d{6}$/),
@@ -18,6 +29,24 @@ export class OnboardingController {
     private readonly onboarding: OnboardingService,
     private readonly config: ConfigService,
   ) {}
+
+  /** Submits a student card for manual review. Verifies nobody by itself. */
+  @Public()
+  @Post("verify/card")
+  @HttpCode(202)
+  card(@Body() body: unknown): Promise<{ state: string; sla_due_at: string }> {
+    const b = cardBody.parse(body);
+    return this.onboarding.submitCardVerification(
+      b.university_id, b.auth_user_id, b.evidence_path, b.evidence_sha256,
+    );
+  }
+
+  /** Poll for a decision. Coarse state only; a rejection reason belongs in appeal. */
+  @Public()
+  @Get("verify/status")
+  status(@Query() query: unknown): Promise<{ state: string; method: string | null; sla_due_at: string | null }> {
+    return this.onboarding.getVerificationStatus(statusQuery.parse(query).auth_user_id);
+  }
 
   /**
    * DEVELOPMENT ONLY: mints an auth subject so onboarding can be walked end to

@@ -112,6 +112,65 @@ suite("onboarding (integration)", () => {
     expect(row).toBeTruthy();
   });
 
+  describe("student card route", () => {
+    const sha = "a".repeat(64);
+
+    it("records a review case with an SLA deadline rather than verifying anyone", async () => {
+      const [uni] = await sql`select id from ref.university where code = 'BDU'`;
+      const [au] = await sql`insert into auth.users (id) values (gen_random_uuid()) returning id`;
+      const res = await service.submitCardVerification(uni!.id, au!.id, "cards/x.jpg", sha);
+
+      // Submitting a card must NOT grant a tier. A human decides.
+      expect(res.state).toBe("in_review");
+      const due = new Date(res.sla_due_at).getTime() - Date.now();
+      // The design promises "24 saata qədər"; the deadline is what makes that
+      // auditable rather than decorative.
+      expect(due).toBeGreaterThan(23 * 3600 * 1000);
+      expect(due).toBeLessThan(25 * 3600 * 1000);
+    });
+
+    it("stores an evidence path and purge deadline, never the image", async () => {
+      const [uni] = await sql`select id from ref.university where code = 'BDU'`;
+      const [au] = await sql`insert into auth.users (id) values (gen_random_uuid()) returning id`;
+      await service.submitCardVerification(uni!.id, au!.id, "cards/purge-me.jpg", sha);
+
+      const [row] = await sql`
+        select evidence_path, evidence_purge_at, evidence_sha256
+          from identity.verification_attempt
+         where evidence_path = 'cards/purge-me.jpg'`;
+      expect(row!.evidence_path).toBe("cards/purge-me.jpg");
+      expect(row!.evidence_purge_at).toBeTruthy();
+      expect(row!.evidence_sha256).toBeTruthy();
+    });
+
+    it("keeps only one live submission, so a reviewer never sees the same case twice", async () => {
+      const [uni] = await sql`select id from ref.university where code = 'BDU'`;
+      const [au] = await sql`insert into auth.users (id) values (gen_random_uuid()) returning id`;
+      await service.submitCardVerification(uni!.id, au!.id, "cards/first.jpg", sha);
+      await service.submitCardVerification(uni!.id, au!.id, "cards/second.jpg", sha);
+
+      const live = await sql`
+        select va.state::text as state from identity.verification_attempt va
+          join identity.subject s on s.id = va.subject_id
+         where va.method = 'student_card' and va.state = 'in_review'
+           and va.evidence_path in ('cards/first.jpg', 'cards/second.jpg')`;
+      expect(live).toHaveLength(1);
+    });
+
+    it("reports status without the caller having an app_user yet", async () => {
+      const [uni] = await sql`select id from ref.university where code = 'BDU'`;
+      const [au] = await sql`insert into auth.users (id) values (gen_random_uuid()) returning id`;
+
+      const before = await service.getVerificationStatus(au!.id);
+      expect(before.state).toBe("none");
+
+      await service.submitCardVerification(uni!.id, au!.id, "cards/status.jpg", sha);
+      const after = await service.getVerificationStatus(au!.id);
+      expect(after.state).toBe("in_review");
+      expect(after.method).toBe("student_card");
+    });
+  });
+
   it("keeps the sealed link out of the public schema entirely", async () => {
     const email = "sizinti.yoxlamasi@std.bsu.edu.az";
     await service.startEmailVerification(email);

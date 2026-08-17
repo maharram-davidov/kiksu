@@ -48,8 +48,11 @@ This is the product's central promise. Getting it wrong is unrecoverable.
 The design is the source of truth for UI and for these behaviours:
 - Verification tiers are VISIBLE BADGES on posts: `ANONİM ✓` (email-verified) vs
   `ANONİM KART` (card-verified). Tier must be cheap to read on every post.
-- Verification routes + advertised SLAs: university email ("2 dəqiqə", recommended),
-  student card photo ("24 saata qədər", manual review), invite code (6 digits).
+- Verification routes: **university email and student card ONLY**. Invite codes
+  were considered and dropped by product decision — a 6-digit invite is not a
+  credential at realistic volumes, and two working routes cover the market.
+  Advertised SLAs: email "2 dəqiqə" (recommended), card "24 saata qədər"
+  (manual review).
 - The composer shows the alias you WILL get before you post ("ANONİM 5 KİMİ YAZ").
   Alias assignment must be queryable ahead of the write AND reserved against races.
 - Attendance shown as `4 / 12` with "33% of allowed absences used" and expulsion at

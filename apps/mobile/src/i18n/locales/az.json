@@ -126,11 +126,9 @@
     "method": "Doğrulama üsulu",
     "emailMethod": "Universitet e-poçtu",
     "cardMethod": "Tələbə kartı şəkli",
-    "inviteMethod": "Dəvət kodu",
     "recommended": "TÖVSİYƏ",
     "minutes": "{{count}} dəqiqə",
     "upToHours": "{{count}} saata qədər",
-    "fromCoursemate": "Kursdaşından 6 rəqəmli kod",
     "notAvailable": "Hazırda əlçatan deyil",
     "continue": "Davam et",
     "anonymityNote": "Real adın heç vaxt forumda görünmür. Doğrulama yalnız tələbə statusunu təsdiqləyir.",
@@ -147,6 +145,14 @@
     "yourHandle": "Forum ləqəbin",
     "handleNote": "Ləqəbin avtomatik yaradılır və 14 gündən bir dəyişdirilə bilər.",
     "enter": "Kiksu-ya keç",
-    "devCode": "İNKİŞAF: kod"
+    "devCode": "İNKİŞAF: kod",
+    "cardHint": "Tələbə kartının şəklini yüklə",
+    "cardTitle": "Tələbə kartın",
+    "cardBody": "Kartın ön tərəfinin aydın şəklini çək. Ad, universitet və tələbə nömrəsi oxunaqlı olmalıdır.",
+    "cardSubmit": "Şəkli göndər",
+    "pendingTitle": "Yoxlanılır",
+    "pendingBody": "Tələbə kartın əl ilə yoxlanılır. Nəticəni 24 saat ərzində bildirəcəyik.",
+    "cardRetention": "Şəkil qərardan sonra silinir və heç vaxt profilində görünmür.",
+    "cardNotImplemented": "Şəkil yükləmə hələ qoşulmayıb — bu ekran axını göstərir."
   }
 }

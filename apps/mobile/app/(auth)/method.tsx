@@ -8,12 +8,13 @@ export default function MethodScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
   const router = useRouter();
-  const { code, sample } = useLocalSearchParams<{ code: string; sample: string }>();
+  const { code, sample, universityId } =
+    useLocalSearchParams<{ code: string; sample: string; universityId: string }>();
 
-  // Card and invite are shown but disabled: the server has no route for either
-  // yet. Hiding them would misrepresent what Kiksu will offer; showing them as
-  // available would be a lie the student discovers after typing. "Not
-  // available yet" is the honest middle.
+  // Two routes only, by product decision — invite codes were dropped. Both are
+  // live. The SLA on each is shown because they differ by a factor of 700: a
+  // student choosing the card route should know it means waiting a day, not
+  // discover that after submitting.
   const methods = [
     {
       key: "email",
@@ -26,18 +27,10 @@ export default function MethodScreen() {
     {
       key: "card",
       title: t("onboarding.cardMethod"),
-      detail: t("onboarding.notAvailable"),
+      detail: t("onboarding.cardHint"),
       sla: t("onboarding.upToHours", { count: 24 }),
       recommended: false,
-      enabled: false,
-    },
-    {
-      key: "invite",
-      title: t("onboarding.inviteMethod"),
-      detail: t("onboarding.fromCoursemate"),
-      sla: "",
-      recommended: false,
-      enabled: false,
+      enabled: true,
     },
   ];
 
@@ -53,7 +46,13 @@ export default function MethodScreen() {
           <Pressable
             key={m.key}
             disabled={!m.enabled}
-            onPress={() => router.push({ pathname: "/(auth)/email", params: { code, sample } })}
+            onPress={() =>
+              router.push(
+                m.key === "email"
+                  ? { pathname: "/(auth)/email", params: { code, sample } }
+                  : { pathname: "/(auth)/card", params: { code, universityId } },
+              )
+            }
             style={({ pressed }) => [
               styles.card,
               {

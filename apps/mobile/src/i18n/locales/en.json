@@ -129,11 +129,9 @@
     "method": "Verification method",
     "emailMethod": "University email",
     "cardMethod": "Student card photo",
-    "inviteMethod": "Invite code",
     "recommended": "RECOMMENDED",
     "minutes": "{{count}} minutes",
     "upToHours": "up to {{count}} hours",
-    "fromCoursemate": "6-digit code from a coursemate",
     "notAvailable": "Not available yet",
     "continue": "Continue",
     "anonymityNote": "Your real name is never shown on the forum. Verification only confirms you are a student.",
@@ -150,6 +148,14 @@
     "yourHandle": "Your forum handle",
     "handleNote": "Your handle is generated and can be changed every 14 days.",
     "enter": "Enter Kiksu",
-    "devCode": "DEV: code"
+    "devCode": "DEV: code",
+    "cardHint": "Upload a photo of your student card",
+    "cardTitle": "Your student card",
+    "cardBody": "Photograph the front clearly. Your name, university and student number must be readable.",
+    "cardSubmit": "Submit photo",
+    "pendingTitle": "Under review",
+    "pendingBody": "Your card is being checked by a person. We'll tell you within 24 hours.",
+    "cardRetention": "The photo is deleted after a decision and never appears on your profile.",
+    "cardNotImplemented": "Photo upload isn't wired yet — this screen shows the flow."
   }
 }

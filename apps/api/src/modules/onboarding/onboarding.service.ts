@@ -132,6 +132,109 @@ export class OnboardingService {
   pendingCodeForDevelopment: string | null = null;
 
   /**
+   * Submits a student card for manual review.
+   *
+   * Deliberately does NOT verify anyone. It records an attempt in `in_review`
+   * with an SLA deadline and returns; a human decides. The design promises
+   * "24 saata qədər", and `sla_due_at` is what makes that promise measurable
+   * rather than decorative — a queue with no deadline column cannot be audited
+   * against the thing the app told a student.
+   *
+   * The image itself never passes through this service. The client uploads to
+   * a private bucket and submits the resulting path plus a content hash, so a
+   * swapped file after submission is detectable. `evidence_purge_at` carries
+   * the deletion deadline: an identity document is the most sensitive thing
+   * Kiksu will ever hold, and holding it past a decision has no upside.
+   */
+  async submitCardVerification(
+    universityId: string, authUserId: string, evidencePath: string, evidenceSha256: string,
+  ): Promise<{ state: string; sla_due_at: string }> {
+    const pepper = this.config.credentialPepper;
+
+    const [route] = await this.db.sql<Array<{ sla_minutes: number }>>`
+      select sla_minutes from ref.university_verification_route
+       where university_id = ${universityId}
+         and method = 'student_card'
+         and is_enabled
+    `;
+    if (!route) throw new BadRequestException("verification_route_unavailable");
+
+    return this.identity.transaction(async (tx) => {
+      // The subject key for a card is the auth subject, not the card number:
+      // card numbers are not yet parsed at submission time, and binding the
+      // credential is the reviewer's job once they can read the document.
+      const subjectKey = hashCredentialBytes("student_card", authUserId, pepper);
+      const [subject] = await tx<Array<{ id: string }>>`
+        insert into identity.subject (subject_key, key_version)
+        values (${subjectKey}, ${CREDENTIAL_KEY_VERSION})
+        on conflict (subject_key) do update set updated_at = now()
+        returning id
+      `;
+      if (!subject) throw new BadRequestException("verification_failed");
+
+      // One live submission at a time. Without this a student who taps twice
+      // puts two documents in the queue and a reviewer decides the same case
+      // twice.
+      await tx`
+        update identity.verification_attempt
+           set state = 'expired', updated_at = now()
+         where subject_id = ${subject.id}
+           and method = 'student_card'
+           and state in ('pending', 'in_review')
+      `;
+
+      const [row] = await tx<Array<{ sla_due_at: Date }>>`
+        insert into identity.verification_attempt
+          (subject_id, university_id, method, state, evidence_path, evidence_sha256,
+           evidence_purge_at, sla_due_at)
+        values (${subject.id}, ${universityId}, 'student_card', 'in_review',
+                ${evidencePath}, decode(${evidenceSha256}, 'hex'),
+                -- 30 days is the outer bound from the product plan; a decided
+                -- case should be purged sooner by the sweeper.
+                now() + interval '30 days',
+                now() + (${route.sla_minutes} || ' minutes')::interval)
+        returning sla_due_at
+      `;
+      return {
+        state: "in_review",
+        sla_due_at: row?.sla_due_at.toISOString() ?? "",
+      };
+    });
+  }
+
+  /**
+   * Verification status for a caller who may not have an app_user yet.
+   *
+   * Returns the coarse state only. It deliberately does not say WHY a card was
+   * rejected in this response — the reason belongs in the appeal flow, where
+   * it can be written for a person, not inferred from an enum by a client.
+   */
+  async getVerificationStatus(authUserId: string): Promise<{
+    state: string; method: string | null; sla_due_at: string | null;
+  }> {
+    const pepper = this.config.credentialPepper;
+    const subjectKey = hashCredentialBytes("student_card", authUserId, pepper);
+
+    const [row] = await this.identity.sql<
+      Array<{ state: string; method: string; sla_due_at: Date | null }>
+    >`
+      select va.state::text, va.method::text, va.sla_due_at
+        from identity.verification_attempt va
+        join identity.subject s on s.id = va.subject_id
+       where s.subject_key = ${subjectKey}
+       order by va.created_at desc
+       limit 1
+    `;
+
+    if (!row) return { state: "none", method: null, sla_due_at: null };
+    return {
+      state: row.state,
+      method: row.method,
+      sla_due_at: row.sla_due_at?.toISOString() ?? null,
+    };
+  }
+
+  /**
    * DEVELOPMENT ONLY. Stands in for a Supabase anonymous sign-in so onboarding
    * can be walked without a Supabase project. The controller refuses to expose
    * this unless the development gate is open.
