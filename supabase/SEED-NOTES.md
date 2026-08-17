@@ -15,11 +15,39 @@ render with real data. The week grid reconstructs the design exactly — CS 214
 Əliyeva is the card the Today screen shows as "45 DƏQ SONRA", and
 `ref.effective_absence_limit()` returns the 12 behind the design's "4 / 12".
 
-## Not yet seeded
+## Content seed (`seed-content.sql`)
 
-Forum posts and comments, reviews, marketplace listings, vacancies, and
-`app_user` rows. These need care rather than volume, and the reason is the
-identity model:
+Users, forum threads, a poll, and 61 reviews. Split from `seed.sql` because
+this half touches the identity model and had to be got right rather than
+merely got in. Verified on the seeded database:
+
+- **Zero** rows carry authorship in `public.post.author_app_user_id` or
+  `public.post_comment.author_app_user_id`. All 6 posts and 3 comments have
+  their authorship in `internal.post_author` / `internal.comment_author`.
+- Thread aliases come from `internal.allocate_thread_alias()`, not hand-written
+  inserts. The OP provably holds ordinal 1 (the helper raises if it does not,
+  per identity spec P4) and commenters get 2, 3, 4 — exactly the design's
+  `ANONİM 1 MÜƏLLİF` through `ANONİM 4`.
+- The opt-in campus badge is set on exactly one post, on the national board.
+  The database rejects it anywhere else.
+
+### The design's professor numbers do not quite reconcile
+
+The review page shows dos. Nigar Əliyeva at **4.2** overall with histogram
+5:35 4:16 3:7 2:2 1:1. That histogram sums to 61 reviews, which matches the
+stated count — but its weighted mean is 265/61 = **4.34**, which rounds to 4.3,
+not 4.2.
+
+The seed reproduces the histogram exactly and therefore reports 4.3. The four
+criterion averages match the design exactly (4.6 / 4.0 / 3.5 / 2.9) via
+per-star lookup tables chosen to land on those means. Fudging the overall to
+4.2 would mean either breaking the histogram or writing the aggregate directly
+past the trigger that maintains it — both worse than a 0.1 discrepancy.
+Worth confirming which number the design intends.
+
+## Still not seeded
+
+Marketplace listings and vacancies. Same reasoning as below applied to those:
 
 - Anonymous post authorship belongs in `internal.post_author`, NOT in
   `public.post.author_app_user_id`, which stays NULL for anonymous posts. Seeding
