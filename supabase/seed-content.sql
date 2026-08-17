@@ -184,7 +184,7 @@ begin
     for j in 1..v_counts[i] loop
       insert into public.review (university_id, course_id, instructor_id, term_id,
                                  overall_rating, quality, fairness, workload,
-                                 attendance_strictness, body, is_enrollment_verified)
+                                 attendance_strictness, tag_keys, body, is_enrollment_verified)
       -- Per-star lookups rather than arithmetic on the overall rating. The
       -- design publishes specific criterion averages (quality 4.6, fairness
       -- 4.0, workload 3.5, attendance strictness 2.9) and these values are
@@ -197,6 +197,9 @@ begin
               (array[3,3,4,4,4])[v_stars[i]],   -- fairness   -> 4.0
               (array[5,5,4,4,3])[v_stars[i]],   -- workload   -> 3.5
               (array[1,2,3,3,3])[v_stars[i]],   -- strictness -> 2.9
+              case when v_stars[i] >= 4 then array['slides_clear','explains_well']
+                   when v_stars[i] = 3 then array['strict_checking','attendance_hard']
+                   else array['heavy_workload'] end,
               case when j = 1 and v_stars[i] = 5
                      then 'İzahları çox səlis, normalizasiya mövzusunu lövhədə addım-addım göstərir. Laboratoriya tapşırıqları imtahana birbaşa hazırlayır.'
                    when j = 1 and v_stars[i] = 3

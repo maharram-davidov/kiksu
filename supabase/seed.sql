@@ -42,6 +42,25 @@ select u.id, d.domain, d.audience, d.sample, d.primary_
 on conflict do nothing;
 
 -- ---------------------------------------------------------------------
+-- Review tag vocabulary. The design shows these as chips on the professor
+-- profile: SLAYDLAR AYDIN, LAB. FAYDALI, YOXLAMA SIX. A closed vocabulary
+-- rather than free tags, because tags are aggregated and shown as a summary of
+-- a named person — an open list would become a place to write things the free
+-- text guardrails exist to prevent.
+-- ---------------------------------------------------------------------
+insert into ref.review_tag (key, label_az, label_en, polarity, applies_to, display_order)
+values
+  ('slides_clear',    'Slaydlar aydın',      'Clear slides',        'positive', 'instructor', 1),
+  ('labs_useful',     'Lab. faydalı',        'Useful labs',         'positive', 'course',     2),
+  ('strict_checking', 'Yoxlama sıx',         'Strict marking',      'negative', 'instructor', 3),
+  ('fair_exam',       'İmtahan ədalətli',    'Fair exam',           'positive', 'course',     4),
+  ('heavy_workload',  'İş yükü ağır',        'Heavy workload',      'negative', 'course',     5),
+  ('explains_well',   'Yaxşı izah edir',     'Explains well',       'positive', 'instructor', 6),
+  ('attendance_hard', 'Davamiyyət ciddi',    'Attendance enforced', 'negative', 'instructor', 7),
+  ('exam_like_hw',    'İmtahan tapşırıq kimi','Exam mirrors homework','positive','course',    8)
+on conflict (key) do nothing;
+
+-- ---------------------------------------------------------------------
 -- Verification routes. TWO routes only, by product decision: university email
 -- and student card. Invite codes were considered and dropped — a 6-digit
 -- invite is not a credential at realistic volumes (identity spec §6), and with
