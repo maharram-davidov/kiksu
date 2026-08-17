@@ -146,3 +146,38 @@ describe("KiksuExceptionFilter — envelope shape (05-api-conventions.md §3.1)"
     expect(envelope1).toEqual(envelope2);
   });
 });
+
+describe("ZodError handling", () => {
+  it("maps a schema failure to 400 validation_failed, not a 500", async () => {
+    const { KiksuExceptionFilter } = await import("../src/common/errors/http-exception.filter");
+    const { z } = await import("zod");
+
+    let captured: { status?: number; body?: unknown } = {};
+    const host = {
+      switchToHttp: () => ({
+        getResponse: () => ({
+          status(code: number) { captured.status = code; return this; },
+          setHeader() { return this; },
+          json(body: unknown) { captured.body = body; return this; },
+        }),
+        getRequest: () => ({ requestId: "req-zod", headers: {} }),
+      }),
+    };
+
+    let thrown: unknown;
+    try {
+      z.object({ email: z.string().email() }).parse({ email: "not-an-email" });
+    } catch (e) {
+      thrown = e;
+    }
+
+    new KiksuExceptionFilter().catch(thrown, host as never);
+
+    expect(captured.status).toBe(400);
+    const body = captured.body as { error: { code: string; details?: { fields?: string[] } } };
+    expect(body.error.code).toBe("validation_failed");
+    // Field paths only — a validation error must not echo the submitted value.
+    expect(JSON.stringify(body)).not.toContain("not-an-email");
+    expect(body.error.details?.fields).toContain("email");
+  });
+});

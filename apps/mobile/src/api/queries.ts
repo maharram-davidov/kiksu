@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { apiGet } from "./client";
+import { apiGet, apiPost } from "./client";
 import type {
   Attendance, Board, Listing, PostDetail, PostPage, Today, Vacancy, WeekGrid,
 } from "./types";
@@ -83,4 +83,34 @@ export function useVacancies(kind?: string) {
     staleTime: 5 * 60 * 1000,
     retry: 1,
   });
+}
+
+export interface UniversityOption {
+  id: string;
+  code: string;
+  name: string;
+  city: string;
+  email_sample: string | null;
+  routes: string[];
+}
+
+/** Public: needed before the caller has any identity at all. */
+export function useUniversities() {
+  return useQuery({
+    queryKey: ["onboarding", "universities"],
+    queryFn: () => apiGet<UniversityOption[]>("/onboarding/universities"),
+    staleTime: 60 * 60 * 1000,
+    retry: 1,
+  });
+}
+
+export function startEmailVerification(email: string) {
+  return apiPost<{ expires_in_seconds: number }>("/onboarding/verify/email/start", { email });
+}
+
+export function confirmEmailVerification(email: string, code: string, authUserId: string) {
+  return apiPost<{ app_user_id: string; handle: string; tier: string }>(
+    "/onboarding/verify/email/confirm",
+    { email, code, auth_user_id: authUserId },
+  );
 }

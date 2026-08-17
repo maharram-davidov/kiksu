@@ -1,19 +1,45 @@
-import { Body, Controller, Get, HttpCode, Post } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, NotFoundException, Post } from "@nestjs/common";
 import { z } from "zod";
 import { Public } from "../../common/auth/public.decorator";
-import { CurrentUser } from "../../common/auth/current-user.decorator";
-import type { KiksuRequestContext } from "../../common/auth/request-context";
 import { OnboardingService, type UniversityDto } from "./onboarding.service";
+import { ConfigService } from "../../config/config.service";
 
 const startBody = z.object({ email: z.string().email().max(254) });
 const confirmBody = z.object({
   email: z.string().email().max(254),
   code: z.string().regex(/^\d{6}$/),
+  /** The Supabase auth subject the caller already holds. */
+  auth_user_id: z.string().uuid(),
 });
 
 @Controller("onboarding")
 export class OnboardingController {
-  constructor(private readonly onboarding: OnboardingService) {}
+  constructor(
+    private readonly onboarding: OnboardingService,
+    private readonly config: ConfigService,
+  ) {}
+
+  /**
+   * DEVELOPMENT ONLY: mints an auth subject so onboarding can be walked end to
+   * end without a Supabase project.
+   *
+   * In production the app signs in anonymously with Supabase Auth first, and
+   * the resulting `sub` is what `confirm` binds the pseudonym to. Locally there
+   * is no Supabase, so this stands in for that step and nothing else — it
+   * grants no tier, creates no app_user, and is refused unless the same
+   * development gate that guards the auth bypass is open.
+   */
+  @Public()
+  @Post("dev/session")
+  @HttpCode(201)
+  async devSession(): Promise<{ auth_user_id: string }> {
+    if (!this.config.devAuthAppUserId) {
+      // Not merely "off in production": absent the development gate this route
+      // does not exist as far as a caller can tell.
+      throw new NotFoundException("not_found");
+    }
+    return this.onboarding.createDevAuthSubject();
+  }
 
   /** The university picker. Public: the caller has no identity yet. */
   @Public()
@@ -41,12 +67,14 @@ export class OnboardingController {
    * session so the resulting app_user has something to hang off. It is the
    * verification that is missing at this point, not authentication.
    */
+  @Public()
   @Post("verify/email/confirm")
-  confirm(
-    @CurrentUser() user: KiksuRequestContext,
-    @Body() body: unknown,
-  ): Promise<{ app_user_id: string; handle: string; tier: string }> {
-    const { email, code } = confirmBody.parse(body);
-    return this.onboarding.confirmEmailVerification(email, code, user.authUserId);
+  confirm(@Body() body: unknown): Promise<{ app_user_id: string; handle: string; tier: string }> {
+    const { email, code, auth_user_id } = confirmBody.parse(body);
+    // The caller presents the auth subject they already hold. It is @Public()
+    // because verification is precisely the step BEFORE a caller has a Kiksu
+    // identity — requiring a Kiksu token here would be circular. Possession of
+    // a valid OTP for a real university address is the credential.
+    return this.onboarding.confirmEmailVerification(email, code, auth_user_id);
   }
 }

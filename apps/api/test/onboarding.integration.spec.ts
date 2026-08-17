@@ -105,6 +105,13 @@ suite("onboarding (integration)", () => {
     expect(result.tier).toBe("email_verified");
   });
 
+  it("mints a dev auth subject that a confirm can bind to", async () => {
+    const { auth_user_id } = await service.createDevAuthSubject();
+    expect(auth_user_id).toMatch(/^[0-9a-f-]{36}$/);
+    const [row] = await sql`select id from auth.users where id = ${auth_user_id}`;
+    expect(row).toBeTruthy();
+  });
+
   it("keeps the sealed link out of the public schema entirely", async () => {
     const email = "sizinti.yoxlamasi@std.bsu.edu.az";
     await service.startEmailVerification(email);

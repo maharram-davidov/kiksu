@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { randomInt } from "node:crypto";
 import { IdentitySqlProvider } from "../../common/db/identity-sql.provider";
 import { SqlProvider } from "../../common/db/sql.provider";
@@ -24,6 +24,8 @@ const OTP_MAX_ATTEMPTS = 5;
 
 @Injectable()
 export class OnboardingService {
+  private readonly logger = new Logger(OnboardingService.name);
+
   constructor(
     private readonly db: SqlProvider,
     private readonly identity: IdentitySqlProvider,
@@ -111,14 +113,35 @@ export class OnboardingService {
 
     // TODO(delivery): no mail provider is wired yet. The code is deliberately
     // NOT returned in the response — doing so would make the whole flow
-    // decorative. In development it is logged by the caller of this service.
+    // decorative and would hand it to anyone who can call the endpoint.
+    //
+    // It IS logged, but only when the development gate is open. Without that,
+    // onboarding cannot be walked by hand at all, and an unwalkable signup
+    // flow is one nobody checks. The gate is the same one that guards the auth
+    // bypass, so this cannot reach production: parseEnv() refuses to boot
+    // there with it set.
     this.pendingCodeForDevelopment = code;
+    if (this.config.devAuthAppUserId) {
+      this.logger.warn(`DEV OTP ${code} for ${normalised} — development only`);
+    }
 
     return { expires_in_seconds: OTP_TTL_MINUTES * 60 };
   }
 
   /** Development-only escape hatch so the flow is testable before mail exists. */
   pendingCodeForDevelopment: string | null = null;
+
+  /**
+   * DEVELOPMENT ONLY. Stands in for a Supabase anonymous sign-in so onboarding
+   * can be walked without a Supabase project. The controller refuses to expose
+   * this unless the development gate is open.
+   */
+  async createDevAuthSubject(): Promise<{ auth_user_id: string }> {
+    const [row] = await this.db.sql<Array<{ id: string }>>`
+      insert into auth.users (id) values (gen_random_uuid()) returning id
+    `;
+    return { auth_user_id: row?.id ?? "" };
+  }
 
   /**
    * Confirms the OTP and, on success, provisions the pseudonymous account.

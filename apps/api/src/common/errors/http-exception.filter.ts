@@ -94,6 +94,22 @@ export class KiksuExceptionFilter implements ExceptionFilter {
     exception: unknown,
     _requestId: string,
   ): { status: number; code: ErrorCode; action: ErrorAction; details: Record<string, unknown>; storeUrl?: string } {
+    // A ZodError from a controller's `schema.parse(body)`. Without this it
+    // falls through to the unknown branch and a malformed request body becomes
+    // a 500 `internal_error` — which is both wrong (the caller's input was at
+    // fault, not the server) and noisy (it pages on client mistakes).
+    if (isZodError(exception)) {
+      return {
+        status: 400,
+        code: "validation_failed",
+        // Nothing for the app to retry or refresh: the request itself was wrong.
+        action: "none",
+        // Field paths only. Zod messages can echo the submitted value back,
+        // and a validation error is not a place to reflect user input.
+        details: { fields: exception.issues.map((i) => i.path.join(".")).filter(Boolean) },
+      };
+    }
+
     if (exception instanceof AppError) {
       return {
         status: HTTP_STATUS_BY_CODE[exception.code],
@@ -170,4 +186,19 @@ function mapHttpStatusToCode(status: number): ErrorCode {
     default:
       return "internal_error";
   }
+}
+
+
+/**
+ * Duck-typed rather than `instanceof ZodError`, so this keeps working when a
+ * dependency bundles its own copy of zod — the classic reason an
+ * `instanceof` check silently stops matching after an unrelated upgrade.
+ */
+function isZodError(e: unknown): e is { issues: Array<{ path: Array<string | number> }> } {
+  return (
+    typeof e === "object" &&
+    e !== null &&
+    (e as { name?: string }).name === "ZodError" &&
+    Array.isArray((e as { issues?: unknown }).issues)
+  );
 }
