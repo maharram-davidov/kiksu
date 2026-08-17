@@ -1,3 +1,9 @@
+// Load .env before ANY other import: config validation runs at module
+// initialisation, so anything imported above this would see an empty
+// process.env and fail fast before the file is read. Real environment
+// variables always win over the file.
+import "dotenv/config";
+
 import "reflect-metadata";
 import { Logger, RequestMethod } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";

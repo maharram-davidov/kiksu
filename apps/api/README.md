@@ -260,3 +260,29 @@ UUIDv4-external id split (§01-schema-notes.md resolves this one already — ext
 exposed tables use v4), and the alias-preview hold TTL (5 vs 15 vs 30 minutes) — this
 package doesn't hardcode either, but whichever service issues alias previews will need
 the number settled.
+
+## Running it
+
+    ./scripts/dev-api.sh
+
+One command. It stands up a throwaway PostgreSQL, applies every migration and
+both seeds, writes `apps/api/.env` with development values, and runs the API in
+watch mode on :3000. Ctrl+C removes the database. Nothing touches the remote
+Supabase project.
+
+`npm start` runs the COMPILED output and now builds first — previously it failed
+with a bare `MODULE_NOT_FOUND` against a `dist/` that had never been built. Use
+`npm run dev` for watch mode against an environment you have set up yourself.
+
+`.env` is read by `dotenv`, imported as the very first line of `main.ts`.
+Ordering matters: config validation runs at module initialisation, so anything
+imported above it would see an empty `process.env` and fail fast before the file
+was read. Real environment variables always win over the file.
+
+### Development environment caveat
+
+`scripts/dev-api.sh` points `DATABASE_URL_IDENTITY` at the same database as
+`DATABASE_URL`, because there are no separate roles locally. That collapses the
+Layer 1 boundary. `IdentitySqlProvider` warns about it and refuses outright in
+production, and the boundary itself is verified by invariant 1 against the real
+grants — not by the development setup.

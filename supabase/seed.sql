@@ -42,6 +42,23 @@ select u.id, d.domain, d.audience, d.sample, d.primary_
 on conflict do nothing;
 
 -- ---------------------------------------------------------------------
+-- Verification routes. The onboarding screen renders these with their SLAs:
+-- university email "2 dəqiqə" and recommended, student card "24 saata qədər",
+-- invite code from a coursemate. The SLAs are promises the queue must actually
+-- keep, so they are configuration per university rather than copy in the app.
+-- ---------------------------------------------------------------------
+insert into ref.university_verification_route
+  (university_id, method, is_enabled, is_recommended, sla_minutes, display_order, note_az)
+select u.id, r.method::public.verification_method, true, r.recommended, r.sla, r.ord, r.note
+  from ref.university u
+  join (values
+    ('university_email', true,  2,    1, 'Universitet e-poçtunuza 6 rəqəmli kod göndərilir.'),
+    ('student_card',     false, 1440, 2, 'Tələbə kartının şəkli əl ilə yoxlanılır.'),
+    ('invite_code',      false, 2,    3, 'Kursdaşınızdan aldığınız 6 rəqəmli kod.')
+  ) as r(method, recommended, sla, ord, note) on true
+on conflict (university_id, method) do nothing;
+
+-- ---------------------------------------------------------------------
 -- Academic calendar. The design's timetable header reads
 -- "2025/26 · PAYIZ SEMESTRİ".
 -- ---------------------------------------------------------------------
