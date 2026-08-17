@@ -51,12 +51,23 @@ it keeps microsecond precision that a JS `Date` (milliseconds only) would drop.
 
 Both are flagged for review against the conventions doc.
 
+## Tier gating
+
+`board.min_tier_to_read` is enforced on all three read paths. The token and the
+database speak different tier vocabularies — provisional/email/card/graduate/
+expired versus the `verification_tier` enum — so `callerReadTier()` translates
+in one place rather than letting each query improvise. A graduate reads at email
+level (verified they were a student, no longer entitled to card-gated campus
+spaces); provisional and expired read at the lowest level rather than being
+refused, so the app can still render public boards while nudging them to verify.
+
+A caller who fails the gate gets the same 404 as a nonexistent post. A
+distinguishable "not verified enough" would confirm that a specific thread
+exists on a board they cannot see.
+
 ## Open questions
 
-1. **Board tier gating is not implemented.** `board.min_tier_to_read` exists and
-   the query ignores it, so a provisional user could read a card-verified board.
-   Needs the tier ordering from the caller's context.
-2. **Comment pagination.** Threads load every comment; the design shows 62 on
+1. **Comment pagination.** Threads load every comment; the design shows 62 on
    one post. Needs its own keyset before a long thread ships.
 3. **Blocked users** are not filtered out of feeds or comment threads.
 4. **Hot ranking** is unused — feeds sort by recency only, so the design's

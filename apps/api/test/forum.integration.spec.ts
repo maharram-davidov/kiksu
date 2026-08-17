@@ -130,6 +130,44 @@ suite("forum service (integration)", () => {
     expect(campus.items.every((p) => p.author_university_code === null)).toBe(true);
   });
 
+  it("hides a card-gated board from an email-tier caller", async () => {
+    // Raise the bar on one board and confirm the same caller loses access to
+    // the list, the feed AND the thread. Board tier gating is access control,
+    // not decoration.
+    await sql`update public.board set min_tier_to_read = 'card_verified'
+               where slug = 'bdu-ders-ve-muellim'`;
+    try {
+      const boards = await service.listBoards(user);           // user is 'email'
+      expect(boards.map((b) => b.slug)).not.toContain("bdu-ders-ve-muellim");
+      await expect(
+        service.getBoardFeed(user, "bdu-ders-ve-muellim", null),
+      ).rejects.toThrow();
+      await expect(service.getPost(user, headlinePostId)).rejects.toThrow();
+
+      // A card-tier caller still gets through.
+      const asCard = { ...user, tier: "card" as const };
+      expect((await service.listBoards(asCard)).map((b) => b.slug))
+        .toContain("bdu-ders-ve-muellim");
+      expect((await service.getPost(asCard, headlinePostId)).id).toBe(headlinePostId);
+    } finally {
+      await sql`update public.board set min_tier_to_read = 'unverified'
+                 where slug = 'bdu-ders-ve-muellim'`;
+    }
+  });
+
+  it("gives a graduate email-level read access, not card-level", async () => {
+    await sql`update public.board set min_tier_to_read = 'card_verified'
+               where slug = 'bdu-ders-ve-muellim'`;
+    try {
+      const grad = { ...user, tier: "graduate" as const };
+      expect((await service.listBoards(grad)).map((b) => b.slug))
+        .not.toContain("bdu-ders-ve-muellim");
+    } finally {
+      await sql`update public.board set min_tier_to_read = 'unverified'
+                 where slug = 'bdu-ders-ve-muellim'`;
+    }
+  });
+
   it("hides another campus's board from this caller", async () => {
     const [ada] = await sql`select id from ref.university where code = 'ADA'`;
     const boards = await service.listBoards({ ...user, univId: ada!.id });

@@ -12,6 +12,36 @@ function tierBadge(t: string): "unverified" | "email" | "card" {
 }
 
 /**
+ * The request context and the database speak different tier vocabularies:
+ * the token carries provisional/email/card/graduate/expired, while
+ * ref/public tables use the verification_tier enum
+ * (unverified < email_verified < card_verified, declared ascending).
+ *
+ * Board reads are gated on board.min_tier_to_read, so the two have to be
+ * compared. Translating here — rather than letting each query improvise —
+ * means there is exactly one place where a graduate or an expired account
+ * gets its read level decided.
+ */
+function callerReadTier(tier: KiksuRequestContext["tier"]): "unverified" | "email_verified" | "card_verified" {
+  switch (tier) {
+    case "card":
+      return "card_verified";
+    case "email":
+    // A graduate keeps read access at the email level: verified they were a
+    // student, no longer entitled to card-gated campus spaces.
+    case "graduate":
+      return "email_verified";
+    // provisional (mid-onboarding) and expired (lapsed re-verification) both
+    // read at the lowest level rather than being refused outright, so the app
+    // can still render public boards while nudging them to verify.
+    case "provisional":
+    case "expired":
+    default:
+      return "unverified";
+  }
+}
+
+/**
  * Forum reads.
  *
  * Two responsibilities beyond fetching rows, both load-bearing:
@@ -42,6 +72,7 @@ export class ForumService {
         left join ref.university u on u.id = b.university_id
        where b.is_archived = false
          and (b.university_id is null or b.university_id = ${user.univId})
+         and b.min_tier_to_read <= ${callerReadTier(user.tier)}::public.verification_tier
        order by (b.university_id is null), b.display_order, b.name_az
     `;
   }
@@ -56,6 +87,7 @@ export class ForumService {
        where b.slug = ${slug}
          and b.is_archived = false
          and (b.university_id is null or b.university_id = ${user.univId})
+         and b.min_tier_to_read <= ${callerReadTier(user.tier)}::public.verification_tier
     `;
     if (!board) throw new NotFoundException("board_not_found");
 
@@ -171,7 +203,11 @@ export class ForumService {
          and p.moderation_state in ('visible', 'limited')
          and p.deleted_at is null
          and (b.university_id is null or b.university_id = ${user.univId})
+         and b.min_tier_to_read <= ${callerReadTier(user.tier)}::public.verification_tier
     `;
+    // Deliberately the same 404 as a nonexistent post. A distinguishable
+    // "you are not verified enough" would confirm that a specific thread
+    // exists on a board the caller cannot see.
     if (!post) throw new NotFoundException("post_not_found");
     const p = post as unknown as Record<string, string | number | Date | null>;
 
