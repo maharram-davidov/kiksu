@@ -17,6 +17,9 @@ const createCommentBody = z.object({
   parent_id: z.string().uuid().optional(),
 });
 
+const voteBody = z.object({ value: z.union([z.literal(-1), z.literal(0), z.literal(1)]) });
+const saveBody = z.object({ saved: z.boolean() });
+
 const feedQuery = z.object({
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
@@ -62,6 +65,28 @@ export class ForumController {
     @Body() body: unknown,
   ): Promise<CommentDto> {
     return this.forum.createComment(user, id, createCommentBody.parse(body));
+  }
+
+  /** Cast, change or clear a vote. `value: 0` clears it. */
+  @Post("posts/:id/vote")
+  @HttpCode(200)
+  vote(
+    @CurrentUser() user: KiksuRequestContext,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ): Promise<{ score: number; your_vote: -1 | 0 | 1 }> {
+    return this.forum.votePost(user, id, voteBody.parse(body).value);
+  }
+
+  /** Add or remove a save. */
+  @Post("posts/:id/save")
+  @HttpCode(200)
+  save(
+    @CurrentUser() user: KiksuRequestContext,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ): Promise<{ saved: boolean; save_count: number }> {
+    return this.forum.savePost(user, id, saveBody.parse(body).saved);
   }
 
   /** Post with its comment thread and the caller's next alias. */

@@ -87,3 +87,34 @@ export async function apiGet<T>(path: string, locale = "az"): Promise<T> {
 
   return (await res.json()) as T;
 }
+
+export async function apiPost<T>(path: string, body: unknown, locale = "az"): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}/v1${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "Accept-Language": locale,
+      "X-Kiksu-Client": "mobile",
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    let code = `http_${res.status}`;
+    let message = `Request failed (${res.status})`;
+    try {
+      const parsed = (await res.json()) as { error?: { code?: string; message?: string } };
+      if (parsed?.error?.code) code = parsed.error.code;
+      if (parsed?.error?.message) message = parsed.error.message;
+    } catch {
+      /* keep the status-derived fallback */
+    }
+    throw new ApiError(code, res.status, message);
+  }
+
+  // 204 and friends have no body; callers of those ignore the return anyway.
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}

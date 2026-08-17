@@ -415,6 +415,78 @@ export class ForumService {
     });
   }
 
+  /**
+   * Casts, changes or clears a vote.
+   *
+   * `value: 0` means "take my vote back", which is why this is not a plain
+   * insert. The score and hot_rank counters and the author's karma ledger are
+   * all trigger-maintained (schema 17.1), so this touches post_vote ONLY —
+   * writing the score here as well would double-count.
+   *
+   * Idempotent: casting the same vote twice leaves one row and one score.
+   */
+  async votePost(
+    user: KiksuRequestContext, postId: string, value: -1 | 0 | 1,
+  ): Promise<{ score: number; your_vote: -1 | 0 | 1 }> {
+    const { sql } = this.db;
+
+    const [visible] = await sql<Array<{ id: string }>>`
+      select p.id from public.post p
+        join public.board b on b.id = p.board_id
+       where p.id = ${postId}
+         and p.moderation_state in ('visible', 'limited')
+         and p.deleted_at is null
+         and (b.university_id is null or b.university_id = ${user.univId})
+         and b.min_tier_to_read <= ${callerReadTier(user.tier)}::public.verification_tier
+    `;
+    if (!visible) throw new NotFoundException("post_not_found");
+
+    if (value === 0) {
+      await sql`delete from public.post_vote
+                 where post_id = ${postId} and app_user_id = ${user.appUserId}`;
+    } else {
+      await sql`
+        insert into public.post_vote (post_id, app_user_id, value)
+        values (${postId}, ${user.appUserId}, ${value})
+        on conflict (post_id, app_user_id) do update set value = excluded.value
+      `;
+    }
+
+    const [row] = await sql<Array<{ score: number }>>`
+      select score from public.post where id = ${postId}`;
+    return { score: row?.score ?? 0, your_vote: value };
+  }
+
+  /** Adds or removes a save. Idempotent in both directions. */
+  async savePost(
+    user: KiksuRequestContext, postId: string, saved: boolean,
+  ): Promise<{ saved: boolean; save_count: number }> {
+    const { sql } = this.db;
+
+    const [visible] = await sql<Array<{ id: string }>>`
+      select p.id from public.post p
+        join public.board b on b.id = p.board_id
+       where p.id = ${postId}
+         and p.deleted_at is null
+         and (b.university_id is null or b.university_id = ${user.univId})
+         and b.min_tier_to_read <= ${callerReadTier(user.tier)}::public.verification_tier
+    `;
+    if (!visible) throw new NotFoundException("post_not_found");
+
+    if (saved) {
+      await sql`insert into public.post_save (post_id, app_user_id)
+                values (${postId}, ${user.appUserId})
+                on conflict do nothing`;
+    } else {
+      await sql`delete from public.post_save
+                 where post_id = ${postId} and app_user_id = ${user.appUserId}`;
+    }
+
+    const [row] = await sql<Array<{ save_count: number }>>`
+      select save_count from public.post where id = ${postId}`;
+    return { saved, save_count: row?.save_count ?? 0 };
+  }
+
   private toSummary(r: Record<string, unknown>): PostSummaryDto {
     return {
       id: r.id as string,

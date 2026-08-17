@@ -75,7 +75,12 @@
     "loadFailed": "Yüklənmədi",
     "writeAs": "{{alias}} kimi yaz",
     "pollTotal": "{{count}} səs",
-    "remaining": "qalıb"
+    "remaining": "qalıb",
+    "writeComment": "Şərh yaz…",
+    "send": "Göndər",
+    "sending": "Göndərilir…",
+    "sendFailed": "Göndərilmədi",
+    "saved": "Saxlanıldı"
   },
   "today": {
     "remaining": "Qalan dərslər",

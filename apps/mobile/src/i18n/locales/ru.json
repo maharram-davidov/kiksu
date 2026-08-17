@@ -78,7 +78,12 @@
     "loadFailed": "Не удалось загрузить",
     "writeAs": "Написать как {{alias}}",
     "pollTotal": "{{count}} голосов",
-    "remaining": "осталось"
+    "remaining": "осталось",
+    "writeComment": "Написать комментарий…",
+    "send": "Отправить",
+    "sending": "Отправка…",
+    "sendFailed": "Не отправлено",
+    "saved": "Сохранено"
   },
   "today": {
     "remaining": "Оставшиеся занятия",

@@ -269,6 +269,61 @@ suite("forum service (integration)", () => {
       })).rejects.toThrow();
     });
 
+    it("counts a vote once however many times it is cast", async () => {
+      const post = await service.createPost(user, {
+        board_slug: "bdu-serbest-sohbet", title: "Səs testi",
+      });
+      const before = (await service.getPost(user, post.id)).score;
+
+      const a = await service.votePost(user, post.id, 1);
+      const b = await service.votePost(user, post.id, 1);   // same vote again
+      expect(a.score).toBe(before + 1);
+      expect(b.score).toBe(before + 1);                      // not +2
+
+      const rows = await sql`select count(*)::int as n from public.post_vote
+                              where post_id = ${post.id}`;
+      expect(rows[0]!.n).toBe(1);
+    });
+
+    it("lets a vote be changed and taken back", async () => {
+      const post = await service.createPost(user, {
+        board_slug: "bdu-serbest-sohbet", title: "Səsi dəyişmə testi",
+      });
+      const base = (await service.getPost(user, post.id)).score;
+
+      await service.votePost(user, post.id, 1);
+      const down = await service.votePost(user, post.id, -1);
+      expect(down.score).toBe(base - 1);                     // swung, not stacked
+
+      const cleared = await service.votePost(user, post.id, 0);
+      expect(cleared.score).toBe(base);
+      const rows = await sql`select count(*)::int as n from public.post_vote
+                              where post_id = ${post.id}`;
+      expect(rows[0]!.n).toBe(0);
+    });
+
+    it("saves and unsaves idempotently", async () => {
+      const post = await service.createPost(user, {
+        board_slug: "bdu-serbest-sohbet", title: "Saxlama testi",
+      });
+      const on = await service.savePost(user, post.id, true);
+      const onAgain = await service.savePost(user, post.id, true);
+      expect(on.save_count).toBe(1);
+      expect(onAgain.save_count).toBe(1);
+
+      const off = await service.savePost(user, post.id, false);
+      expect(off.save_count).toBe(0);
+      // Unsaving something never saved must not throw.
+      await expect(service.savePost(user, post.id, false)).resolves.toBeTruthy();
+    });
+
+    it("refuses a vote on another campus's post", async () => {
+      const [ada] = await sql`select id from ref.university where code = 'ADA'`;
+      await expect(
+        service.votePost({ ...user, univId: ada!.id }, headlinePostId, 1),
+      ).rejects.toThrow();
+    });
+
     it("strands no ordinal when the write rolls back", async () => {
       const post = await service.createPost(user, {
         board_slug: "bdu-serbest-sohbet", title: "Geri qaytarma testi",

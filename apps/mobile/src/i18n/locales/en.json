@@ -78,7 +78,12 @@
     "loadFailed": "Couldn't load",
     "writeAs": "Write as {{alias}}",
     "pollTotal": "{{count}} votes",
-    "remaining": "left"
+    "remaining": "left",
+    "writeComment": "Write a comment…",
+    "send": "Send",
+    "sending": "Sending…",
+    "sendFailed": "Couldn't send",
+    "saved": "Saved"
   },
   "today": {
     "remaining": "Remaining classes",
