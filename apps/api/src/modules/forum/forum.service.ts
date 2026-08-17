@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { SqlProvider } from "../../common/db/sql.provider";
 import { CursorService } from "../../common/pagination/cursor.service";
+import { ModerationService } from "../moderation/moderation.service";
 import type { KiksuRequestContext } from "../../common/auth/request-context";
 import type {
   BoardDto, CommentDto, CreateCommentInput, CreatePostInput,
@@ -62,6 +63,7 @@ export class ForumService {
   constructor(
     private readonly db: SqlProvider,
     private readonly cursors: CursorService,
+    private readonly moderation: ModerationService,
   ) {}
 
   async listBoards(user: KiksuRequestContext): Promise<BoardDto[]> {
@@ -328,6 +330,19 @@ export class ForumService {
       `;
       if (!row) throw new NotFoundException("author_not_found");
 
+      // Classify in the SAME transaction as the insert. Doing it afterwards
+      // leaves a window where a phone number is fully visible, and closing
+      // that window is the entire point of an automated tier.
+      const state = await this.moderation.classifyOnWrite(tx, {
+        targetType: "post", targetId: row.id,
+        universityId: board.university_id ?? user.univId,
+        title: input.title, body: input.body ?? null,
+      });
+      if (state !== "visible") {
+        await tx`update public.post set moderation_state = ${state}::public.moderation_state
+                  where id = ${row.id}`;
+      }
+
       // Authorship goes to internal, never onto the public row.
       await tx`insert into internal.post_author (post_id, app_user_id)
                values (${row.id}, ${user.appUserId})`;
@@ -399,6 +414,16 @@ export class ForumService {
 
       await tx`insert into internal.comment_author (comment_id, app_user_id)
                values (${row.id as string}, ${user.appUserId})`;
+
+      const state = await this.moderation.classifyOnWrite(tx, {
+        targetType: "comment", targetId: row.id as string,
+        universityId: user.univId, body: input.body,
+      });
+      if (state !== "visible") {
+        await tx`update public.post_comment
+                    set moderation_state = ${state}::public.moderation_state
+                  where id = ${row.id as string}`;
+      }
 
       return {
         id: row.id as string,

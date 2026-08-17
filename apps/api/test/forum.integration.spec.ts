@@ -2,6 +2,7 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import postgres from "postgres";
 import { ForumService } from "../src/modules/forum/forum.service";
 import { CursorService } from "../src/common/pagination/cursor.service";
+import { ModerationService } from "../src/modules/moderation/moderation.service";
 import type { KiksuRequestContext } from "../src/common/auth/request-context";
 
 /**
@@ -41,7 +42,7 @@ suite("forum service (integration)", () => {
       transaction: <T,>(fn: (tx: postgres.TransactionSql) => Promise<T>) =>
         sql.begin(fn) as Promise<T>,
     };
-    service = new ForumService(db as never, cursors);
+    service = new ForumService(db as never, cursors, new ModerationService());
 
     const [uni] = await sql`select id from ref.university where code = 'BDU'`;
     if (!uni) throw new Error("seed missing: BDU");
@@ -322,6 +323,57 @@ suite("forum service (integration)", () => {
       await expect(
         service.votePost({ ...user, univId: ada!.id }, headlinePostId, 1),
       ).rejects.toThrow();
+    });
+
+    it("limits a post containing a phone number at write time, before anyone reports", async () => {
+      const post = await service.createPost(user, {
+        board_slug: "bdu-serbest-sohbet",
+        title: "Kitab satıram",
+        body: "Maraqlananlar 0505551234 nömrəsinə yazsın.",
+      });
+      const [row] = await sql`select moderation_state::text as s from public.post where id = ${post.id}`;
+      // Not waiting for three strangers to notice: the damage is done the
+      // moment it is readable.
+      expect(row!.s).toBe("limited");
+    });
+
+    it("opens an automod case a moderator can see, without quoting the number", async () => {
+      const post = await service.createPost(user, {
+        board_slug: "bdu-serbest-sohbet",
+        title: "Əlaqə",
+        body: "Yazın: ilkin@std.bsu.edu.az",
+      });
+      const [c] = await sql`
+        select opened_by, severity, resolution_note
+          from moderation.mod_case where subject_id = ${post.id}`;
+      expect(c!.opened_by).toBe("automod");
+      expect(c!.severity).toBe(5);
+      // The queue row must not copy the personal information into a second place.
+      expect(c!.resolution_note).not.toContain("ilkin@std.bsu.edu.az");
+      expect(c!.resolution_note).toContain("email_address");
+    });
+
+    it("leaves ordinary posts visible and opens no case", async () => {
+      const post = await service.createPost(user, {
+        board_slug: "bdu-serbest-sohbet",
+        title: "Kitabxana saatları dəyişdi?",
+        body: "Elan lövhəsində 22:00 yazılıb, təsdiq edən var?",
+      });
+      const [row] = await sql`select moderation_state::text as s from public.post where id = ${post.id}`;
+      expect(row!.s).toBe("visible");
+      const cases = await sql`select id from moderation.mod_case where subject_id = ${post.id}`;
+      expect(cases).toHaveLength(0);
+    });
+
+    it("classifies comments as well as posts", async () => {
+      const post = await service.createPost(user, {
+        board_slug: "bdu-serbest-sohbet", title: "Şərh yoxlaması",
+      });
+      const c = await service.createComment(user, post.id, {
+        body: "Mənə yaz +994 55 777 88 99",
+      });
+      const [row] = await sql`select moderation_state::text as s from public.post_comment where id = ${c.id}`;
+      expect(row!.s).toBe("limited");
     });
 
     it("strands no ordinal when the write rolls back", async () => {

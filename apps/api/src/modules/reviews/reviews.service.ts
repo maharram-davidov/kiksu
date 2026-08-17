@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { SqlProvider } from "../../common/db/sql.provider";
+import { ModerationService } from "../moderation/moderation.service";
 import type { KiksuRequestContext } from "../../common/auth/request-context";
 import type {
   InstructorProfileDto, ReviewAccessDto, ReviewDto, ReviewPageDto,
@@ -24,7 +25,10 @@ const REQUIRED_REVIEWS_PER_TERM = 1;
  */
 @Injectable()
 export class ReviewsService {
-  constructor(private readonly db: SqlProvider) {}
+  constructor(
+    private readonly db: SqlProvider,
+    private readonly moderation: ModerationService,
+  ) {}
 
   /**
    * How many reviews this caller has written this term.
@@ -247,6 +251,18 @@ export class ReviewsService {
         insert into internal.review_author (review_id, app_user_id, course_id, instructor_id, term_id)
         values (${row.id}, ${user.appUserId}, ${input.courseId}, ${input.instructorId}, ${term.id})
       `;
+
+      // Reviews are free text about a NAMED person, so they get the same
+      // automated pass as forum content and arguably need it more.
+      const state = await this.moderation.classifyOnWrite(tx, {
+        targetType: "review", targetId: row.id,
+        universityId: user.univId, body: input.body ?? null,
+      });
+      if (state !== "visible") {
+        await tx`update public.review set moderation_state = ${state}::public.moderation_state
+                  where id = ${row.id}`;
+      }
+
       return row.id;
     });
 

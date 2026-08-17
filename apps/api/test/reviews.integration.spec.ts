@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import postgres from "postgres";
 import { ReviewsService } from "../src/modules/reviews/reviews.service";
+import { ModerationService } from "../src/modules/moderation/moderation.service";
 import type { KiksuRequestContext } from "../src/common/auth/request-context";
 
 const url = process.env.DATABASE_URL;
@@ -19,7 +20,7 @@ suite("reviews service (integration)", () => {
       sql,
       transaction: <T,>(fn: (tx: postgres.TransactionSql) => Promise<T>) => sql.begin(fn) as Promise<T>,
     };
-    service = new ReviewsService(db as never);
+    service = new ReviewsService(db as never, new ModerationService());
 
     const [uni] = await sql`select id from ref.university where code = 'BDU'`;
     const [i] = await sql`select id from ref.instructor where slug = 'nigar-eliyeva'`;
