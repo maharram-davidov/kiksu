@@ -17,6 +17,7 @@ import { OnboardingModule } from "./modules/onboarding/onboarding.module";
 import { TodayModule } from "./modules/today/today.module";
 import { CommerceModule } from "./modules/commerce/commerce.module";
 import { ReviewsModule } from "./modules/reviews/reviews.module";
+import { AdminModule } from "./modules/admin/admin.module";
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { ReviewsModule } from "./modules/reviews/reviews.module";
     TodayModule,
     CommerceModule,
     ReviewsModule,
+    AdminModule,
   ],
   providers: [
     // Fail-closed by default: every route requires a verified caller unless it opts
