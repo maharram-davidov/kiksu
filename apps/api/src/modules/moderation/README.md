@@ -29,20 +29,23 @@ post is readable. Everything else opens a case and stays visible.
 **The queue row never quotes what it matched.** A case that repeats the phone
 number it found has copied the personal information into a second place.
 
-## Tier 2 is not implemented
+## Tier 2 is deferred, by decision
 
-An LLM pass for tone and context — the thing the product plan actually leans on,
-because off-the-shelf toxicity APIs are effectively blind to Azerbaijani — does
-not exist. It needs an API key, a per-write budget and a latency decision, none
-of which have been made.
+An LLM pass for tone and context is **not being built for now**. Tier 1 plus
+human reports is the agreed coverage until there is evidence that it is not
+enough. Revisit when the queue shows what actually gets past it — that evidence
+is worth more than a guess made before launch.
 
-It is absent rather than stubbed on purpose. A stub that returned "looks fine"
-would make every write appear classified while catching nothing, and **a
-moderation layer that fails open is worse than one that is honestly missing.**
+It is absent rather than stubbed on purpose. A stub returning "looks fine" would
+make every write appear classified while catching nothing, and **a moderation
+layer that fails open is worse than one that is honestly missing.** The seam is
+`ModerationService.classifyOnWrite`, which already returns a shape that
+accommodates a second tier.
 
-## Consequence worth stating plainly
+### What that means in the meantime
 
-Between tier 1 and human reports, nothing catches abuse, harassment, or
-criticism of a lecturer that has tipped into something defamatory. Those are
-precisely the cases the legal section of the product plan is most concerned
-with, and today they are caught only when a student reports them.
+Abuse, harassment, and criticism of a lecturer that has tipped into something
+defamatory are caught **only when a student reports them**. Those are the cases
+the legal section of the product plan is most concerned with, so two things
+matter more while tier 2 is absent: report entry points on every surface (only
+posts have one today), and moderator response time against the published SLA.
