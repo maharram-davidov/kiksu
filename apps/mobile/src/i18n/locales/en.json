@@ -91,5 +91,31 @@
     "daysLeft": "{{count}} DAYS",
     "noClassesToday": "No classes today",
     "loadFailed": "Couldn't load"
+  },
+  "market": {
+    "negotiable": "Negotiable",
+    "condition": "Condition",
+    "noListings": "No listings",
+    "loadFailed": "Couldn't load",
+    "deals": "deals",
+    "response": "response",
+    "all": "All",
+    "safety": "Pay only when you meet. Kiksu does not guarantee transfers."
+  },
+  "careers": {
+    "active": "active",
+    "noVacancies": "No vacancies",
+    "loadFailed": "Couldn't load",
+    "paid": "Paid",
+    "unpaid": "Unpaid",
+    "days": "DAYS",
+    "months": "MO",
+    "hoursWeek": "HRS / WEEK",
+    "conversion": "Can convert to a role",
+    "transport": "Transport provided",
+    "friendly": "Fits your timetable",
+    "all": "All",
+    "year": "YEAR",
+    "careerIdentity": "Applications are sent with your career identity only — employers never see your forum handle."
   }
 }

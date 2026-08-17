@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "./client";
-import type { Attendance, Board, PostDetail, PostPage, Today, WeekGrid } from "./types";
+import type {
+  Attendance, Board, Listing, PostDetail, PostPage, Today, Vacancy, WeekGrid,
+} from "./types";
 
 export function useWeekGrid() {
   return useQuery({
@@ -59,6 +61,26 @@ export function useToday() {
     // refetches when the app comes back to the foreground.
     staleTime: 60 * 1000,
     refetchOnMount: true,
+    retry: 1,
+  });
+}
+
+export function useListings(category?: string) {
+  return useQuery({
+    queryKey: ["market", "listings", category ?? "all"],
+    queryFn: () =>
+      apiGet<Listing[]>(`/market/listings${category ? `?category=${encodeURIComponent(category)}` : ""}`),
+    staleTime: 60 * 1000,
+    retry: 1,
+  });
+}
+
+export function useVacancies(kind?: string) {
+  return useQuery({
+    queryKey: ["careers", "vacancies", kind ?? "all"],
+    queryFn: () =>
+      apiGet<Vacancy[]>(`/careers/vacancies${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`),
+    staleTime: 5 * 60 * 1000,
     retry: 1,
   });
 }

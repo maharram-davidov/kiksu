@@ -40,6 +40,7 @@ echo "==> seed (second run — must be idempotent)"
 
 echo "==> content seed"
 "${PSQL[@]}" -f "$ROOT/supabase/seed-content.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/seed-commerce.sql" >/dev/null
 
 echo "==> invariants with data present"
 "${PSQL[@]}" -f "$ROOT/scripts/schema-invariants.sql"
@@ -60,6 +61,9 @@ union all select 'app_user',    count(*) from public.app_user
 union all select 'post',        count(*) from public.post
 union all select 'comment',     count(*) from public.post_comment
 union all select 'review',      count(*) from public.review
+union all select 'listing',     count(*) from public.listing
+union all select 'employer',    count(*) from public.employer
+union all select 'vacancy',     count(*) from public.vacancy
 order by 1;
 COUNTS
 echo "==> OK"

@@ -71,6 +71,7 @@ for f in "$ROOT"/supabase/migrations/*.sql; do "${PSQL[@]}" -f "$f" >/dev/null; 
 echo "==> seeding"
 "${PSQL[@]}" -f "$ROOT/supabase/seed.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/seed-content.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/seed-commerce.sql" >/dev/null
 
 DB_URL="postgresql://postgres@127.0.0.1:$PGPORT/postgres"
 

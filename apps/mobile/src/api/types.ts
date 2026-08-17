@@ -149,3 +149,61 @@ export interface Today {
   deadlines: TodayDeadline[];
   hot_posts: TodayPost[];
 }
+
+/**
+ * A seller is pseudonymous but PERSISTENT — unlike a forum author they carry a
+ * handle and a rating. That is the one place the product trades anonymity for
+ * accountability: someone meeting a stranger to hand over cash needs something
+ * to go on. It does not link to their forum or review activity.
+ */
+export interface Seller {
+  handle: string;
+  avatar_id: number;
+  university_code: string | null;
+  verification_status: "card" | "email" | "none";
+  trade_rating_avg: number | null;
+  deal_count: number;
+  response_rate_pct: number | null;
+  response_time_median_sec: number | null;
+  complaint_count: number;
+}
+
+export interface Listing {
+  id: string;
+  title: string;
+  description: string | null;
+  category_key: string;
+  category_name: string;
+  /** Minor units (qəpik). Divide by 100 only at render time. */
+  price_minor: number;
+  currency: string;
+  is_negotiable: boolean;
+  condition: string;
+  meetup_notes: string[];
+  related_course_code: string | null;
+  published_at: string;
+  seller: Seller | null;
+}
+
+export interface Vacancy {
+  id: string;
+  title: string;
+  description: string | null;
+  kind: string;
+  work_mode: string;
+  city: string | null;
+  is_paid: boolean;
+  stipend_minor: number | null;
+  currency: string;
+  duration_months: number | null;
+  hours_per_week: number | null;
+  min_study_year: number | null;
+  max_study_year: number | null;
+  required_skills: string[];
+  conversion_possible: boolean;
+  transport_provided: boolean;
+  schedule_friendly: boolean;
+  apply_deadline: string | null;
+  days_left: number | null;
+  employer: { slug: string; name: string; logo_initials: string | null; brand_color: string | null };
+}

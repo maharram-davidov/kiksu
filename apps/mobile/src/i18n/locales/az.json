@@ -88,5 +88,31 @@
     "daysLeft": "{{count}} GÜN",
     "noClassesToday": "Bu gün dərs yoxdur",
     "loadFailed": "Yüklənmədi"
+  },
+  "market": {
+    "negotiable": "Razılaşma olar",
+    "condition": "Vəziyyət",
+    "noListings": "Elan yoxdur",
+    "loadFailed": "Yüklənmədi",
+    "deals": "sövdələşmə",
+    "response": "cavab",
+    "all": "Hamısı",
+    "safety": "Ödənişi yalnız görüş zamanı edin. Kiksu köçürmələrə zəmanət vermir."
+  },
+  "careers": {
+    "active": "aktiv elan",
+    "noVacancies": "Vakansiya yoxdur",
+    "loadFailed": "Yüklənmədi",
+    "paid": "Ödənişli",
+    "unpaid": "Ödənişsiz",
+    "days": "GÜN",
+    "months": "AY",
+    "hoursWeek": "SAAT / HƏFTƏ",
+    "conversion": "İşə keçid imkanı",
+    "transport": "Nəqliyyat var",
+    "friendly": "Cədvələ uyğun",
+    "all": "Hamısı",
+    "year": "KURS",
+    "careerIdentity": "Müraciət yalnız karyera kimliyi ilə göndərilir — forum ləqəbin işəgötürənə görünmür."
   }
 }

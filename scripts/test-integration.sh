@@ -30,6 +30,7 @@ STUB
 for f in "$ROOT"/supabase/migrations/*.sql; do "${PSQL[@]}" -f "$f" >/dev/null; done
 "${PSQL[@]}" -f "$ROOT/supabase/seed.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/seed-content.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/seed-commerce.sql" >/dev/null
 echo "==> database ready on 127.0.0.1:$PORT"
 
 cd "$ROOT/apps/api"
