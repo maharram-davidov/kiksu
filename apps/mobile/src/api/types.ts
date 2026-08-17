@@ -268,3 +268,46 @@ export interface ClassDetail {
 export interface MarketCategory { id: string; key: string; name: string }
 
 export type ListingCondition = "new" | "like_new" | "good" | "fair" | "poor";
+
+
+export interface ChatParticipant {
+  app_user_id: string;
+  handle: string;
+  avatar_id: number;
+  verification_status: "card" | "email" | "none";
+  trade_rating_avg: number | null;
+  is_seller: boolean;
+}
+
+export interface ChatMessage {
+  id: string;
+  sender_id: string;
+  kind: string;
+  body: string | null;
+  offer_price_minor: number | null;
+  created_at: string;
+  /** Classifier limited it; the client renders a placeholder, not the text. */
+  is_limited: boolean;
+}
+
+export interface Conversation {
+  id: string;
+  listing_id: string | null;
+  listing_title: string | null;
+  listing_price_minor: number | null;
+  participants: ChatParticipant[];
+  messages: ChatMessage[];
+  is_closed: boolean;
+}
+
+export interface ConversationSummary {
+  id: string;
+  listing_id: string | null;
+  listing_title: string | null;
+  listing_price_minor: number | null;
+  other: ChatParticipant | null;
+  last_message_at: string | null;
+  last_message_preview: string | null;
+  unread_count: number;
+  is_closed: boolean;
+}

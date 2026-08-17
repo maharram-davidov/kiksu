@@ -1,6 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiPatch, apiPost } from "./client";
-import type { Comment, Listing, ListingCondition, MyProfile, PostDetail, PrivacyKey } from "./types";
+import type {
+  ChatMessage, Comment, Conversation, Listing, ListingCondition, MyProfile, PostDetail, PrivacyKey,
+} from "./types";
 
 /**
  * Optimistic vote.
@@ -141,5 +143,34 @@ export function useCreateListing() {
         meetup_notes: input.meetupNotes,
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["market", "listings"] }),
+  });
+}
+
+export function useOpenConversation() {
+  return useMutation({
+    mutationFn: (listingId: string) =>
+      apiPost<Conversation>(`/market/listings/${listingId}/conversation`, {}),
+  });
+}
+
+/**
+ * Sends a message or a structured offer.
+ *
+ * Not optimistic: the server decides whether the classifier limits it, and
+ * showing a message as delivered that then turns out to be limited would
+ * mislead the sender about what the other person can actually see.
+ */
+export function useSendMessage(conversationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { body?: string; offerPriceMinor?: number }) =>
+      apiPost<ChatMessage>(`/market/conversations/${conversationId}/messages`, {
+        body: input.body,
+        offer_price_minor: input.offerPriceMinor,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["market", "conversation", conversationId] });
+      qc.invalidateQueries({ queryKey: ["market", "conversations"] });
+    },
   });
 }

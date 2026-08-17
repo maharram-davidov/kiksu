@@ -42,20 +42,22 @@ layer that fails open is worse than one that is honestly missing.** The seam is
 `ModerationService.classifyOnWrite`, which already returns a shape that
 accommodates a second tier.
 
-### Listings are a deliberate exception
+### Listings: the exception is closed
 
-Forum posts and reviews containing a phone number are **limited immediately**.
-Listings are **not** — they open a case for a human and stay visible.
+Listings briefly stayed visible with contact details in them, because before
+deal chat a phone number was the only way a buyer could reach a seller and
+limiting would have made the marketplace unusable rather than safer.
 
-That is not an inconsistency. In-app deal chat does not exist yet, so a phone
-number is currently the only way a buyer can reach a seller. Limiting on
-contact details would make the marketplace unusable rather than safer, and an
-unusable marketplace pushes the same conversation to WhatsApp where Kiksu can
-see none of it.
+**Chat shipped, so the exception is gone.** Listings now limit on sight like
+everything else, and the composer warns before the seller types a number — the
+safe path has to be the obvious one, not a rule people discover by having a
+listing hidden.
 
-**This should flip to limiting the moment deal chat ships.** The exception
-exists because there is no alternative, not because posting a number in a
-listing is fine. The composer already warns before the seller types it.
+Chat messages are classified too, at a lower stakes: a private thread is not
+the broadcast risk a board is. They are still checked, because a scam script
+pasted into every conversation looks identical to the rules and is worth a
+moderator seeing. A limited message renders as a placeholder to **both**
+parties rather than showing the flagged text to either.
 
 ### What that means in the meantime
 

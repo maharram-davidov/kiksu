@@ -256,5 +256,21 @@
     "failed": "Couldn't publish",
     "freeHint": "Enter 0 to give it away",
     "contactWarning": "Don't include a phone number or email. Arrange through Kiksu and pay when you meet."
+  },
+  "chat": {
+    "messages": "Messages",
+    "noMessages": "No messages yet",
+    "write": "Write a message…",
+    "send": "Send",
+    "offer": "Make an offer",
+    "offerPlaceholder": "Your price",
+    "offerMade": "Offered {{price}} ₼",
+    "limited": "This message is under review",
+    "seller": "Seller",
+    "buyer": "Buyer",
+    "safety": "Pay when you meet. No need to share a phone number — you can talk here.",
+    "noThreads": "No conversations yet",
+    "loadFailed": "Couldn't load",
+    "closed": "This conversation is closed"
   }
 }

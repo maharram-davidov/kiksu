@@ -1,10 +1,11 @@
 import React from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Stack, useLocalSearchParams } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useListing } from "@/api/queries";
 import { ReportSheet } from "@/features/moderation/ReportSheet";
+import { useOpenConversation } from "@/api/mutations";
 
 /** Minor units to a display string. 2500 -> "25 ₼". */
 function formatPrice(minor: number): string {
@@ -18,6 +19,8 @@ export default function ListingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data, isPending, error } = useListing(id);
   const [reporting, setReporting] = React.useState(false);
+  const router = useRouter();
+  const openChat = useOpenConversation();
 
   if (isPending) {
     return (
@@ -162,11 +165,17 @@ export default function ListingDetailScreen() {
         </View>
 
         <Pressable
-          disabled
-          style={[styles.cta, { borderColor: theme.colors.border, opacity: 0.55 }]}
+          disabled={openChat.isPending}
+          onPress={() =>
+            openChat.mutate(data.id, {
+              onSuccess: (c) =>
+                router.push({ pathname: "/market/chat/[id]", params: { id: c.id } }),
+            })
+          }
+          style={[styles.cta, { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }]}
         >
-          <Text style={[styles.ctaText, { color: theme.colors.textMuted }]}>
-            {t("listing.messageSeller")} — {t("listing.chatNotBuilt")}
+          <Text style={[styles.ctaText, { color: theme.colors.onPrimary }]}>
+            {t("listing.messageSeller")}
           </Text>
         </Pressable>
 

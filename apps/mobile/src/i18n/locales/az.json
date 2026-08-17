@@ -253,5 +253,21 @@
     "failed": "Yerləşdirilmədi",
     "freeHint": "0 yazsan, pulsuz sayılacaq",
     "contactWarning": "Nömrə və ya e-poçt yazma. Alıcı ilə Kiksu üzərindən razılaşın və ödənişi görüş zamanı edin."
+  },
+  "chat": {
+    "messages": "Mesajlar",
+    "noMessages": "Hələ mesaj yoxdur",
+    "write": "Mesaj yaz…",
+    "send": "Göndər",
+    "offer": "Təklif et",
+    "offerPlaceholder": "Təklif qiyməti",
+    "offerMade": "{{price}} ₼ təklif edildi",
+    "limited": "Bu mesaj yoxlanılır",
+    "seller": "Satıcı",
+    "buyer": "Alıcı",
+    "safety": "Ödənişi görüş zamanı edin. Nömrə paylaşmağa ehtiyac yoxdur — burada yazışa bilərsiniz.",
+    "noThreads": "Hələ yazışma yoxdur",
+    "loadFailed": "Yüklənmədi",
+    "closed": "Bu yazışma bağlanıb"
   }
 }

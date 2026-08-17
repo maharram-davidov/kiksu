@@ -98,8 +98,16 @@ suite("admin queues (integration)", () => {
   });
 
   it("removes reported content and records the action", async () => {
-    const [post] = await sql`select id, board_id from public.post limit 1`;
+    // Owns its own post. Grabbing `limit 1` mutated a row other test FILES
+    // read, and vitest runs files in parallel against one database — so that
+    // failed intermittently and blamed the wrong code.
     const [uni] = await sql`select id from ref.university where code = 'BDU'`;
+    const [board] = await sql`select id from public.board where slug = 'bdu-serbest-sohbet'`;
+    const [post] = await sql`
+      insert into public.post (board_id, university_id, title, author_display_mode,
+                               author_alias_number, author_tier)
+      values (${board!.id}, ${uni!.id}, 'Admin silmə testi', 'alias', 1, 'email_verified')
+      returning id`;
     const [mc] = await sql`
       insert into moderation.mod_case (subject_type, subject_id, university_id, state, report_count, opened_by)
       values ('post', ${post!.id}, ${uni!.id}, 'open', 3, 'report') returning id`;
@@ -113,12 +121,16 @@ suite("admin queues (integration)", () => {
     const [act] = await sql`select kind::text as k from moderation.action where case_id = ${mc!.id}`;
     expect(act!.k).toBe("remove_content");
 
-    await sql`update public.post set moderation_state = 'visible' where id = ${post!.id}`;
   });
 
   it("records an action even when nothing is removed", async () => {
-    const [post] = await sql`select id from public.post offset 1 limit 1`;
     const [uni] = await sql`select id from ref.university where code = 'BDU'`;
+    const [board] = await sql`select id from public.board where slug = 'bdu-serbest-sohbet'`;
+    const [post] = await sql`
+      insert into public.post (board_id, university_id, title, author_display_mode,
+                               author_alias_number, author_tier)
+      values (${board!.id}, ${uni!.id}, 'Admin saxlama testi', 'alias', 1, 'email_verified')
+      returning id`;
     const [mc] = await sql`
       insert into moderation.mod_case (subject_type, subject_id, university_id, state, report_count, opened_by)
       values ('post', ${post!.id}, ${uni!.id}, 'open', 1, 'automod') returning id`;

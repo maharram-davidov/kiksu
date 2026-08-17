@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, apiPost } from "./client";
 import type {
-  Attendance, Board, ClassDetail, Listing, MarketCategory, MyProfile, PostDetail, PostPage,
-  Today, Vacancy, WeekGrid,
+  Attendance, Board, ClassDetail, Conversation, ConversationSummary, Listing, MarketCategory,
+  MyProfile, PostDetail, PostPage, Today, Vacancy, WeekGrid,
 } from "./types";
 
 export function useWeekGrid() {
@@ -197,5 +197,26 @@ export function useMarketCategories() {
     queryKey: ["market", "categories"],
     queryFn: () => apiGet<MarketCategory[]>("/market/categories"),
     staleTime: 60 * 60 * 1000,
+  });
+}
+
+export function useConversations() {
+  return useQuery({
+    queryKey: ["market", "conversations"],
+    queryFn: () => apiGet<ConversationSummary[]>("/market/conversations"),
+    staleTime: 15 * 1000,
+    retry: 1,
+  });
+}
+
+export function useConversation(id: string | null) {
+  return useQuery({
+    queryKey: ["market", "conversation", id],
+    queryFn: () => apiGet<Conversation>(`/market/conversations/${id}`),
+    enabled: Boolean(id),
+    // A live negotiation: poll while the screen is open. Realtime would be
+    // better and is the natural upgrade, but polling is honest and cheap.
+    refetchInterval: 8000,
+    retry: 1,
   });
 }

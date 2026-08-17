@@ -163,7 +163,7 @@ suite("commerce service (integration)", () => {
       })).rejects.toThrow();
     });
 
-    it("opens a case for a phone number but leaves the listing VISIBLE", async () => {
+    it("limits a listing containing a phone number, now that chat exists", async () => {
       const l = await service.createListing(seller, {
         categoryKey: "electronics",
         title: "Kalkulyator satılır",
@@ -172,10 +172,11 @@ suite("commerce service (integration)", () => {
       });
 
       const [row] = await sql`select moderation_state::text as s from public.listing where id = ${l.id}`;
-      // Deliberately NOT limited, unlike a forum post: in-app chat does not
-      // exist, so a phone number is currently the only way a buyer can reach a
-      // seller. Limiting would make the marketplace unusable rather than safer.
-      expect(row!.s).toBe("visible");
+      // Before deal chat this stayed visible, because a number was the only
+      // way to reach a seller and limiting would have made the marketplace
+      // unusable. Chat removed the excuse, so listings follow the same rule as
+      // everything else.
+      expect(row!.s).toBe("limited");
 
       const [c] = await sql`
         select opened_by, severity from moderation.mod_case where subject_id = ${l.id}`;

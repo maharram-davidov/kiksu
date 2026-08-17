@@ -100,16 +100,15 @@ export class CommerceService {
   /**
    * Creates a listing.
    *
-   * MODERATION DECISION, and it is a deliberate departure from how forum posts
-   * are treated. The tier 1 rules fire on a phone number in a listing exactly
-   * as they do in a post — but in-app chat does not exist yet, so a phone
-   * number is currently the ONLY way a buyer can reach a seller. Auto-limiting
-   * on contact details would make the marketplace unusable rather than safer.
+   * Contact details are limited on sight, same as a forum post. That was NOT
+   * true before deal chat existed: a phone number was then the only way a
+   * buyer could reach a seller, so limiting on it would have made the
+   * marketplace unusable rather than safer. Chat removes the excuse, so the
+   * exception is gone.
    *
-   * So listings open a moderation case for a human to look at, and stay
-   * visible. This should flip to limiting the moment deal chat ships, and the
-   * README says so: the reason it is tolerated is the absence of an
-   * alternative, not a judgement that posting a number is fine.
+   * The composer warns before the seller types a number, which is the point:
+   * the safe path has to be the obvious one, not a rule people discover by
+   * having a listing hidden.
    */
   async createListing(
     user: KiksuRequestContext, input: CreateListingInput,
@@ -145,18 +144,22 @@ export class CommerceService {
       `;
       if (!row) throw new BadRequestException("listing_failed");
 
-      // Classify, but do not limit — see the note on this method.
       const hits = runRules([input.title, input.description, ...input.meetupNotes].join("\n"));
       if (hits.length > 0) {
+        const severity = worstSeverity(hits) ?? 1;
         await tx`
           insert into moderation.mod_case
             (subject_type, subject_id, university_id, opened_by, state, severity,
              report_count, resolution_note)
           values ('listing', ${row.id}, ${user.univId}, 'automod', 'open',
-                  ${worstSeverity(hits) ?? 1}, 0,
-                  ${hits.map((h) => `${h.rule}: ${h.note}`).join(" ")})
+                  ${severity}, 0, ${hits.map((h) => `${h.rule}: ${h.note}`).join(" ")})
           on conflict do nothing
         `;
+        // Same threshold as everywhere else now that chat exists.
+        if (severity >= 5) {
+          await tx`update public.listing set moderation_state = 'limited'
+                    where id = ${row.id}`;
+        }
       }
 
       return row.id;

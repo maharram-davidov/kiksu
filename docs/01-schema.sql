@@ -2558,7 +2558,15 @@ create table public.chat_message (
   edited_at        timestamptz,
   deleted_at       timestamptz,
   moderation_state public.moderation_state not null default 'visible',
-  constraint chat_message_content_ck check (body is not null or storage_path is not null or kind = 'system')
+  -- An offer carries only a price and no body: the client renders
+  -- "20 ₼ təklif edildi" from the number. Requiring a duplicated body would
+  -- put the price in two places that can disagree.
+  constraint chat_message_content_ck check (
+    body is not null or storage_path is not null or kind = 'system'
+    or (kind = 'offer' and offer_price_minor is not null)
+  ),
+  -- And the other direction: an offer with no price renders as an empty bubble.
+  constraint chat_message_offer_ck check (kind <> 'offer' or offer_price_minor is not null)
 );
 -- Message pagination is always "newest N in this conversation".
 create index chat_message_conversation_idx on public.chat_message (conversation_id, created_at desc);
