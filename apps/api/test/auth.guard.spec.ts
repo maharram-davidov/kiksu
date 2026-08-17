@@ -164,7 +164,7 @@ describe("development auth bypass", () => {
       CREDENTIAL_PEPPER: "x".repeat(40),
       CURSOR_HMAC_SECRET: "y".repeat(40),
       SUPABASE_URL: "https://p.supabase.co",
-      SUPABASE_SERVICE_ROLE_KEY: "k",
+      SUPABASE_SERVICE_ROLE_KEY: "k".repeat(40),
       SUPABASE_JWT_AUDIENCE: "authenticated",
       IOS_STORE_URL: "https://apps.apple.com/app/id1",
       ANDROID_STORE_URL: "https://play.google.com/store/apps/details?id=a",
