@@ -11,6 +11,7 @@ import { IdempotencyModule } from "./common/idempotency/idempotency.module";
 import { RequestIdMiddleware } from "./common/request/request-id.middleware";
 import { HealthModule } from "./modules/health/health.module";
 import { BootstrapModule } from "./modules/bootstrap/bootstrap.module";
+import { TimetableModule } from "./modules/timetable/timetable.module";
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { BootstrapModule } from "./modules/bootstrap/bootstrap.module";
     IdempotencyModule,
     HealthModule,
     BootstrapModule,
+    TimetableModule,
   ],
   providers: [
     // Fail-closed by default: every route requires a verified caller unless it opts
