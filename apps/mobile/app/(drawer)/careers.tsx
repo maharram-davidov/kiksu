@@ -1,5 +1,5 @@
 import React from "react";
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useVacancies } from "@/api/queries";
@@ -35,12 +35,13 @@ export default function CareersScreen() {
           <Text style={[styles.count, { color: theme.colors.textMuted, fontFamily: theme.fontFamilies.mono }]}>
             {data.length} {t("careers.active").toUpperCase()}
           </Text>
-          {/* Layer 4, stated where it matters. Applying is the one place a real
-              name leaves the app, and a student deserves to know that before
-              they tap, not in a settings screen they never open. */}
+          {/* Kiksu aggregates and hands off. Saying so is worth more than it
+              looks: it is the reason the app never asks for a name, a CV or a
+              phone number, and a student comparing it to a job board should
+              know that is deliberate rather than missing. */}
           <View style={[styles.notice, { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.primaryAccent }]}>
             <Text style={[styles.noticeText, { color: theme.colors.primaryHover }]}>
-              {t("careers.careerIdentity")}
+              {t("careers.externalNote")}
             </Text>
           </View>
         </View>
@@ -49,7 +50,18 @@ export default function CareersScreen() {
         <Text style={[styles.empty, { color: theme.colors.textPlaceholder }]}>{t("careers.noVacancies")}</Text>
       }
       renderItem={({ item }) => (
-        <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+        <Pressable
+          onPress={() => {
+            if (item.external_url) void Linking.openURL(item.external_url);
+          }}
+          style={({ pressed }) => [
+            styles.card,
+            {
+              backgroundColor: pressed ? theme.colors.surfaceAlt : theme.colors.surface,
+              borderColor: theme.colors.border,
+            },
+          ]}
+        >
           <View style={styles.head}>
             <View style={[styles.logo, { backgroundColor: item.employer.brand_color ?? theme.colors.primary }]}>
               <Text style={[styles.logoText, { color: theme.colors.onPrimary, fontFamily: theme.fontFamilies.mono }]}>
@@ -90,7 +102,11 @@ export default function CareersScreen() {
             {item.schedule_friendly ? <Chip label={t("careers.friendly").toUpperCase()} /> : null}
             {item.required_skills.map((s) => <Chip key={s} label={s.toUpperCase()} />)}
           </View>
-        </View>
+
+          <Text style={[styles.openSite, { color: theme.colors.primary, fontFamily: theme.fontFamilies.mono }]}>
+            {t("careers.openSite").toUpperCase()} ›
+          </Text>
+        </Pressable>
       )}
     />
   );
@@ -129,4 +145,5 @@ const styles = StyleSheet.create({
   deadline: { fontSize: 10, letterSpacing: 0.6 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 5 },
   chip: { fontSize: 9, letterSpacing: 0.6, borderWidth: 1, borderRadius: 2, paddingHorizontal: 5, paddingVertical: 2 },
+  openSite: { fontSize: 10, letterSpacing: 0.9 },
 });

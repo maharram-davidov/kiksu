@@ -32,13 +32,24 @@ This is the product's central promise. Getting it wrong is unrecoverable.
    from a curated Azerbaijani wordlist), changeable every 14 days.
 3. **thread_alias** (ephemeral) — `Anonim 1`, `Anonim 2`, scoped to one thread,
    never reused across threads.
-4. **career_profile** (opt-in, siloed) — real name + CV, used ONLY for job
-   applications. NO traversable foreign key back to app_user.
+4. **career_profile** (opt-in, siloed) — real name + CV.
+   **SCOPE CHANGE: Kiksu no longer collects this at all.** Vacancies are
+   scraped from employers' own sites and the student is handed off to apply
+   there, so there is no CV, no career profile and no application in the
+   product. The `career.*` tables remain in the schema but are unused.
+
+   The consequence is worth stating: **Kiksu holds no real names anywhere.**
+   Layer 4 existed solely to keep a real name away from the pseudonym; with
+   nothing collecting one, that entire risk surface is gone rather than
+   merely walled off.
 
 ### Hard invariants (must be enforced as failing tests, not conventions)
 - No query outside the verification/legal-request services may join
   `verified_identity` to `app_user`.
-- NOTHING may ever join `career_profile` to `app_user`.
+- NOTHING may ever join `career_profile` to `app_user`. (Still enforced by
+  invariant 2, and now trivially true since nothing writes those tables. Keep
+  the check: it costs nothing and it is what stops the layer quietly coming
+  back if applications are ever added.)
 - **k-anonymity floor**: any displayed attribute combination matching fewer than
   20 verified users must render at a coarser level. Small-cohort de-anonymisation
   (e.g. "3rd year, Petroleum Engineering" on a 9-person programme) is the top risk.

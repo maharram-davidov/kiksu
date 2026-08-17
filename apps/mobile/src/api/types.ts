@@ -205,6 +205,8 @@ export interface Vacancy {
   schedule_friendly: boolean;
   apply_deadline: string | null;
   days_left: number | null;
+  /** Where applying happens. Kiksu hands off; it does not take applications. */
+  external_url: string | null;
   employer: { slug: string; name: string; logo_initials: string | null; brand_color: string | null };
 }
 

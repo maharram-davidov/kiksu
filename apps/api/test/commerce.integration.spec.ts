@@ -217,6 +217,29 @@ suite("commerce service (integration)", () => {
     expect(azercell!.days_left).toBeLessThanOrEqual(3);
   });
 
+  it("carries the employer's own link, because Kiksu does not take applications", async () => {
+    const vacancies = await service.listVacancies(user);
+    // Every vacancy is a hand-off. No link would mean a card a student cannot
+    // act on, which is worse than not showing it.
+    expect(vacancies.length).toBeGreaterThan(0);
+    for (const v of vacancies) {
+      expect(v.external_url).toBeTruthy();
+      expect(v.external_url).toMatch(/^https?:\/\//);
+    }
+  });
+
+  it("hides a vacancy with no link rather than showing a dead card", async () => {
+    const [emp] = await sql`select id, sector_id from public.employer limit 1`;
+    const [v] = await sql`
+      insert into public.vacancy (employer_id, title, kind, work_mode, city, sector_id,
+                                  apply_via, external_url, status, posted_at)
+      values (${emp!.id}, 'Linksiz vakansiya', 'internship', 'onsite', 'Bakı',
+              ${emp!.sector_id}, 'kiksu', null, 'active', now())
+      returning id`;
+    const list = await service.listVacancies(user);
+    expect(list.find((x) => x.id === v!.id)).toBeUndefined();
+  });
+
   it("shows vacancies to every campus unless an employer targeted one", async () => {
     const [ada] = await sql`select id from ref.university where code = 'ADA'`;
     const forAda = await service.listVacancies({ ...user, univId: ada!.id });

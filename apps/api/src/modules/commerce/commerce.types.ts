@@ -57,6 +57,14 @@ export interface VacancyDto {
   apply_deadline: string | null;
   /** Whole days until the deadline. The design renders "3 GÜN". */
   days_left: number | null;
+  /**
+   * Where applying actually happens — the employer's own site.
+   *
+   * Kiksu does NOT take applications. Vacancies are aggregated and the student
+   * is handed off, which means no CV, no career profile, and no real name
+   * anywhere in the system. See the note on Layer 4 in the brief.
+   */
+  external_url: string | null;
   employer: { slug: string; name: string; logo_initials: string | null; brand_color: string | null };
 }
 

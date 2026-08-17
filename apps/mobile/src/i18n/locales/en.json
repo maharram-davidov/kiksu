@@ -126,7 +126,9 @@
     "friendly": "Fits your timetable",
     "all": "All",
     "year": "YEAR",
-    "careerIdentity": "Applications are sent with your career identity only — employers never see your forum handle."
+    "externalNote": "Vacancies are collected from companies' own sites. You apply there — Kiksu collects no personal details at all.",
+    "openSite": "Open on the company's site",
+    "cannotOpen": "Couldn't open the link"
   },
   "onboarding": {
     "pickUniversity": "Choose your university",
@@ -187,10 +189,6 @@
     "linkListingsNote": "From my handle to my listings",
     "discoverable": "Findable in search",
     "discoverableNote": "Exact handle only",
-    "careerTitle": "Career identity · separate",
-    "careerNone": "Not set up yet",
-    "careerNote": "Your real name is shown only to a company you apply to. Never on the forum, the marketplace or in reviews.",
-    "careerManage": "Manage career identity",
     "notBuilt": "This section isn't ready yet",
     "loadFailed": "Couldn't load",
     "handleChanged": "Your new handle is ready"

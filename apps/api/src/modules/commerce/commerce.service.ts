@@ -176,7 +176,7 @@ export class CommerceService {
              v.currency, v.duration_months, v.hours_per_week,
              v.min_study_year, v.max_study_year, v.required_skills,
              v.conversion_possible, v.transport_provided, v.schedule_friendly,
-             v.apply_deadline,
+             v.apply_deadline, v.external_url,
              case when v.apply_deadline is null then null
                   else greatest(0, (v.apply_deadline::date - current_date))::int end as days_left,
              jsonb_build_object(
@@ -193,6 +193,9 @@ export class CommerceService {
               or cardinality(v.target_university_ids) = 0
               or ${user.univId} = any (v.target_university_ids))
          and (${kind ?? null}::text is null or v.kind::text = ${kind ?? null})
+         -- A vacancy nobody can act on is noise. Since Kiksu hands off rather
+         -- than taking applications, no link means no listing.
+         and v.external_url is not null
        order by v.apply_deadline nulls last, v.posted_at desc
        limit 50
     `;

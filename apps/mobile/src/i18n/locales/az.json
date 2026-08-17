@@ -123,7 +123,9 @@
     "friendly": "Cədvələ uyğun",
     "all": "Hamısı",
     "year": "KURS",
-    "careerIdentity": "Müraciət yalnız karyera kimliyi ilə göndərilir — forum ləqəbin işəgötürənə görünmür."
+    "externalNote": "Vakansiyalar şirkətlərin öz saytlarından toplanır. Müraciət orada edilir — Kiksu heç bir şəxsi məlumat toplamır.",
+    "openSite": "Şirkətin saytında aç",
+    "cannotOpen": "Link açılmadı"
   },
   "onboarding": {
     "pickUniversity": "Universitetini seç",
@@ -184,10 +186,6 @@
     "linkListingsNote": "Ləqəbimdən elanlarıma keçid olsun",
     "discoverable": "Axtarışda tapılım",
     "discoverableNote": "Yalnız tam ləqəb üzrə axtarış",
-    "careerTitle": "Karyera kimliyi · ayrıdır",
-    "careerNone": "Hələ qurulmayıb",
-    "careerNote": "Real adın yalnız müraciət göndərdiyin şirkətə açılır. Forum, bazar və rəylərdə heç vaxt görünmür.",
-    "careerManage": "Karyera kimliyini idarə et",
     "notBuilt": "Bu hissə hələ hazır deyil",
     "loadFailed": "Yüklənmədi",
     "handleChanged": "Yeni ləqəbin hazırdır"

@@ -150,21 +150,6 @@ export default function ProfileScreen() {
         />
       </View>
 
-      {/* Career identity — Layer 4, and the screen says why it is separate. */}
-      <View style={{ gap: 8 }}>
-        {label(t("profile.careerTitle"))}
-        <View style={[styles.career, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-          <Text style={[styles.careerState, { color: theme.colors.textPlaceholder }]}>
-            {t("profile.careerNone")}
-          </Text>
-          <Text style={[styles.careerNote, { color: theme.colors.textMuted }]}>
-            {t("profile.careerNote")}
-          </Text>
-          <Text style={[styles.notBuilt, { color: theme.colors.textPlaceholder, fontFamily: theme.fontFamilies.mono }]}>
-            {t("profile.notBuilt").toUpperCase()}
-          </Text>
-        </View>
-      </View>
     </ScrollView>
   );
 }
