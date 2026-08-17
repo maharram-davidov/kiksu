@@ -103,6 +103,31 @@ suite("timetable service (integration)", () => {
     expect(cs214!.is_barred).toBe(false);
   });
 
+  it("does not count an approved excused absence against the limit", async () => {
+    // Regression: `excuse_state` is none/requested/approved/rejected, and
+    // `kind` is absent/late/excused. Filtering excuse_state against 'excused'
+    // matches nothing, so approved excuses silently counted and could bar a
+    // student from an exam they were entitled to sit.
+    const [enr] = await sql`
+      select e.id from public.enrollment e
+        join ref.course_section s on s.id = e.section_id
+        join ref.course c on c.id = s.course_id and c.code = 'MATH 201'
+       where e.app_user_id = ${user.appUserId}`;
+    if (!enr) throw new Error("seed missing: MATH 201 enrollment");
+
+    await sql`insert into public.absence (enrollment_id, occurred_on, kind, source, excuse_state)
+              values (${enr.id}, '2025-10-14'::date, 'absent', 'self_reported', 'approved')`;
+    await sql`insert into public.absence (enrollment_id, occurred_on, kind, source)
+              values (${enr.id}, '2025-10-21'::date, 'excused', 'instructor')`;
+    await sql`insert into public.absence (enrollment_id, occurred_on, kind, source)
+              values (${enr.id}, '2025-10-28'::date, 'absent', 'self_reported')`;
+
+    const rows = await service.getAttendance(user);
+    const math = rows.find((r) => r.course_code === "MATH 201");
+    // three rows inserted, only the plain unexcused one counts
+    expect(math!.absences).toBe(1);
+  });
+
   it("finds a course typed with plain ASCII instead of Azerbaijani letters", async () => {
     // A student types "verilenler" for "Verilənlər". Folding both sides is the
     // whole reason util.tsq/fold_text exist.

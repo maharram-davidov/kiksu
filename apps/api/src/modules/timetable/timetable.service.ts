@@ -104,7 +104,15 @@ export class TimetableService {
           select count(*) as n
             from public.absence ab
            where ab.enrollment_id = e.id
-             and ab.excuse_state <> 'excused'
+             -- Two separate concepts, easy to conflate: kind is what
+             -- happened (absent / late / excused) and excuse_state is where
+             -- the appeal got to (none / requested / approved / rejected).
+             -- There is no 'excused' excuse_state, so comparing against one
+             -- silently matches every row and counts approved excuses against
+             -- the student, which is what bars them from an exam they were
+             -- entitled to sit.
+             and ab.excuse_state <> 'approved'
+             and ab.kind <> 'excused'
         ) a on true
        where e.app_user_id = ${user.appUserId}
          and e.state = 'enrolled'
