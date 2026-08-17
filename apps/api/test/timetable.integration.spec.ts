@@ -27,12 +27,15 @@ suite("timetable service (integration)", () => {
     service = new TimetableService({ sql } as never);
 
     const [uni] = await sql`select id from ref.university where code = 'BDU'`;
+    if (!uni) throw new Error("seed missing: BDU university");
     const [authUser] = await sql`
       insert into auth.users (id) values (gen_random_uuid()) returning id`;
+    if (!authUser) throw new Error("failed to create auth user");
     const [appUser] = await sql`
       insert into public.app_user (auth_user_id, handle, university_id, verification_tier, status)
       values (${authUser.id}, 'test-tələbə-01', ${uni.id}, 'email_verified', 'active')
       returning id`;
+    if (!appUser) throw new Error("failed to create app_user");
 
     // Enrol in every seeded section so the grid has content.
     await sql`
@@ -48,6 +51,7 @@ suite("timetable service (integration)", () => {
         join ref.course_section s on s.id = e.section_id
         join ref.course c on c.id = s.course_id and c.code = 'CS 214'
        where e.app_user_id = ${appUser.id}`;
+    if (!cs214) throw new Error("seed missing: CS 214 enrollment");
     for (const d of ["2025-09-16", "2025-09-23", "2025-09-30", "2025-10-07"]) {
       await sql`insert into public.absence (enrollment_id, occurred_on, kind, source)
                 values (${cs214.id}, ${d}::date, 'absent', 'self_reported')`;
@@ -121,20 +125,20 @@ suite("timetable service (integration)", () => {
     // itself. If the university predicate were ever dropped, this test is what
     // catches it — the same enrolled user, re-scoped to ADA, must see nothing.
     const [ada] = await sql`select id from ref.university where code = 'ADA'`;
-    const grid = await service.getWeekGrid({ ...user, univId: ada.id });
+    const grid = await service.getWeekGrid({ ...user, univId: ada!.id });
     expect(grid).not.toBeNull();
     expect(grid!.meetings).toHaveLength(0);
   });
 
   it("leaks no BDU attendance to a caller scoped to another campus", async () => {
     const [ada] = await sql`select id from ref.university where code = 'ADA'`;
-    const rows = await service.getAttendance({ ...user, univId: ada.id });
+    const rows = await service.getAttendance({ ...user, univId: ada!.id });
     expect(rows).toHaveLength(0);
   });
 
   it("leaks no BDU courses into another campus's catalogue search", async () => {
     const [ada] = await sql`select id from ref.university where code = 'ADA'`;
-    const hits = await service.searchCourses({ ...user, univId: ada.id }, "verilenler");
+    const hits = await service.searchCourses({ ...user, univId: ada!.id }, "verilenler");
     expect(hits).toHaveLength(0);
   });
 });
