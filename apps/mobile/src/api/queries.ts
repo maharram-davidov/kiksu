@@ -139,3 +139,25 @@ export function useVerificationStatus(authUserId: string) {
     retry: 1,
   });
 }
+
+export interface ReportReason { key: string; label: string; severity: number }
+
+export function useReportReasons(targetType: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["reports", "reasons", targetType],
+    queryFn: () => apiGet<ReportReason[]>(`/reports/reasons?target_type=${targetType}`),
+    enabled,
+    staleTime: 60 * 60 * 1000,
+  });
+}
+
+export function fileReport(input: {
+  targetType: string; targetId: string; reasonKey: string; details?: string;
+}) {
+  return apiPost<void>("/reports", {
+    target_type: input.targetType,
+    target_id: input.targetId,
+    reason_key: input.reasonKey,
+    details: input.details,
+  });
+}

@@ -80,7 +80,12 @@
     "send": "Göndər",
     "sending": "Göndərilir…",
     "sendFailed": "Göndərilmədi",
-    "saved": "Saxlanıldı"
+    "saved": "Saxlanıldı",
+    "report": "Şikayət et",
+    "reportTitle": "Nəyə görə şikayət edirsən?",
+    "reportSent": "Şikayətin göndərildi",
+    "reportNote": "Şikayətlər anonimdir. Nəticə barədə ayrıca bildiriş göndərilmir.",
+    "cancel": "Ləğv et"
   },
   "today": {
     "remaining": "Qalan dərslər",

@@ -9,6 +9,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { usePost } from "@/api/queries";
 import { AliasBadge } from "@/features/forum/AliasBadge";
 import { useCreateComment, useSavePost, useVotePost } from "@/api/mutations";
+import { ReportSheet } from "@/features/moderation/ReportSheet";
 
 export default function PostDetailScreen() {
   const theme = useTheme();
@@ -21,6 +22,7 @@ export default function PostDetailScreen() {
   const [draft, setDraft] = React.useState("");
   const [myVote, setMyVote] = React.useState<-1 | 0 | 1>(0);
   const [isSaved, setIsSaved] = React.useState(false);
+  const [reporting, setReporting] = React.useState(false);
 
   if (isPending) {
     return (
@@ -131,6 +133,12 @@ export default function PostDetailScreen() {
             <Text style={[styles.actionText, { color: theme.colors.textPlaceholder, fontFamily: theme.fontFamilies.mono }]}>
               ▭ {data.comment_count}
             </Text>
+
+            <Pressable onPress={() => setReporting(true)} style={{ marginLeft: "auto" }}>
+              <Text style={[styles.actionText, { color: theme.colors.textPlaceholder }]}>
+                {t("forum.report")}
+              </Text>
+            </Pressable>
           </View>
         </View>
 
@@ -221,6 +229,12 @@ export default function PostDetailScreen() {
           ) : null}
         </View>
       </ScrollView>
+      <ReportSheet
+        visible={reporting}
+        targetType="post"
+        targetId={data.id}
+        onClose={() => setReporting(false)}
+      />
       </KeyboardAvoidingView>
     </>
   );

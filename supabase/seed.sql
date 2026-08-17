@@ -42,6 +42,36 @@ select u.id, d.domain, d.audience, d.sample, d.primary_
 on conflict do nothing;
 
 -- ---------------------------------------------------------------------
+-- Report reasons. `severity` orders the moderation queue; `auto_hide_at_count`
+-- limits content automatically once that many DISTINCT people have reported
+-- it, before any human looks.
+--
+-- That threshold is the only protection between a report and a moderator, so
+-- it is set low for the things that cause real harm quickly (a phone number,
+-- targeted abuse) and left null for judgement calls like off-topic, where an
+-- automatic hide would just hand a brigade a delete button.
+-- ---------------------------------------------------------------------
+insert into ref.report_reason (key, label_az, label_en, applies_to, severity, auto_hide_at_count, display_order)
+values
+  ('personal_info', 'Şəxsi məlumat paylaşılıb', 'Personal information shared',
+   '{post,comment,review,listing}', 5, 2, 1),
+  ('harassment',    'Təhqir və ya hədə',        'Harassment or threats',
+   '{post,comment,review,listing}', 5, 3, 2),
+  ('naming_person', 'Şəxsi adla hədəflənib',    'Targets a named individual',
+   '{post,comment,review}',         4, 3, 3),
+  ('sexual',        'Cinsi məzmun',             'Sexual content',
+   '{post,comment,listing}',        4, 3, 4),
+  ('scam',          'Fırıldaq və ya saxta elan','Scam or fake listing',
+   '{listing,post}',                4, 3, 5),
+  ('spam',          'Spam və ya reklam',        'Spam or advertising',
+   '{post,comment,review,listing}', 2, 5, 6),
+  ('false_info',    'Yanlış məlumat',           'False information',
+   '{post,comment,review}',         2, null, 7),
+  ('off_topic',     'Mövzuya aid deyil',        'Off topic',
+   '{post,comment}',                1, null, 8)
+on conflict (key) do nothing;
+
+-- ---------------------------------------------------------------------
 -- Review tag vocabulary. The design shows these as chips on the professor
 -- profile: SLAYDLAR AYDIN, LAB. FAYDALI, YOXLAMA SIX. A closed vocabulary
 -- rather than free tags, because tags are aggregated and shown as a summary of

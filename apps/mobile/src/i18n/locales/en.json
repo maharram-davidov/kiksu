@@ -83,7 +83,12 @@
     "send": "Send",
     "sending": "Sending…",
     "sendFailed": "Couldn't send",
-    "saved": "Saved"
+    "saved": "Saved",
+    "report": "Report",
+    "reportTitle": "What's wrong with this?",
+    "reportSent": "Report sent",
+    "reportNote": "Reports are anonymous. You won't get a separate notification about the outcome.",
+    "cancel": "Cancel"
   },
   "today": {
     "remaining": "Remaining classes",
