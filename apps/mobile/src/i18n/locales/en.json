@@ -63,5 +63,21 @@
     "loadFailed": "Couldn't load your timetable",
     "emptyTitle": "Your timetable is empty",
     "emptyBody": "You aren't enrolled in any courses this semester."
+  },
+  "forum": {
+    "boards": "Boards",
+    "national": "National",
+    "campus": "University",
+    "followers": "followers",
+    "posts": "posts",
+    "anonymous": "Anonymous",
+    "author": "AUTHOR",
+    "comments": "comments",
+    "votes": "votes",
+    "noPosts": "No posts yet",
+    "loadFailed": "Couldn't load",
+    "writeAs": "Write as {{alias}}",
+    "pollTotal": "{{count}} votes",
+    "remaining": "left"
   }
 }

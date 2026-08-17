@@ -60,5 +60,21 @@
     "loadFailed": "Cədvəl yüklənmədi",
     "emptyTitle": "Cədvəliniz boşdur",
     "emptyBody": "Bu semestr üçün heç bir fənnə yazılmamısınız."
+  },
+  "forum": {
+    "boards": "Lövhələr",
+    "national": "Milli",
+    "campus": "Universitet",
+    "followers": "izləyici",
+    "posts": "post",
+    "anonymous": "Anonim",
+    "author": "MÜƏLLİF",
+    "comments": "şərh",
+    "votes": "səs",
+    "noPosts": "Hələ post yoxdur",
+    "loadFailed": "Yüklənmədi",
+    "writeAs": "{{alias}} kimi yaz",
+    "pollTotal": "{{count}} səs",
+    "remaining": "qalıb"
   }
 }
