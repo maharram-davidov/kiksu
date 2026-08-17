@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiPost } from "./client";
-import type { Comment, PostDetail } from "./types";
+import { apiPatch, apiPost } from "./client";
+import type { Comment, MyProfile, PostDetail, PrivacyKey } from "./types";
 
 /**
  * Optimistic vote.
@@ -57,5 +57,45 @@ export function useCreateComment(postId: string) {
     mutationFn: (body: string) =>
       apiPost<Comment>(`/forum/posts/${postId}/comments`, { body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["forum", "post", postId] }),
+  });
+}
+
+/**
+ * Privacy toggles, updated optimistically.
+ *
+ * A switch that lags behind the finger feels broken, and these are controls a
+ * student is likely to flip several times while reading what each one does.
+ * The rollback matters more than usual here: leaving a toggle showing "on"
+ * when the server rejected it would misrepresent what the app is disclosing.
+ */
+export function useUpdatePrivacy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: Partial<Record<PrivacyKey, boolean>>) =>
+      apiPatch<MyProfile>("/me/privacy", patch),
+    onMutate: async (patch) => {
+      await qc.cancelQueries({ queryKey: ["me"] });
+      const previous = qc.getQueryData<MyProfile>(["me"]);
+      if (previous) {
+        qc.setQueryData<MyProfile>(["me"], {
+          ...previous,
+          privacy: { ...previous.privacy, ...patch },
+        });
+      }
+      return { previous };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.previous) qc.setQueryData(["me"], ctx.previous);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["me"] }),
+  });
+}
+
+/** Handle rotation is NOT optimistic: the new name is generated server-side. */
+export function useRotateHandle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost<{ handle: string }>("/me/handle/rotate", {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["me"] }),
   });
 }

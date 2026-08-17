@@ -118,3 +118,26 @@ export async function apiPost<T>(path: string, body: unknown, locale = "az"): Pr
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;
 }
+
+export async function apiPatch<T>(path: string, body: unknown, locale = "az"): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}/v1${path}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "Accept-Language": locale,
+      "X-Kiksu-Client": "mobile",
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let code = `http_${res.status}`;
+    try {
+      const parsed = (await res.json()) as { error?: { code?: string } };
+      if (parsed?.error?.code) code = parsed.error.code;
+    } catch { /* keep the fallback */ }
+    throw new ApiError(code, res.status, `Request failed (${res.status})`);
+  }
+  return (await res.json()) as T;
+}

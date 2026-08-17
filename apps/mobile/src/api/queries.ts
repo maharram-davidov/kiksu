@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, apiPost } from "./client";
 import type {
-  Attendance, Board, Listing, PostDetail, PostPage, Today, Vacancy, WeekGrid,
+  Attendance, Board, Listing, MyProfile, PostDetail, PostPage, Today, Vacancy, WeekGrid,
 } from "./types";
 
 export function useWeekGrid() {
@@ -159,5 +159,14 @@ export function fileReport(input: {
     target_id: input.targetId,
     reason_key: input.reasonKey,
     details: input.details,
+  });
+}
+
+export function useMyProfile() {
+  return useQuery({
+    queryKey: ["me"],
+    queryFn: () => apiGet<MyProfile>("/me"),
+    staleTime: 30 * 1000,
+    retry: 1,
   });
 }

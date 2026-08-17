@@ -207,3 +207,32 @@ export interface Vacancy {
   days_left: number | null;
   employer: { slug: string; name: string; logo_initials: string | null; brand_color: string | null };
 }
+
+
+export interface MyProfile {
+  handle: string;
+  avatar_id: number;
+  /** Exact, and ONLY here. No cross-user surface carries this. */
+  karma: number;
+  post_count: number;
+  comment_count: number;
+  review_count: number;
+  trade_rating_avg: number | null;
+  deal_count: number;
+  verification_tier: string;
+  /** Independent of tier: you can be email-verified with a card pending. */
+  card_review_state: string;
+  university_code: string | null;
+  study_year: number | null;
+  handle_change_allowed_at: string;
+  can_change_handle: boolean;
+  privacy: {
+    show_year: boolean;
+    share_timetable: boolean;
+    show_uni_badge: boolean;
+    link_listings: boolean;
+    discoverable: boolean;
+  };
+}
+
+export type PrivacyKey = keyof MyProfile["privacy"];
