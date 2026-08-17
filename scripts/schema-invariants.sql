@@ -154,5 +154,33 @@ begin
     raise exception 'INVARIANT 10 FAILED: SECURITY DEFINER function(s) callable by client roles: %', v_cols;
   end if;
 
-  raise notice 'All 10 schema invariants hold.';
+  ---------------------------------------------------------------------
+  -- 11. The token-mint hook cannot reach the sealed store, and the claims
+  --     projection it CAN reach stays exactly six columns.
+  --
+  --     Identity spec §7.1: "The hook must not be able to read the sealed
+  --     store — if it can, every token mint is a sealed-store read." Token
+  --     minting is the highest-frequency operation in the product, so a
+  --     grant here would turn the sealed store's read-volume budget (tens
+  --     of reads per day, §7.4) into millions and destroy the cheapest
+  --     detector this design has for identity being wired into a hot path.
+  --
+  --     The column list is the same control as invariant 7: what keeps a
+  --     claim out of every token the product issues is the allowlist, not
+  --     anyone remembering why the view is narrow.
+  ---------------------------------------------------------------------
+  if has_schema_privilege('kiksu_auth_hook_owner', 'identity', 'usage')
+     or has_schema_privilege('kiksu_auth_hook_owner', 'career', 'usage') then
+    raise exception 'INVARIANT 11 FAILED: the access-token hook role can reach a sealed schema; every token mint is now a sealed-store read';
+  end if;
+
+  select string_agg(column_name, ', ' order by column_name) into v_cols
+    from information_schema.columns
+   where table_schema = 'internal' and table_name = 'token_claims';
+  if v_cols is distinct from
+     'app_user_id, auth_user_id, epoch, role, tier, univ_id' then
+    raise exception 'INVARIANT 11 FAILED: internal.token_claims columns changed to: %', v_cols;
+  end if;
+
+  raise notice 'All 11 schema invariants hold.';
 end$$;
