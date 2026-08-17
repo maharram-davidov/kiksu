@@ -170,8 +170,4 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 19, fontWeight: "700" },
   statLabel: { fontSize: 8, letterSpacing: 0.9 },
   sectionLabel: { fontSize: 10, letterSpacing: 1.4, marginBottom: 4 },
-  career: { borderWidth: 1, borderRadius: 4, padding: 14, gap: 8 },
-  careerState: { fontSize: 14, fontWeight: "600" },
-  careerNote: { fontSize: 12, lineHeight: 18 },
-  notBuilt: { fontSize: 9, letterSpacing: 0.9, marginTop: 2 },
 });
