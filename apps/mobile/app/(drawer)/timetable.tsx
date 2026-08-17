@@ -5,11 +5,13 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { useWeekGrid } from "@/api/queries";
 import { ApiError, API_BASE_URL, hasAuthToken } from "@/api/client";
 import { WeekGrid } from "@/features/timetable/WeekGrid";
+import { ClassDetailSheet } from "@/features/timetable/ClassDetailSheet";
 
 export default function TimetableScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
   const { data, isPending, error, refetch } = useWeekGrid();
+  const [openSection, setOpenSection] = React.useState<string | null>(null);
 
   if (isPending) {
     return (
@@ -65,7 +67,8 @@ export default function TimetableScreen() {
           {data.term.label.toUpperCase()}
         </Text>
       </View>
-      <WeekGrid meetings={data.meetings} />
+      <WeekGrid meetings={data.meetings} onSelect={setOpenSection} />
+      <ClassDetailSheet sectionId={openSection} onClose={() => setOpenSection(null)} />
     </View>
   );
 }

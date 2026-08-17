@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, apiPost } from "./client";
 import type {
-  Attendance, Board, Listing, MyProfile, PostDetail, PostPage, Today, Vacancy, WeekGrid,
+  Attendance, Board, ClassDetail, Listing, MyProfile, PostDetail, PostPage, Today, Vacancy, WeekGrid,
 } from "./types";
 
 export function useWeekGrid() {
@@ -167,6 +167,16 @@ export function useMyProfile() {
     queryKey: ["me"],
     queryFn: () => apiGet<MyProfile>("/me"),
     staleTime: 30 * 1000,
+    retry: 1,
+  });
+}
+
+export function useClassDetail(sectionId: string | null) {
+  return useQuery({
+    queryKey: ["timetable", "section", sectionId],
+    queryFn: () => apiGet<ClassDetail>(`/timetable/sections/${sectionId}`),
+    enabled: Boolean(sectionId),
+    staleTime: 60 * 1000,
     retry: 1,
   });
 }

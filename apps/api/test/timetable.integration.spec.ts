@@ -128,6 +128,82 @@ suite("timetable service (integration)", () => {
     expect(math!.absences).toBe(1);
   });
 
+  describe("class detail sheet", () => {
+    let sectionId: string;
+
+    beforeAll(async () => {
+      const [s] = await sql`
+        select s.id from ref.course_section s
+          join ref.course c on c.id = s.course_id and c.code = 'CS 214'`;
+      sectionId = s!.id;
+    });
+
+    it("returns the design's header in one call", async () => {
+      const d = await service.getClassDetail(user, sectionId);
+      expect(d.course_code).toBe("CS 214");
+      expect(d.course_title).toBe("Verilənlər bazası sistemləri");
+      expect(d.credits).toBe(6);                       // the design's "6 KREDİT"
+      expect(d.instructor!.full_name).toBe("Nigar Əliyeva");
+      expect(d.instructor!.title_prefix).toBe("dos.");
+      expect(Number(d.instructor!.rating_avg)).toBeCloseTo(4.3, 1);
+      expect(d.meetings.length).toBeGreaterThan(0);
+      const cakhs = d.meetings.find((m) => m.weekday === 2);
+      expect(cakhs!.starts_at).toBe("14:05");
+      expect(cakhs!.room).toBe("312");
+    });
+
+    it("agrees with the attendance list, so two surfaces cannot disagree", async () => {
+      const detail = await service.getClassDetail(user, sectionId);
+      const list = await service.getAttendance(user);
+      const same = list.find((a) => a.section_id === sectionId)!;
+      // A student anxious about exclusion must never see two different counts.
+      expect(detail.attendance.absences).toBe(same.absences);
+      expect(detail.attendance.max_absences).toBe(same.max_absences);
+      expect(detail.attendance.is_barred).toBe(same.is_barred);
+    });
+
+    it("records a self-reported absence and returns the new count", async () => {
+      const before = await service.getClassDetail(user, sectionId);
+      const res = await service.recordAbsence(user, sectionId, "2025-11-04");
+      expect(res.absences).toBe(before.attendance.absences + 1);
+    });
+
+    it("does not charge a second absence for the same date", async () => {
+      const first = await service.recordAbsence(user, sectionId, "2025-11-11");
+      const second = await service.recordAbsence(user, sectionId, "2025-11-11");
+      // Tapping twice must not cost a student an absence against a limit that
+      // can exclude them.
+      expect(second.absences).toBe(first.absences);
+    });
+
+    it("refuses to record for a course the caller is not enrolled in", async () => {
+      const [au] = await sql`insert into auth.users (id) values (gen_random_uuid()) returning id`;
+      const [u] = await sql`
+        insert into public.app_user (auth_user_id, handle, university_id, verification_tier, status)
+        values (${au!.id}, 'qeyri-telebe-01', ${user.univId}, 'email_verified', 'active')
+        returning id`;
+      const stranger = { ...user, appUserId: u!.id };
+      await expect(service.recordAbsence(stranger, sectionId, "2025-11-18")).rejects.toThrow();
+    });
+
+    it("hides recording for a non-enrolled caller by returning no enrollment", async () => {
+      const [au] = await sql`insert into auth.users (id) values (gen_random_uuid()) returning id`;
+      const [u] = await sql`
+        insert into public.app_user (auth_user_id, handle, university_id, verification_tier, status)
+        values (${au!.id}, 'baxan-telebe-01', ${user.univId}, 'email_verified', 'active')
+        returning id`;
+      const d = await service.getClassDetail({ ...user, appUserId: u!.id }, sectionId);
+      expect(d.enrollment_id).toBeNull();
+    });
+
+    it("refuses a section on another campus", async () => {
+      const [ada] = await sql`select id from ref.university where code = 'ADA'`;
+      await expect(
+        service.getClassDetail({ ...user, univId: ada!.id }, sectionId),
+      ).rejects.toThrow();
+    });
+  });
+
   it("finds a course typed with plain ASCII instead of Azerbaijani letters", async () => {
     // A student types "verilenler" for "Verilənlər". Folding both sides is the
     // whole reason util.tsq/fold_text exist.

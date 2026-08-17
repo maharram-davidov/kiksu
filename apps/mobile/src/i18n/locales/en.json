@@ -194,5 +194,26 @@
     "notBuilt": "This section isn't ready yet",
     "loadFailed": "Couldn't load",
     "handleChanged": "Your new handle is ready"
+  },
+  "classDetail": {
+    "time": "Time",
+    "room": "Room",
+    "instructor": "Instructor",
+    "attendance": "Attendance",
+    "limitNote": "{{pct}}% of your allowed absences used. Excluded from the course after {{limit}}.",
+    "barred": "Absence limit exceeded. You may not be allowed to sit the exam.",
+    "materials": "Course materials",
+    "topics": "Course board",
+    "reviews": "Instructor reviews",
+    "files": "files",
+    "topicsCount": "topics",
+    "reviewsCount": "reviews",
+    "markAbsence": "Record an absence",
+    "marking": "Recording…",
+    "marked": "Recorded",
+    "selfReported": "This is your own tally. It does not reach your university's official register.",
+    "notEnrolled": "You're not enrolled in this course",
+    "credits": "credits",
+    "loadFailed": "Couldn't load"
   }
 }

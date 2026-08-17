@@ -51,3 +51,50 @@ export interface CourseSearchItemDto {
   credits: number | null;
   instructors: string[];
 }
+
+
+/**
+ * Everything the class detail sheet needs, in one call.
+ *
+ * The sheet opens from a tap on the week grid, so it must not stall — and it
+ * shows six different things (times, room, instructor, attendance, and three
+ * link counts) that would otherwise be six round trips on campus wifi.
+ */
+export interface ClassDetailDto {
+  section_id: string;
+  course_id: string;
+  course_code: string;
+  course_title: string;
+  credits: number | null;
+  section_code: string | null;
+  meetings: Array<{
+    weekday: number;
+    starts_at: string;
+    ends_at: string;
+    room: string | null;
+    campus: string | null;
+    kind: string;
+  }>;
+  instructor: {
+    id: string;
+    full_name: string;
+    title_prefix: string | null;
+    /** Links the sheet straight into the reviews profile. */
+    rating_avg: number | null;
+    review_count: number;
+  } | null;
+  attendance: {
+    absences: number;
+    max_absences: number;
+    expulsion_at: number;
+    used_ratio: number;
+    is_warning: boolean;
+    is_barred: boolean;
+  };
+  /** The design's "14 fayl", "38 mövzu", "61 rəy" row. */
+  material_count: number;
+  board_topic_count: number;
+  review_count: number;
+  /** Null when the caller is not enrolled — the sheet then hides recording. */
+  enrollment_id: string | null;
+}

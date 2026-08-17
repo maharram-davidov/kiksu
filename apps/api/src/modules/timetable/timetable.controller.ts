@@ -1,9 +1,14 @@
-import { Controller, Get, NotFoundException, Query } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, NotFoundException, Param, Post, Query } from "@nestjs/common";
 import { z } from "zod";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import type { KiksuRequestContext } from "../../common/auth/request-context";
 import { TimetableService } from "./timetable.service";
-import type { AttendanceDto, CourseSearchItemDto, WeekGridDto } from "./timetable.types";
+import type { AttendanceDto, ClassDetailDto, CourseSearchItemDto, WeekGridDto } from "./timetable.types";
+
+const absenceBody = z.object({
+  /** ISO date. Defaults to today in the caller's own reckoning if omitted. */
+  occurred_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
 
 const searchQuery = z.object({
   q: z.string().min(1).max(80),
@@ -31,6 +36,29 @@ export class TimetableController {
   @Get("attendance")
   attendance(@CurrentUser() user: KiksuRequestContext): Promise<AttendanceDto[]> {
     return this.timetable.getAttendance(user);
+  }
+
+  /** Everything the class detail sheet shows, in one call. */
+  @Get("sections/:id")
+  section(
+    @CurrentUser() user: KiksuRequestContext,
+    @Param("id") id: string,
+  ): Promise<ClassDetailDto> {
+    return this.timetable.getClassDetail(user, id);
+  }
+
+  /**
+   * Records a self-reported absence. Idempotent per date: tapping twice must
+   * not cost a student a second absence against a limit that can exclude them.
+   */
+  @Post("sections/:id/absence")
+  @HttpCode(200)
+  absence(
+    @CurrentUser() user: KiksuRequestContext,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ): Promise<{ absences: number; max_absences: number }> {
+    return this.timetable.recordAbsence(user, id, absenceBody.parse(body).occurred_on);
   }
 
   /** Course catalogue search, scoped to the caller's campus. */

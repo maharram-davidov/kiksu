@@ -236,3 +236,30 @@ export interface MyProfile {
 }
 
 export type PrivacyKey = keyof MyProfile["privacy"];
+
+
+export interface ClassDetail {
+  section_id: string;
+  course_id: string;
+  course_code: string;
+  course_title: string;
+  credits: number | null;
+  section_code: string | null;
+  meetings: Array<{
+    weekday: number; starts_at: string; ends_at: string;
+    room: string | null; campus: string | null; kind: string;
+  }>;
+  instructor: {
+    id: string; full_name: string; title_prefix: string | null;
+    rating_avg: number | null; review_count: number;
+  } | null;
+  attendance: {
+    absences: number; max_absences: number; expulsion_at: number;
+    used_ratio: number; is_warning: boolean; is_barred: boolean;
+  };
+  material_count: number;
+  board_topic_count: number;
+  review_count: number;
+  /** Null when not enrolled — the sheet hides absence recording. */
+  enrollment_id: string | null;
+}

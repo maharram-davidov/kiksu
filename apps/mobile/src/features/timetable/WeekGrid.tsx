@@ -1,5 +1,5 @@
 import React from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@/theme/ThemeProvider";
 import type { Meeting } from "@/api/types";
@@ -16,7 +16,12 @@ const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri"] as const;
  * constructs a Date: doing so would reinterpret 14:05 in the phone's zone and
  * silently shift every class for a student travelling.
  */
-export function WeekGrid({ meetings }: { meetings: Meeting[] }) {
+export function WeekGrid({
+  meetings, onSelect,
+}: {
+  meetings: Meeting[];
+  onSelect?: (sectionId: string) => void;
+}) {
   const theme = useTheme();
   const { t } = useTranslation();
 
@@ -49,11 +54,15 @@ export function WeekGrid({ meetings }: { meetings: Meeting[] }) {
               </Text>
             ) : (
               dayMeetings.map((m) => (
-                <View
+                <Pressable
                   key={`${m.section_id}-${m.starts_at}`}
-                  style={[
+                  onPress={() => onSelect?.(m.section_id)}
+                  style={({ pressed }) => [
                     styles.card,
-                    { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                    {
+                      backgroundColor: pressed ? theme.colors.surfaceAlt : theme.colors.surface,
+                      borderColor: theme.colors.border,
+                    },
                   ]}
                 >
                   <View style={[styles.stripe, { backgroundColor: theme.colors.primary }]} />
@@ -76,7 +85,7 @@ export function WeekGrid({ meetings }: { meetings: Meeting[] }) {
                       </Text>
                     ) : null}
                   </View>
-                </View>
+                </Pressable>
               ))
             )}
           </View>

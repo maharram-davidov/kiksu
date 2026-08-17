@@ -191,5 +191,26 @@
     "notBuilt": "Bu hissə hələ hazır deyil",
     "loadFailed": "Yüklənmədi",
     "handleChanged": "Yeni ləqəbin hazırdır"
+  },
+  "classDetail": {
+    "time": "Vaxt",
+    "room": "Otaq",
+    "instructor": "Müəllim",
+    "attendance": "Davamiyyət",
+    "limitNote": "İcazəli qayıb limitinin {{pct}}%-i istifadə olunub. {{limit}} qayıbdan sonra kursdan kənarlaşdırılma.",
+    "barred": "Qayıb limiti keçilib. İmtahana buraxılmaya bilərsən.",
+    "materials": "Kurs materialları",
+    "topics": "Kurs forumu",
+    "reviews": "Müəllim rəyləri",
+    "files": "fayl",
+    "topicsCount": "mövzu",
+    "reviewsCount": "rəy",
+    "markAbsence": "Qayıb qeyd et",
+    "marking": "Qeyd olunur…",
+    "marked": "Qeyd olundu",
+    "selfReported": "Bu sənin öz qeydindir. Universitetin rəsmi jurnalına düşmür.",
+    "notEnrolled": "Bu fənnə yazılmamısan",
+    "credits": "kredit",
+    "loadFailed": "Yüklənmədi"
   }
 }

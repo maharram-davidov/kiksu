@@ -99,3 +99,25 @@ export function useRotateHandle() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["me"] }),
   });
 }
+
+/**
+ * Records a self-reported absence.
+ *
+ * NOT optimistic. This number can end in exclusion from an exam, so a count
+ * that briefly showed 5/12 and settled back to 4/12 would be alarming in a way
+ * a vote count never is. Better a moment's wait than a moment's fright.
+ */
+export function useRecordAbsence(sectionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (occurredOn: string) =>
+      apiPost<{ absences: number; max_absences: number }>(
+        `/timetable/sections/${sectionId}/absence`,
+        { occurred_on: occurredOn },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["timetable", "section", sectionId] });
+      qc.invalidateQueries({ queryKey: ["timetable", "attendance"] });
+    },
+  });
+}

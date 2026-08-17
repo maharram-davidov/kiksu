@@ -1,7 +1,9 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { SqlProvider } from "../../common/db/sql.provider";
 import type { KiksuRequestContext } from "../../common/auth/request-context";
-import type { AttendanceDto, CourseSearchItemDto, MeetingDto, WeekGridDto } from "./timetable.types";
+import type {
+  AttendanceDto, ClassDetailDto, CourseSearchItemDto, MeetingDto, WeekGridDto,
+} from "./timetable.types";
 
 /**
  * Timetable reads.
@@ -119,6 +121,154 @@ export class TimetableService {
          and c.university_id = ${user.univId}
        order by c.code
     `;
+  }
+
+  /**
+   * The class detail sheet, in one call.
+   *
+   * Attendance is computed the same way as the summary endpoint, through
+   * `ref.effective_absence_limit`, so the sheet and the list can never
+   * disagree about whether a student is close to exclusion. Two surfaces
+   * showing different absence counts is the kind of thing that destroys trust
+   * in a feature students are already anxious about.
+   */
+  async getClassDetail(user: KiksuRequestContext, sectionId: string): Promise<ClassDetailDto> {
+    const { sql } = this.db;
+
+    const [head] = await sql<Array<Record<string, unknown>>>`
+      select s.id as section_id, s.section_code, c.id as course_id, c.code as course_code,
+             c.title_az as course_title, c.credits,
+             i.id as instructor_id, i.full_name, i.title_prefix,
+             irs.rating_avg as instructor_rating, coalesce(irs.review_count, 0) as instructor_reviews,
+             e.id as enrollment_id,
+             l.max_absences, coalesce(l.expulsion_at, l.max_absences) as expulsion_at,
+             l.warn_at_ratio,
+             coalesce(a.n, 0) as absences,
+             (select count(*) from public.course_material cm
+               where cm.course_id = c.id and cm.deleted_at is null
+                 and cm.moderation_state in ('visible','limited'))            as material_count,
+             (select coalesce(b.post_count, 0) from public.board b
+               where b.course_id = c.id limit 1)                              as board_topic_count,
+             (select count(*) from public.review r
+               where r.course_id = c.id and r.instructor_id = i.id
+                 and r.deleted_at is null)                                    as review_count
+        from ref.course_section s
+        join ref.course c on c.id = s.course_id
+        left join ref.instructor i on i.id = s.primary_instructor_id
+        left join public.instructor_review_summary irs on irs.instructor_id = i.id
+        left join public.enrollment e
+               on e.section_id = s.id and e.app_user_id = ${user.appUserId} and e.state = 'enrolled'
+        cross join lateral ref.effective_absence_limit(s.id) l
+        left join lateral (
+          select count(*) as n from public.absence ab
+           where ab.enrollment_id = e.id
+             and ab.excuse_state <> 'approved'
+             and ab.kind <> 'excused'
+        ) a on true
+       where s.id = ${sectionId}
+         and c.university_id = ${user.univId}
+    `;
+    if (!head) throw new NotFoundException("section_not_found");
+
+    const meetings = await sql<Array<Record<string, unknown>>>`
+      select m.weekday, to_char(m.starts_at,'HH24:MI') as starts_at,
+             to_char(m.ends_at,'HH24:MI') as ends_at,
+             r.code as room, ca.name_az as campus, m.kind::text as kind
+        from ref.section_meeting m
+        left join ref.room r on r.id = m.room_id
+        left join ref.campus ca on ca.id = r.campus_id
+       where m.section_id = ${sectionId}
+       order by m.weekday, m.starts_at
+    `;
+
+    const absences = Number(head.absences ?? 0);
+    const max = Number(head.max_absences ?? 0);
+    const expulsion = Number(head.expulsion_at ?? max);
+    const ratio = max > 0 ? absences / max : 0;
+
+    return {
+      section_id: head.section_id as string,
+      course_id: head.course_id as string,
+      course_code: head.course_code as string,
+      course_title: head.course_title as string,
+      // numeric arrives as a string from the driver: without this the sheet
+      // renders "6.0 KREDİT" where the design says "6 KREDİT".
+      credits: head.credits === null || head.credits === undefined ? null : Number(head.credits),
+      section_code: (head.section_code as string) ?? null,
+      meetings: meetings.map((m) => ({
+        weekday: Number(m.weekday),
+        starts_at: m.starts_at as string,
+        ends_at: m.ends_at as string,
+        room: (m.room as string) ?? null,
+        campus: (m.campus as string) ?? null,
+        kind: m.kind as string,
+      })),
+      instructor: head.instructor_id
+        ? {
+            id: head.instructor_id as string,
+            full_name: head.full_name as string,
+            title_prefix: (head.title_prefix as string) ?? null,
+            rating_avg: head.instructor_rating === null ? null : Number(head.instructor_rating),
+            review_count: Number(head.instructor_reviews ?? 0),
+          }
+        : null,
+      attendance: {
+        absences,
+        max_absences: max,
+        expulsion_at: expulsion,
+        used_ratio: Number(ratio.toFixed(4)),
+        is_warning: ratio >= Number(head.warn_at_ratio ?? 0.5),
+        is_barred: absences >= expulsion,
+      },
+      material_count: Number(head.material_count ?? 0),
+      board_topic_count: Number(head.board_topic_count ?? 0),
+      review_count: Number(head.review_count ?? 0),
+      enrollment_id: (head.enrollment_id as string) ?? null,
+    };
+  }
+
+  /**
+   * Records a self-reported absence — the design's "Qayıb qeyd et".
+   *
+   * Self-reported, and that word carries weight: this is the student's own
+   * tally so they can see the exclusion limit coming, NOT the university's
+   * register. Nothing here feeds a real attendance record, and the client says
+   * so, because a student who mistook one for the other could believe they had
+   * reported an absence to their faculty when they had not.
+   *
+   * Idempotent per date: tapping twice for the same class must not cost a
+   * student a second absence against a limit that can exclude them.
+   */
+  async recordAbsence(
+    user: KiksuRequestContext, sectionId: string, occurredOn: string,
+  ): Promise<{ absences: number; max_absences: number }> {
+    const { sql } = this.db;
+
+    const [enrollment] = await sql<Array<{ id: string }>>`
+      select e.id from public.enrollment e
+        join ref.course_section s on s.id = e.section_id
+        join ref.course c on c.id = s.course_id
+       where e.app_user_id = ${user.appUserId}
+         and e.section_id = ${sectionId}
+         and e.state = 'enrolled'
+         and c.university_id = ${user.univId}
+    `;
+    if (!enrollment) throw new BadRequestException("not_enrolled");
+
+    await sql`
+      insert into public.absence (enrollment_id, occurred_on, kind, source)
+      values (${enrollment.id}, ${occurredOn}::date, 'absent', 'self_reported')
+      on conflict do nothing
+    `;
+
+    const [row] = await sql<Array<{ n: number; max: number }>>`
+      select (select count(*) from public.absence ab
+               where ab.enrollment_id = ${enrollment.id}
+                 and ab.excuse_state <> 'approved' and ab.kind <> 'excused')::int as n,
+             l.max_absences as max
+        from ref.effective_absence_limit(${sectionId}::uuid) l
+    `;
+    return { absences: Number(row?.n ?? 0), max_absences: Number(row?.max ?? 0) };
   }
 
   /**
