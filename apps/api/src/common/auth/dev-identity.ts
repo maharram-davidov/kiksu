@@ -67,20 +67,24 @@ export function buildDevContext(
   appUserId: string,
   universityId: string,
   authUserId: string,
+  tier: "email" | "card" = "email",
 ): KiksuRequestContext {
   return {
     authUserId,
     appUserId,
-    // Deliberately the lowest useful tier rather than 'card'. Developing
-    // against the most privileged identity hides tier-gating bugs, which is
-    // exactly the class of bug this project has already shipped once.
+    // **Defaults to the lowest useful tier, and that default is load-bearing.**
+    // Developing against the most privileged identity hides tier-gating bugs,
+    // which is exactly the class of bug this project has already shipped once.
+    // `dev-api.sh --card` can raise it for deliberately testing a card-gated
+    // surface, but nothing raises it implicitly and there is no way to reach
+    // `card` by forgetting something.
     //
     // Routed through the vocabulary mapping rather than written as the literal
-    // 'email' it produces. This function is one of the two places that emit a
+    // string it produces. This function is one of the two places that emit a
     // tier claim without passing through internal.token_claims, and having it
     // hardcode a token-vocabulary string is how the two vocabularies drifted
     // apart in the first place.
-    tier: dbTierToToken("email_verified"),
+    tier: dbTierToToken(tier === "card" ? "card_verified" : "email_verified"),
     role: "student",
     univId: universityId,
     epoch: 1,

@@ -1,7 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiPatch, apiPost } from "./client";
+import { apiDelete, apiPatch, apiPost } from "./client";
 import type {
-  ChatMessage, Comment, Conversation, Listing, ListingCondition, MyProfile, PostDetail, PrivacyKey,
+  AccentColor, ChatMessage, Comment, Conversation, Enrollment, Listing, ListingCondition,
+  MyProfile, PostDetail, PrivacyKey,
   ReviewAccess,
 } from "./types";
 
@@ -126,6 +127,37 @@ export function useRecordAbsence(sectionId: string) {
 }
 
 /** Creating a listing is never optimistic: the server assigns the id. */
+/**
+ * Start a thread.
+ *
+ * `show_university_badge` is sent per post and never remembered. The design
+ * treats the campus badge as a disclosure rather than a preference, and the
+ * server rejects it outright on anything but a national board — a badge on a
+ * campus board would say nothing except "this student is from here", which
+ * everyone on that board already is.
+ */
+export function useCreatePost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      boardSlug: string; title: string; body?: string; showUniversityBadge?: boolean;
+    }) =>
+      apiPost<PostDetail>("/forum/posts", {
+        board_slug: input.boardSlug,
+        title: input.title,
+        body: input.body,
+        show_university_badge: input.showUniversityBadge ?? false,
+      }),
+    onSuccess: (_data, vars) => {
+      // The board feed and the board list both carry counters the new thread
+      // just changed.
+      void qc.invalidateQueries({ queryKey: ["forum", "board", vars.boardSlug] });
+      void qc.invalidateQueries({ queryKey: ["forum", "boards"] });
+      void qc.invalidateQueries({ queryKey: ["today"] });
+    },
+  });
+}
+
 export function useCreateListing() {
   const qc = useQueryClient();
   return useMutation({
@@ -221,5 +253,53 @@ export function useFileAppeal() {
     mutationFn: (input: { action_id: string; body: string }) =>
       apiPost<{ id: string; state: string }>("/me/appeals", input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["me"] }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Timetable editing
+// ---------------------------------------------------------------------------
+
+/**
+ * The three writes share one invalidation set, because all three change the
+ * week grid as well as the enrollment list — a course added, dropped or
+ * recoloured is visible on the grid immediately or the editor feels broken.
+ */
+function timetableKeys(qc: ReturnType<typeof useQueryClient>) {
+  void qc.invalidateQueries({ queryKey: ["enrollments"] });
+  void qc.invalidateQueries({ queryKey: ["timetable", "week"] });
+  void qc.invalidateQueries({ queryKey: ["timetable", "attendance"] });
+  void qc.invalidateQueries({ queryKey: ["today"] });
+  void qc.invalidateQueries({ queryKey: ["catalogue", "sections"] });
+}
+
+export function useAddEnrollment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { sectionId: string; color?: AccentColor }) =>
+      apiPost<Enrollment>("/enrollments", { section_id: input.sectionId, color: input.color }),
+    onSuccess: () => timetableKeys(qc),
+  });
+}
+
+/**
+ * Drop. The server treats this as a state change rather than a delete so
+ * absence history survives — see `EnrollmentsService` on the API side. From
+ * the client's point of view the course simply leaves the grid.
+ */
+export function useDropEnrollment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (enrollmentId: string) => apiDelete<void>(`/enrollments/${enrollmentId}`),
+    onSuccess: () => timetableKeys(qc),
+  });
+}
+
+export function useRecolourEnrollment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { enrollmentId: string; color: AccentColor }) =>
+      apiPatch<Enrollment>(`/enrollments/${input.enrollmentId}`, { color: input.color }),
+    onSuccess: () => timetableKeys(qc),
   });
 }

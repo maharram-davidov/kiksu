@@ -179,3 +179,12 @@ export function apiPost<T>(path: string, body: unknown, locale = "az"): Promise<
 export function apiPatch<T>(path: string, body: unknown, locale = "az"): Promise<T> {
   return request<T>({ method: "PATCH", path, body, locale });
 }
+
+/**
+ * DELETE. The API answers 204 with no body for these, which `request` already
+ * handles — it reads the body as text and only parses when there is something
+ * to parse, so `T` is `void` for every current caller.
+ */
+export function apiDelete<T>(path: string, locale = "az"): Promise<T> {
+  return request<T>({ method: "DELETE", path, locale });
+}

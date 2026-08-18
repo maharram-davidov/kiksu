@@ -5,6 +5,7 @@ import type {
   InstructorProfile, MyModerationAction, MyProfile, PostDetail, PostPage, Reviewable,
   ReviewPage, ReviewTag, Today, Vacancy, WeekGrid,
   CourseHit, InstructorHit, ListingHit, PostHit, SearchPage, VacancyHit,
+  CourseSection, Enrollment,
 } from "./types";
 
 export function useWeekGrid() {
@@ -373,4 +374,29 @@ export function useSearchVacancies(q: string, enabled = true, limit = 20) {
 /** Flattens the page list into the flat array every result surface renders. */
 export function flattenPages<T>(data: { pages: Array<SearchPage<T>> } | undefined): T[] {
   return data ? data.pages.flatMap((p) => p.items) : [];
+}
+
+// ---------------------------------------------------------------------------
+// Timetable editing
+// ---------------------------------------------------------------------------
+
+/** The caller's own enrollments. `state` defaults to `enrolled` server-side. */
+export function useEnrollments() {
+  return useQuery({
+    queryKey: ["enrollments"],
+    queryFn: () => apiGet<Enrollment[]>("/enrollments"),
+    staleTime: 60 * 1000,
+    retry: 1,
+  });
+}
+
+/** Sections of one course, with meetings, so the picker can show week impact. */
+export function useCourseSections(courseId: string | null) {
+  return useQuery({
+    queryKey: ["catalogue", "sections", courseId],
+    queryFn: () => apiGet<CourseSection[]>(`/catalogue/courses/${courseId!}/sections`),
+    enabled: courseId !== null,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
 }

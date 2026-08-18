@@ -20,9 +20,11 @@ APIPORT="${KIKSU_API_PORT:-3000}"
 # StaffGuard's not_found path would never be the thing you see, and the
 # authorisation bugs it exists to catch would be invisible until production.
 WANT_STAFF=0
+WANT_CARD=0
 for arg in "$@"; do
   case "$arg" in
     --staff) WANT_STAFF=1 ;;
+    --card)  WANT_CARD=1 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -96,11 +98,17 @@ DB_URL="postgresql://postgres@127.0.0.1:$PGPORT/postgres"
 # locally, so without this every authenticated route is unreachable and no
 # screen can be built against real data. parseEnv() refuses to boot if these
 # are ever set with NODE_ENV=production.
+# A NAMED student, not "whichever handle sorts first". The old query was
+# `order by au.handle limit 1`, which is deterministic but not stable: adding a
+# seed handle that sorts earlier silently moves development onto a different
+# account with different karma, enrollments and tier, and nothing announces it.
+# Falls back to the old behaviour if the named handle is ever removed.
 DEV_IDS=$("${PSQL[@]}" -tAF' ' <<'IDQ'
 select au.id, au.university_id, au.auth_user_id
   from public.app_user au
   join ref.university u on u.id = au.university_id and u.code = 'BDU'
- order by au.handle limit 1;
+ order by (au.handle <> 'dinc-alma-24'), au.handle
+ limit 1;
 IDQ
 )
 DEV_APP_USER_ID=$(echo "$DEV_IDS" | awk '{print $1}')
@@ -117,6 +125,23 @@ insert into moderation.staff (auth_user_id, display_name, role, university_scope
 values ('$DEV_AUTH_USER_ID', 'Dev Moderator', 'admin', array['$DEV_UNIVERSITY_ID']::uuid[], true)
 on conflict (auth_user_id) do update set is_active = true;
 STAFFQ
+fi
+
+# --card raises the development identity to the card tier.
+#
+# BOTH halves are needed and they are not the same thing. DEV_AUTH_TIER changes
+# the claim the bypass puts in the request context, which is what tier gates
+# read. The UPDATE changes public.app_user.verification_tier, which is what the
+# badge on the student's own posts renders from and what any query that reads
+# the row sees. Setting only the first gives an account that may post to a
+# card-gated board while still showing the email badge on what it posts.
+if [ "$WANT_CARD" = "1" ]; then
+  echo "==> raising the development identity to the card tier (--card)"
+  "${PSQL[@]}" >/dev/null <<CARDQ
+update public.app_user
+   set verification_tier = 'card_verified'
+ where id = '$DEV_APP_USER_ID';
+CARDQ
 fi
 
 # Enrol that student in everything, so the timetable screen has content.
@@ -155,6 +180,7 @@ RATE_LIMIT_STORE=memory
 # DEVELOPMENT ONLY. Every request is served as this student, with no token.
 # parseEnv() refuses to boot if either is set while NODE_ENV=production.
 DEV_AUTH_APP_USER_ID=$DEV_APP_USER_ID
+DEV_AUTH_TIER=$([ "$WANT_CARD" = "1" ] && echo card || echo email)
 DEV_AUTH_UNIVERSITY_ID=$DEV_UNIVERSITY_ID
 DEV_AUTH_AUTH_USER_ID=$DEV_AUTH_USER_ID
 
@@ -167,7 +193,8 @@ RECOMMENDED_CLIENT_ANDROID=0.1.0
 ENVEOF
 
 echo "==> database ready, .env written"
-echo "==> developing as app_user $DEV_APP_USER_ID (BDU, email tier, no token needed)"
+echo "==> developing as app_user $DEV_APP_USER_ID (BDU, $([ "$WANT_CARD" = "1" ] && echo "CARD" || echo "email") tier, no token needed)"
+[ "$WANT_CARD" = "1" ] || echo "==> re-run with --card for a card-verified student"
 if [ "$WANT_STAFF" = "1" ]; then
   echo "==> that identity is ALSO a platform moderator — admin routes are open"
 else

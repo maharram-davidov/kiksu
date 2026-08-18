@@ -118,16 +118,39 @@ on conflict (university_id, method) do nothing;
 -- ---------------------------------------------------------------------
 -- Academic calendar. The design's timetable header reads
 -- "2025/26 · PAYIZ SEMESTRİ".
+--
+-- ANCHORED TO current_date, NOT TO FIXED DATES, and that is the whole point.
+-- This block used to hardcode the 2025/26 autumn term: starts 2025-09-15, ends
+-- 2026-01-25, add/drop closes 2025-10-03, `is_current = true`. Those dates were
+-- correct when they were written and then quietly rotted. Run the seed a year
+-- later and you get a term flagged current whose add/drop window shut months
+-- ago and whose last class was in January — so the week grid renders a finished
+-- semester, "Bu gün" truthfully reports no classes today, and every attempt to
+-- add a course fails with `term_closed`. Nothing is broken; the fixture is
+-- simply in the past, which is far harder to recognise than a failure.
+--
+-- Deriving the window from `current_date` means the seed is always mid-term:
+-- the term started six weeks ago, add/drop is open for another two, exams are
+-- ahead, and it stays that way whenever anyone runs it.
 -- ---------------------------------------------------------------------
 insert into ref.academic_year (university_id, label, starts_on, ends_on)
-select id, '2025/26', date '2025-09-15', date '2026-06-30' from ref.university
+select id,
+       -- Label follows the anchor so it cannot contradict the dates.
+       to_char(current_date - 42, 'YYYY') || '/' ||
+         to_char(current_date + 273, 'YY'),
+       current_date - 42, current_date + 273
+  from ref.university
 on conflict do nothing;
 
 insert into ref.term (university_id, academic_year_id, season, label, starts_on, ends_on,
                       add_drop_ends_on, exams_start_on, is_current)
-select ay.university_id, ay.id, 'payiz', '2025/26 Payız',
-       date '2025-09-15', date '2026-01-25', date '2025-10-03', date '2026-01-05', true
-  from ref.academic_year ay where ay.label = '2025/26'
+select ay.university_id, ay.id, 'payiz', ay.label || ' Payız',
+       current_date - 42,   -- six weeks in: enough history for attendance to be non-trivial
+       current_date + 84,   -- twelve weeks left
+       current_date + 14,   -- add/drop still open, which is what the editor needs
+       current_date + 70,   -- exams ahead of the end
+       true
+  from ref.academic_year ay
 on conflict do nothing;
 
 -- ---------------------------------------------------------------------

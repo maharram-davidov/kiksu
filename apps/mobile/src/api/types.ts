@@ -516,3 +516,38 @@ export interface VacancyHit {
 
 /** The chips on HM-03. `all` fans out; the rest hit one endpoint. */
 export type SearchScope = "all" | "posts" | "courses" | "listings" | "vacancies";
+
+// ---------------------------------------------------------------------------
+// Timetable editing
+// ---------------------------------------------------------------------------
+
+/** `public.accent_color`. The student's own choice, per enrollment. */
+export const ACCENT_COLORS = [
+  "turquoise", "bronze", "pomegranate", "indigo", "ink", "moss", "plum",
+] as const;
+export type AccentColor = (typeof ACCENT_COLORS)[number];
+
+export interface Enrollment {
+  id: string;
+  section_id: string;
+  term_id: string;
+  state: "enrolled" | "dropped" | "completed" | "failed";
+  color: AccentColor;
+  display_order: number | null;
+  course: { id: string; code: string; title: string; short_title: string | null; credits: number | null };
+  section_code: string;
+  instructor_name: string | null;
+  attendance: Attendance | null;
+  final_letter: string | null;
+  gpa_points: number | null;
+}
+
+export interface CourseSection {
+  id: string;
+  section_code: string;
+  capacity: number | null;
+  enrolled_count: number;
+  instructor_name: string | null;
+  is_enrolled: boolean;
+  meetings: Array<{ weekday: number; starts_at: string; ends_at: string; kind: string; room: string | null }>;
+}

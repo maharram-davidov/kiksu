@@ -51,7 +51,7 @@ verification is logged behind the same gate.
 
     ./scripts/verify-schema.sh        # applies the monolith, asserts 11 invariants
     ./scripts/verify-migrations.sh    # same via the 22 split migrations
-    ./scripts/test-integration.sh     # stands up Postgres + seeds, runs 355 tests
+    ./scripts/test-integration.sh     # stands up Postgres + seeds, runs 371 tests
     ./scripts/seed-local.sh           # seeds twice; see the note below
 
 `npx vitest run` alone gives 91 unit tests; integration tests skip without
@@ -224,6 +224,60 @@ anything font-related behaves oddly.
 Also caught by running it: the search screen's scope chips rendered as
 full-height columns, because a horizontal `ScrollView` in a flex column stretches
 unless given `flexGrow: 0`. Nothing in a type check or a unit test sees that.
+
+## Creation flows — why they appeared broken, and what now exists
+
+Reported as "cannot post in Forum or Marketplace, timetable not interactive".
+It was **not tier and not a missing API**, which were the two obvious guesses.
+The dev identity is email-verified and no seeded board sets
+`min_tier_to_post`, so it clears all seven; creating a thread, a comment and a
+listing over HTTP all succeeded before a line was changed.
+
+Three separate causes:
+
+1. **No forum composer existed on the client.** `POST /v1/forum/posts` has
+   worked all along; there was no `useCreatePost`, no screen and no button. The
+   phrase "Forum … with composer" in earlier revisions of this file meant the
+   *comment* composer on the thread screen.
+2. **No timetable editor existed on either side.** No enrollment write endpoint,
+   no UI. Enrollment was populated by `dev-api.sh` running an INSERT, which is
+   why the grid looked full but nothing could change.
+3. **The seeded term had rotted into the past.** `ref.term` hardcoded 2025/26
+   Payız — ended 2026-01-25, add/drop closed 2025-10-03 — while still flagged
+   `is_current`. Every add would have failed `term_closed` even with a finished
+   editor, and "Bu gün dərs yoxdur" was literally true. **The seed now derives
+   its dates from `current_date`** (term started six weeks ago, add/drop open
+   another two, exams ahead), so it cannot rot again. `timetable.integration`
+   had to stop asserting the literal label `"2025/26 Payız"` — a clock that only
+   told the right time in one particular year.
+
+**Now built.** `GET/POST/PATCH/DELETE /v1/enrollments` and
+`GET /v1/catalogue/courses/:id/sections`, both at the paths `05-openapi.yaml`
+already documented and nobody had implemented. Mobile: `/forum/new` with board
+picker and the national-boards-only campus badge, FABs on the board list and
+board feed, `/timetable/edit` with a section picker showing week impact before
+you commit, and a seven-colour picker per enrollment.
+
+**Drop is soft and that is load-bearing.** `DELETE` sets `state = 'dropped'` and
+keeps the row. `public.absence` hangs off the enrollment and
+`enrollment_uniq (app_user_id, section_id)` makes re-adding an upsert, so a hard
+delete would let a student drop and re-add to launder an absence counter back
+under the exam-exclusion limit. Pinned by a test that sets four absences, drops,
+re-adds, and asserts the count survives on the same row id.
+
+**`dev-api.sh --card`** raises the development identity to the card tier. Two
+halves, both needed: `DEV_AUTH_TIER` changes the claim the bypass puts in the
+request context (what tier gates read) and an UPDATE changes
+`app_user.verification_tier` (what the badge renders from). Email remains the
+default deliberately — `buildDevContext` explains why developing as the most
+privileged identity hides tier-gating bugs. The script also now picks a **named**
+student rather than whichever handle sorts first, which silently moved
+development onto a different account whenever a seed handle was added.
+
+**Still not verified:** nobody has tapped through add/drop/recolour in the
+simulator. Both screens were confirmed to render with live data and the
+endpoints were exercised over HTTP, but the button-to-endpoint path is proven
+only by the integration suite, not by touch.
 
 ## Defects found by execution this session
 

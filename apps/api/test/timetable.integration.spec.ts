@@ -68,7 +68,11 @@ suite("timetable service (integration)", () => {
   it("returns the week grid for the current term in one query", async () => {
     const grid = await service.getWeekGrid(user);
     expect(grid).not.toBeNull();
-    expect(grid!.term.label).toBe("2025/26 Payız");
+    // The seed anchors the term to current_date so it cannot rot into the
+    // past, which means the academic-year label is derived rather than fixed.
+    // Assert its shape; asserting the literal "2025/26 Payız" is what made this
+    // test a clock that only told the right time in one particular year.
+    expect(grid!.term.label).toMatch(/^\d{4}\/\d{2} Payız$/);
     expect(grid!.timezone).toBe("Asia/Baku");
     expect(grid!.meetings.length).toBeGreaterThan(0);
   });

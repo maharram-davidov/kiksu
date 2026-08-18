@@ -77,6 +77,7 @@ export class AuthGuard implements CanActivate {
         // The REAL auth subject. Synthesising one here is what made every
         // staff route answer 500 — see buildDevContext's doc comment.
         this.config.devAuthAuthUserId ?? "",
+        this.config.devAuthTier,
       );
       return true;
     }

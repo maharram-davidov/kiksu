@@ -4,12 +4,15 @@ import { useTranslation } from "react-i18next";
 import { useTheme } from "@/theme/ThemeProvider";
 
 /**
- * A Stack inside the drawer, so board and post detail push on top of the list
- * while Forum stays the active drawer destination and the back stack works.
- * Per docs/03-navigation.md, detail routes must not swallow deep links or
- * strand the drawer.
+ * A Stack inside the drawer, matching Forum and Bazar, so the editor pushes on
+ * top of the week grid with a working back button while Cədvəl stays the active
+ * drawer destination.
+ *
+ * The drawer's own `swipeEnabled: false` for this destination still applies and
+ * still matters: the week grid scrolls horizontally, and the edge-swipe fights
+ * it (docs/03-navigation.md).
  */
-export default function ForumLayout() {
+export default function TimetableLayout() {
   const theme = useTheme();
   const { t } = useTranslation();
   return (
@@ -21,14 +24,12 @@ export default function ForumLayout() {
         contentStyle: { backgroundColor: theme.colors.background },
       }}
     >
-      {/* The list keeps the drawer's own header (hamburger); details get a back button. */}
+      {/* The grid keeps the drawer's header (hamburger); the editor gets a back button. */}
       {/* `title` is set even though the header is hidden: the back button on
           pushed screens takes its label from the previous route, and without
           this it renders the literal filename, "index". */}
-      <Stack.Screen name="index" options={{ headerShown: false, title: t("nav.forum") }} />
-      <Stack.Screen name="new" />
-      <Stack.Screen name="board/[slug]" />
-      <Stack.Screen name="post/[id]" />
+      <Stack.Screen name="index" options={{ headerShown: false, title: t("nav.timetable") }} />
+      <Stack.Screen name="edit" />
     </Stack>
   );
 }

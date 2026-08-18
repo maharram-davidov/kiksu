@@ -1,5 +1,5 @@
 import React from "react";
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, FlatList, StyleSheet, Text, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -48,6 +48,16 @@ export default function BoardFeedScreen() {
           />
         )}
       />
+      {/* Pre-selects this board, since a student on a board who taps "write"
+          almost always means "write here". Still changeable in the composer. */}
+      <Pressable
+        onPress={() => router.push({ pathname: "/forum/new", params: { board: slug } })}
+        accessibilityRole="button"
+        accessibilityLabel={t("forum.newPost")}
+        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+      >
+        <Text style={[styles.fabText, { color: theme.colors.onPrimary }]}>+ {t("forum.write")}</Text>
+      </Pressable>
     </>
   );
 }
@@ -55,4 +65,9 @@ export default function BoardFeedScreen() {
 const styles = StyleSheet.create({
   centre: { flex: 1, alignItems: "center", justifyContent: "center" },
   empty: { fontSize: 13, textAlign: "center", marginTop: 40, fontStyle: "italic" },
+  fab: {
+    position: "absolute", right: 16, bottom: 20,
+    paddingHorizontal: 18, paddingVertical: 13, borderRadius: 26,
+  },
+  fabText: { fontSize: 14, fontWeight: "700" },
 });

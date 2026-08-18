@@ -1,5 +1,6 @@
 import React from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useWeekGrid } from "@/api/queries";
@@ -10,6 +11,7 @@ import { ClassDetailSheet } from "@/features/timetable/ClassDetailSheet";
 export default function TimetableScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
+  const router = useRouter();
   const { data, isPending, error, refetch } = useWeekGrid();
   const [openSection, setOpenSection] = React.useState<string | null>(null);
 
@@ -45,6 +47,10 @@ export default function TimetableScreen() {
     );
   }
 
+  // An empty timetable is the state where the editor matters most, so the
+  // empty state is a door into it rather than a dead end. Before this existed,
+  // a student with no enrolled courses was told their timetable was empty and
+  // given nothing whatsoever to do about it.
   if (data.meetings.length === 0) {
     return (
       <View style={[styles.centre, { backgroundColor: theme.colors.background, gap: 6 }]}>
@@ -54,6 +60,15 @@ export default function TimetableScreen() {
         <Text style={[styles.errBody, { color: theme.colors.textMuted }]}>
           {t("timetable.emptyBody")}
         </Text>
+        <Pressable
+          onPress={() => router.push("/timetable/edit")}
+          accessibilityRole="button"
+          style={[styles.cta, { backgroundColor: theme.colors.primary }]}
+        >
+          <Text style={{ color: theme.colors.onPrimary, fontWeight: "700" }}>
+            {t("timetable.editAdd")}
+          </Text>
+        </Pressable>
       </View>
     );
   }
@@ -66,6 +81,9 @@ export default function TimetableScreen() {
         >
           {data.term.label.toUpperCase()}
         </Text>
+        <Pressable onPress={() => router.push("/timetable/edit")} accessibilityRole="button" hitSlop={8}>
+          <Text style={[styles.editLink, { color: theme.colors.primary }]}>{t("timetable.edit")}</Text>
+        </Pressable>
       </View>
       <WeekGrid meetings={data.meetings} onSelect={setOpenSection} />
       <ClassDetailSheet sectionId={openSection} onClose={() => setOpenSection(null)} />
@@ -78,6 +96,11 @@ const styles = StyleSheet.create({
   errTitle: { fontSize: 16, fontWeight: "600", textAlign: "center" },
   errBody: { fontSize: 13, textAlign: "center", lineHeight: 19 },
   errMeta: { fontSize: 10, marginTop: 8 },
-  termBar: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1 },
+  termBar: {
+    paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+  },
   term: { fontSize: 10, letterSpacing: 1.4 },
+  editLink: { fontSize: 13, fontWeight: "600" },
+  cta: { marginTop: 14, borderRadius: 8, paddingHorizontal: 20, paddingVertical: 12 },
 });

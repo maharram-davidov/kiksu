@@ -44,6 +44,11 @@ export class ConfigService {
   }
 
   /** DEVELOPMENT ONLY. The bypassed user's real auth.users id. */
+  /** `email` unless an operator asked for `card` via `dev-api.sh --card`. */
+  get devAuthTier(): "email" | "card" {
+    return this.env.DEV_AUTH_TIER ?? "email";
+  }
+
   get devAuthAuthUserId(): string | undefined {
     return this.env.DEV_AUTH_AUTH_USER_ID;
   }

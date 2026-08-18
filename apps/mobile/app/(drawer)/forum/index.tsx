@@ -73,13 +73,21 @@ export default function BoardListScreen() {
     );
 
   return (
-    <ScrollView
-      style={{ backgroundColor: theme.colors.background }}
-      contentContainerStyle={{ padding: 16, gap: 22 }}
-    >
-      {section(t("forum.campus").toUpperCase(), campus)}
-      {section(t("forum.national").toUpperCase(), national)}
-    </ScrollView>
+    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      <ScrollView contentContainerStyle={{ padding: 16, gap: 22, paddingBottom: 88 }}>
+        {section(t("forum.campus").toUpperCase(), campus)}
+        {section(t("forum.national").toUpperCase(), national)}
+      </ScrollView>
+      {/* No board pre-selected here — the composer asks. */}
+      <Pressable
+        onPress={() => router.push("/forum/new")}
+        accessibilityRole="button"
+        accessibilityLabel={t("forum.newPost")}
+        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+      >
+        <Text style={[styles.fabText, { color: theme.colors.onPrimary }]}>+ {t("forum.write")}</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -90,4 +98,9 @@ const styles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: "600" },
   desc: { fontSize: 12 },
   count: { fontSize: 11 },
+  fab: {
+    position: "absolute", right: 16, bottom: 20,
+    paddingHorizontal: 18, paddingVertical: 13, borderRadius: 26,
+  },
+  fabText: { fontSize: 14, fontWeight: "700" },
 });

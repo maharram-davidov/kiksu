@@ -54,6 +54,14 @@ export const envSchema = z.object({
    * instead of at the first staff request.
    */
   DEV_AUTH_AUTH_USER_ID: z.string().uuid().optional(),
+  /**
+   * Which verification tier the development bypass should claim. Absent means
+   * `email`, which is the deliberate default — see `buildDevContext`. A closed
+   * enum rather than a free string: this feeds a tier claim, and a typo that
+   * silently produced `provisional` would look exactly like a tier-gating bug
+   * in whatever screen was being worked on.
+   */
+  DEV_AUTH_TIER: z.enum(["email", "card"]).optional(),
   SUPABASE_URL: z.string().url(),
   // Server-only. See the SECURITY note on the exported schema above.
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
@@ -155,6 +163,12 @@ export function parseEnv(raw: NodeJS.ProcessEnv): Env {
   // boot is the only safe behaviour: warning and continuing would leave a
   // deployment silently accepting unauthenticated requests as a real user, and
   // that is exactly the sort of thing that gets noticed months later.
+  if (result.data.NODE_ENV === "production" && result.data.DEV_AUTH_TIER) {
+    throw new Error(
+      "DEV_AUTH_TIER is set while NODE_ENV=production. Refusing to boot: it " +
+        "would hand every caller a verification tier nobody earned.",
+    );
+  }
   if (result.data.NODE_ENV === "production" && result.data.DEV_AUTH_APP_USER_ID) {
     throw new Error(
       "DEV_AUTH_APP_USER_ID is set while NODE_ENV=production. Refusing to " +
