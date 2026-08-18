@@ -45,9 +45,27 @@ export const envSchema = z.object({
   DEV_AUTH_APP_USER_ID: z.string().uuid().optional(),
   /** DEVELOPMENT ONLY. Campus the bypassed identity belongs to. */
   DEV_AUTH_UNIVERSITY_ID: z.string().uuid().optional(),
+  /**
+   * DEVELOPMENT ONLY. The bypassed user's REAL `auth.users` id.
+   *
+   * Typed as a uuid on purpose. The bypass previously synthesised
+   * `dev-auth-<uuid>` here, which every admin route then fed to a uuid column
+   * and died on — see buildDevContext. A malformed value now fails at boot
+   * instead of at the first staff request.
+   */
+  DEV_AUTH_AUTH_USER_ID: z.string().uuid().optional(),
   SUPABASE_URL: z.string().url(),
   // Server-only. See the SECURITY note on the exported schema above.
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
+  /**
+   * Private bucket holding student card images.
+   *
+   * Must NOT be public-read: these are identity documents, and the whole point
+   * of Layer 1 is that a real name never leaves it. Objects are reached only
+   * through short-lived signed URLs minted by EvidenceService, and every mint
+   * is written to identity.access_log first.
+   */
+  SUPABASE_EVIDENCE_BUCKET: z.string().min(1).default("verification-evidence"),
 
   // --- Auth token verification (05-api-conventions.md §2.1: Supabase JWT, RS256, 900s TTL) ---
   // Used to build the JWKS URL: `${SUPABASE_URL}/auth/v1/.well-known/jwks.json`.

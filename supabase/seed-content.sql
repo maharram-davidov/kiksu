@@ -215,4 +215,125 @@ begin
   end loop;
 end$$;
 
+-- ---------------------------------------------------------------------
+-- Staff and a verification queue to review.
+--
+-- LOCAL DEVELOPMENT ONLY, like the auth.users rows above, and more so: these
+-- are rows in the sealed identity schema.
+--
+-- Without them the admin console has nothing to show. The verification queue
+-- was empty on every environment, which meant the one surface whose entire
+-- purpose is "a human looks at a document" had no document and no human — and
+-- so was never exercised even once. The build plan calls this out: the card
+-- route files a case with a 24-hour SLA and nothing existed that could
+-- approve it.
+--
+-- No staff row is created here. `moderation.staff` is deliberately left empty
+-- so that every local run starts with an UNPRIVILEGED caller and StaffGuard's
+-- not_found path is the default experience. Opt in with `dev-api.sh --staff`.
+-- Seeding a moderator would hide exactly the authorisation bugs that guard
+-- exists to catch.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_uni       uuid;
+  v_route_sla integer;
+  v_subject   uuid;
+  v_auth      uuid;
+  i           integer;
+  -- Realistic queue shape: two comfortably inside the SLA, one close to it,
+  -- one already breached. A queue where nothing is late never shows the
+  -- reviewer what late looks like.
+  v_offsets   integer[] := array[20, 8, 1, -3];
+begin
+  select id into v_uni from ref.university where code = 'BDU';
+  select sla_minutes into v_route_sla
+    from ref.university_verification_route
+   where university_id = v_uni and method = 'student_card';
+  if v_uni is null or v_route_sla is null then return; end if;
+
+  for i in 1 .. array_length(v_offsets, 1) loop
+    insert into auth.users (id) values (gen_random_uuid()) returning id into v_auth;
+
+    -- The subject key is normally HMAC(pepper, auth uid) written by the
+    -- onboarding service. A random 32 bytes stands in: nothing here needs to
+    -- resolve it back, and inventing a plausible-looking hash would suggest
+    -- the pepper is reproducible, which it must not be.
+    insert into identity.subject (subject_key, key_version)
+    values (extensions.gen_random_bytes(32), 1)
+    returning id into v_subject;
+
+    insert into identity.verification_attempt
+      (subject_id, university_id, method, state, evidence_path, evidence_sha256,
+       evidence_purge_at, sla_due_at)
+    values
+      (v_subject, v_uni, 'student_card', 'in_review',
+       -- >=128-bit random object key with no shared prefix scheme, per
+       -- identity spec T3: a guessable or enumerable path in a private bucket
+       -- is a public bucket with extra steps.
+       'cards/' || encode(extensions.gen_random_bytes(16), 'hex') || '.jpg',
+       extensions.gen_random_bytes(32),
+       now() + interval '30 days',
+       now() + (v_offsets[i] || ' hours')::interval);
+  end loop;
+end$$;
+
+-- ---------------------------------------------------------------------
+-- Reported content, so the moderation queue has cases.
+--
+-- LOCAL DEVELOPMENT ONLY.
+--
+-- Note what is NOT set: mod_case.subject_app_user_id. The column exists and
+-- the schema calls it "the pseudonym under investigation", but identity spec
+-- T4(a) says moderation cases reference CONTENT IDS ONLY, and T4(e) that
+-- moderators never see a handle or any other case. The queue query does not
+-- select it and the console does not render it, so leaving it null here keeps
+-- the seed honest about what a moderator actually works from — a piece of
+-- content and a count of reports, never a person.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_uni      uuid;
+  v_post     uuid;
+  v_reporter uuid;
+  v_case     uuid;
+  v_reason   text;
+  v_reasons  text[] := array['spam', 'harassment', 'off_topic'];
+  v_sev      smallint;
+  i          integer := 0;
+begin
+  select id into v_uni from ref.university where code = 'BDU';
+  if v_uni is null then return; end if;
+
+  for v_post in
+    select p.id from public.post p
+     where p.university_id = v_uni and p.moderation_state = 'visible'
+     order by p.created_at desc limit 3
+  loop
+    i := i + 1;
+    v_reason := v_reasons[i];
+    -- Severity climbs with the reason so the queue's ordering is visible at a
+    -- glance rather than every case looking alike.
+    v_sev := (i + 1)::smallint;
+
+    select au.id into v_reporter
+      from public.app_user au
+     where au.university_id = v_uni
+     order by au.handle offset i limit 1;
+    if v_reporter is null then continue; end if;
+
+    insert into moderation.mod_case
+      (subject_type, subject_id, university_id, opened_by, state, severity, report_count)
+    values ('post', v_post, v_uni, 'report', 'open', v_sev, 1)
+    on conflict (subject_type, subject_id) do update
+      set report_count = moderation.mod_case.report_count + 1
+    returning id into v_case;
+
+    insert into public.report
+      (reporter_id, target_type, target_id, reason_key, state, case_id)
+    values (v_reporter, 'post', v_post, v_reason, 'linked', v_case)
+    on conflict (reporter_id, target_type, target_id) do nothing;
+  end loop;
+end$$;
+
 commit;

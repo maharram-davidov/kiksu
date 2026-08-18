@@ -7,3 +7,7 @@ build/
 .expo/
 *.log
 .DS_Store
+
+# Vite build output for the internal console
+apps/admin/dist/
+*.tsbuildinfo

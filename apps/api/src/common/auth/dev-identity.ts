@@ -48,7 +48,21 @@ export function resolveDevIdentity(
   return null; // the per-request context is built by the guard; see buildDevContext
 }
 
-/** Builds the request context the bypass hands to downstream code. */
+/**
+ * Builds the request context the bypass hands to downstream code.
+ *
+ * `authUserId` MUST be the app_user's real `auth.users` id, not a synthesised
+ * string. It used to be `dev-auth-<appUserId>`, which read as harmless because
+ * nothing consumed it — until StaffGuard did. That guard looks staff up by
+ * `moderation.staff.auth_user_id`, a uuid column, so every admin route in
+ * development answered `500 internal_error` with
+ * `invalid input syntax for type uuid` in the log.
+ *
+ * Worth being precise about why that was worse than a broken route: the guard
+ * deliberately returns `not_found` rather than `forbidden`, so that an ordinary
+ * student cannot confirm an admin surface exists at a path. A 500 confirms it.
+ * The bypass was leaking the one bit that guard is written to withhold.
+ */
 export function buildDevContext(
   appUserId: string,
   universityId: string,

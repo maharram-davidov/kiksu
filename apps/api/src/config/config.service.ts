@@ -43,6 +43,11 @@ export class ConfigService {
     return this.env.DEV_AUTH_UNIVERSITY_ID;
   }
 
+  /** DEVELOPMENT ONLY. The bypassed user's real auth.users id. */
+  get devAuthAuthUserId(): string | undefined {
+    return this.env.DEV_AUTH_AUTH_USER_ID;
+  }
+
   get databasePoolMax(): number {
     return this.env.DATABASE_POOL_MAX;
   }
@@ -57,6 +62,11 @@ export class ConfigService {
    */
   get supabaseServiceRoleKey(): string {
     return this.env.SUPABASE_SERVICE_ROLE_KEY;
+  }
+
+  /** Private bucket for student card images. Never public-read. */
+  get supabaseEvidenceBucket(): string {
+    return this.env.SUPABASE_EVIDENCE_BUCKET;
   }
 
   get supabaseJwksUrl(): string {

@@ -1,0 +1,114 @@
+/*
+ * Palette from packages/tokens, so the console reads as the same product.
+ * Values are duplicated here rather than imported because this is plain CSS
+ * with no build step over it — the token file remains the source of truth and
+ * these must be changed together.
+ */
+:root {
+  --paper: #f1f0ec;      /* Bakı əhəngdaşı */
+  --surface: #ffffff;
+  --sunk: #f7f6f3;
+  --ink: #141c24;        /* Xəzər mürəkkəbi */
+  --ink-2: #3d444d;
+  --muted: #6d7580;
+  --faint: #8a9099;
+  --line: #dedcd5;
+  --line-2: #eae8e1;
+  --teal: #0f7a85;       /* Şirvan turkuazı */
+  --teal-soft: #e3eff0;
+  --bronze: #8a6b21;     /* Tunc */
+  --bronze-soft: #f2e9d4;
+  --nar: #b23a2f;        /* Nar */
+  --nar-soft: #f7e5e2;
+
+  --ui: -apple-system, "SF Pro Text", "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  --mono: ui-monospace, "SF Mono", "Segoe UI Mono", "Roboto Mono", Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--ui);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+button { font: inherit; cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: 0.5; }
+
+.shell { max-width: 1100px; margin: 0 auto; padding: 0 24px 64px; }
+
+header.top {
+  border-bottom: 1px solid var(--line);
+  padding: 24px 0 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+header.top h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
+header.top .who { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: auto; }
+
+nav.tabs { display: flex; gap: 4px; margin: 20px 0 8px; }
+nav.tabs button {
+  background: transparent; border: 1px solid transparent; border-radius: 4px;
+  padding: 7px 14px; font-size: 14px; font-weight: 600; color: var(--muted);
+}
+nav.tabs button[aria-current="true"] { background: var(--teal-soft); color: var(--teal); border-color: var(--teal); }
+
+.card {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 6px;
+  padding: 16px; margin-bottom: 12px;
+}
+.card .row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.meta { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em; color: var(--muted); text-transform: uppercase; }
+.excerpt { margin: 8px 0; color: var(--ink-2); }
+
+.pill {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 3px 7px; border-radius: 3px; white-space: nowrap;
+}
+.pill.late { background: var(--nar-soft); color: var(--nar); font-weight: 700; }
+.pill.soon { background: var(--bronze-soft); color: var(--bronze); }
+.pill.ok { background: var(--teal-soft); color: var(--teal); }
+.pill.sev { background: var(--sunk); color: var(--ink-2); }
+
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.actions button {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 4px;
+  padding: 7px 12px; font-size: 13px; color: var(--ink-2);
+}
+.actions button:hover:not(:disabled) { border-color: var(--ink-2); }
+.actions button.primary { background: var(--teal); border-color: var(--teal); color: #fff; font-weight: 600; }
+.actions button.danger { background: var(--nar); border-color: var(--nar); color: #fff; font-weight: 600; }
+.actions button.inert { color: var(--faint); }
+
+.note {
+  border-left: 3px solid var(--bronze); background: var(--bronze-soft);
+  padding: 10px 14px; margin: 12px 0; font-size: 13px; color: var(--ink-2);
+}
+.note.warn { border-left-color: var(--nar); background: var(--nar-soft); }
+
+.empty { color: var(--muted); padding: 32px 0; }
+.err { color: var(--nar); font-size: 13px; margin: 8px 0; }
+
+.evidence { margin-top: 12px; }
+.evidence img { max-width: 100%; border: 1px solid var(--line); border-radius: 4px; display: block; }
+
+/* ---- login ---- */
+.login { max-width: 340px; margin: 12vh auto; }
+.login h1 { font-size: 20px; margin: 0 0 4px; }
+.login p { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+.login label { display: block; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); margin-bottom: 5px; }
+.login input {
+  width: 100%; padding: 10px 12px; font-size: 15px; margin-bottom: 14px;
+  border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink);
+}
+.login button {
+  width: 100%; padding: 11px; background: var(--teal); color: #fff;
+  border: 0; border-radius: 4px; font-size: 15px; font-weight: 600;
+}

@@ -15,6 +15,18 @@ RUN="/tmp/kiksu-dev-$$"
 PGPORT="${KIKSU_PGPORT:-54420}"
 APIPORT="${KIKSU_API_PORT:-3000}"
 
+# --staff makes the development identity a moderator, so the admin console is
+# reachable locally. OFF by default on purpose: if every local run were staff,
+# StaffGuard's not_found path would never be the thing you see, and the
+# authorisation bugs it exists to catch would be invisible until production.
+WANT_STAFF=0
+for arg in "$@"; do
+  case "$arg" in
+    --staff) WANT_STAFF=1 ;;
+    *) echo "unknown option: $arg" >&2; exit 2 ;;
+  esac
+done
+
 cleanup() {
   echo ""
   echo "==> stopping database"
@@ -80,7 +92,7 @@ DB_URL="postgresql://postgres@127.0.0.1:$PGPORT/postgres"
 # screen can be built against real data. parseEnv() refuses to boot if these
 # are ever set with NODE_ENV=production.
 DEV_IDS=$("${PSQL[@]}" -tAF' ' <<'IDQ'
-select au.id, au.university_id
+select au.id, au.university_id, au.auth_user_id
   from public.app_user au
   join ref.university u on u.id = au.university_id and u.code = 'BDU'
  order by au.handle limit 1;
@@ -88,6 +100,19 @@ IDQ
 )
 DEV_APP_USER_ID=$(echo "$DEV_IDS" | awk '{print $1}')
 DEV_UNIVERSITY_ID=$(echo "$DEV_IDS" | awk '{print $2}')
+# The REAL auth subject, not a synthesised string. StaffGuard looks staff up by
+# this against a uuid column, so a made-up value made every admin route answer
+# 500 instead of not_found — see buildDevContext.
+DEV_AUTH_USER_ID=$(echo "$DEV_IDS" | awk '{print $3}')
+
+if [ "$WANT_STAFF" = "1" ]; then
+  echo "==> granting the development identity moderator access (--staff)"
+  "${PSQL[@]}" >/dev/null <<STAFFQ
+insert into moderation.staff (auth_user_id, display_name, role, university_scope, is_active)
+values ('$DEV_AUTH_USER_ID', 'Dev Moderator', 'admin', array['$DEV_UNIVERSITY_ID']::uuid[], true)
+on conflict (auth_user_id) do update set is_active = true;
+STAFFQ
+fi
 
 # Enrol that student in everything, so the timetable screen has content.
 "${PSQL[@]}" >/dev/null <<ENROLQ
@@ -126,6 +151,7 @@ RATE_LIMIT_STORE=memory
 # parseEnv() refuses to boot if either is set while NODE_ENV=production.
 DEV_AUTH_APP_USER_ID=$DEV_APP_USER_ID
 DEV_AUTH_UNIVERSITY_ID=$DEV_UNIVERSITY_ID
+DEV_AUTH_AUTH_USER_ID=$DEV_AUTH_USER_ID
 
 IOS_STORE_URL=https://apps.apple.com/az/app/kiksu/id000000000
 ANDROID_STORE_URL=https://play.google.com/store/apps/details?id=az.kiksu.mobile
@@ -137,6 +163,11 @@ ENVEOF
 
 echo "==> database ready, .env written"
 echo "==> developing as app_user $DEV_APP_USER_ID (BDU, email tier, no token needed)"
+if [ "$WANT_STAFF" = "1" ]; then
+  echo "==> that identity is ALSO a platform moderator — admin routes are open"
+else
+  echo "==> admin routes answer not_found; re-run with --staff to open them"
+fi
 echo "==> API starting on http://localhost:$APIPORT  (Ctrl+C stops everything)"
 echo ""
 cd "$ROOT/apps/api"

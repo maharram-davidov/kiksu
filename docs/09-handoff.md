@@ -19,6 +19,7 @@ alternates. All UI copy is Azerbaijani first.
     /Users/macbook/kiksu          npm workspaces, git repo, 49 commits
       apps/api                    NestJS + TypeScript strict
       apps/mobile                 Expo SDK 54 + Expo Router (drawer)
+      apps/admin                  internal web console (Vite + React)
       apps/scraper                work.az vacancy scraper
       packages/db                 generated Supabase types
       packages/tokens             design tokens from the design file
@@ -34,6 +35,8 @@ use it.
 ## Running it
 
     ./scripts/dev-api.sh          # throwaway Postgres + migrations + seeds + API on :3000
+    ./scripts/dev-api.sh --staff  # ...and make that identity a moderator
+    npm run dev --workspace @kiksu/admin   # the console on :5174
     cd apps/mobile && npx expo start -c   # then scan the QR
 
 `dev-api.sh` sets `DEV_AUTH_APP_USER_ID`, which makes the API serve every
@@ -46,7 +49,7 @@ verification is logged behind the same gate.
 
     ./scripts/verify-schema.sh        # applies the monolith, asserts 11 invariants
     ./scripts/verify-migrations.sh    # same via the 22 split migrations
-    ./scripts/test-integration.sh     # stands up Postgres + seeds, runs 261 tests
+    ./scripts/test-integration.sh     # stands up Postgres + seeds, runs 272 tests
     ./scripts/seed-local.sh           # seeds twice, proves idempotency
 
 `npx vitest run` alone gives 119 unit tests; integration tests skip without
@@ -157,7 +160,17 @@ screens render real data.
   Deliberately not faked from `status` — suspension is not expiry.
 - **Account sanctions do nothing.** `decideModeration` accepts `mute`,
   `suspend`, `ban` and `shadowban`, writes an audit row, and never touches
-  `app_user.status`. A banned student keeps posting.
+  `app_user.status`. A banned student keeps posting. The console offers these
+  actions because the API accepts them, in a box that says so.
+- **The console is 2 of the 10 AD screens.** AD-01 moderation and AD-02
+  verification. Not built: sanctions/appeals, catalogue editor, university
+  onboarding, employer accounts, broadcast, analytics, feature flags, and the
+  Layer 1 legal-request log (AD-10) — `identity.access_log` now has real rows
+  and nothing reads them back.
+- **Card images need a real Supabase Storage bucket.** The endpoint mints a
+  60s signed URL against `SUPABASE_EVIDENCE_BUCKET`; locally there is no
+  storage, so the image fails to load. The access-log write happens first
+  regardless, which is the property that matters and is tested both ways.
 - **No mail delivery.** OTP is logged behind the dev gate only.
 - **No tier 2 moderation** (LLM pass) — deferred by decision. Abuse and
   defamation are caught only by human reports.
@@ -176,7 +189,6 @@ screens render real data.
   present in the design are verbatim; about sixteen are newly written and
   listed by name in `az.json`'s `_meta`. Same native reviewer as the handle
   wordlist.
-- **No web console** for the admin queues; a moderator needs curl.
 - **No photo upload** anywhere (listings, student cards).
 - **No push notifications or home-screen widget** — both need a development
   build rather than Expo Go.

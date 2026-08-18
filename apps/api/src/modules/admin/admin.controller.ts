@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Req, UseGuards } from "@nestjs/comm
 import type { Request } from "express";
 import { z } from "zod";
 import { AdminService, type ModerationCaseDto, type QueueCaseDto } from "./admin.service";
+import { EvidenceService, type EvidenceUrlDto } from "./evidence.service";
 import { StaffGuard } from "./staff.guard";
 
 const decideVerification = z.object({
@@ -25,7 +26,10 @@ const decideModeration = z.object({
 @Controller("admin")
 @UseGuards(StaffGuard)
 export class AdminController {
-  constructor(private readonly admin: AdminService) {}
+  constructor(
+    private readonly admin: AdminService,
+    private readonly evidence: EvidenceService,
+  ) {}
 
   @Get("verification/queue")
   verificationQueue(@Req() req: Request): Promise<QueueCaseDto[]> {
@@ -42,6 +46,18 @@ export class AdminController {
   ): Promise<{ state: string; handle: string | null }> {
     const b = decideVerification.parse(body);
     return this.admin.decideVerification(id, req.kiksuStaff!.id, b.approve, b.reason_code);
+  }
+
+  /**
+   * A short-lived link to one attempt's student card.
+   *
+   * Declared before the moderation routes purely for reading order; it belongs
+   * with verification. Every call writes identity.access_log BEFORE minting —
+   * see EvidenceService for why that order is not negotiable.
+   */
+  @Get("verification/:id/evidence")
+  evidenceUrl(@Req() req: Request, @Param("id") id: string): Promise<EvidenceUrlDto> {
+    return this.evidence.signedUrlFor(id, req.kiksuStaff!.id);
   }
 
   @Get("moderation/queue")

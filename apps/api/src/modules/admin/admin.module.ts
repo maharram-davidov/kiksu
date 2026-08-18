@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { AuthModule } from "../../common/auth/auth.module";
 import { AdminController } from "./admin.controller";
 import { AdminService } from "./admin.service";
+import { EvidenceService } from "./evidence.service";
 import { StaffGuard } from "./staff.guard";
 
 // AuthModule for EpochService — approving a student card is a tier grant and
@@ -10,6 +11,6 @@ import { StaffGuard } from "./staff.guard";
 @Module({
   imports: [AuthModule],
   controllers: [AdminController],
-  providers: [AdminService, StaffGuard],
+  providers: [AdminService, EvidenceService, StaffGuard],
 })
 export class AdminModule {}

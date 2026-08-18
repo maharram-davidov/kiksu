@@ -3,6 +3,9 @@ import type { Request } from "express";
 import { AppError } from "../../common/errors/app-error";
 import { SqlProvider } from "../../common/db/sql.provider";
 
+/** Same shape Postgres accepts for `uuid`. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Staff-only routes.
  *
@@ -24,6 +27,15 @@ export class StaffGuard implements CanActivate {
     const req = context.switchToHttp().getRequest<Request>();
     const ctx = req.kiksu;
     if (!ctx) throw new AppError("not_found");
+
+    // `moderation.staff.auth_user_id` is a uuid column, so a non-uuid subject
+    // makes Postgres raise rather than return no rows — which surfaces as
+    // `500 internal_error` instead of the `not_found` below. That is not
+    // merely an ugly error: a 500 CONFIRMS the route exists, which is the one
+    // bit this guard is written to withhold. Checked here rather than trusted
+    // from upstream, because upstream got it wrong once already (the
+    // development bypass used to synthesise `dev-auth-<uuid>`).
+    if (!UUID_PATTERN.test(ctx.authUserId)) throw new AppError("not_found");
 
     const [staff] = await this.db.sql<Array<{ id: string; role: string; university_scope: string | null }>>`
       select id, role::text, university_scope

@@ -74,7 +74,9 @@ export class AuthGuard implements CanActivate {
       req.kiksu = buildDevContext(
         devAppUserId,
         this.config.devAuthUniversityId ?? "",
-        `dev-auth-${devAppUserId}`,
+        // The REAL auth subject. Synthesising one here is what made every
+        // staff route answer 500 — see buildDevContext's doc comment.
+        this.config.devAuthAuthUserId ?? "",
       );
       return true;
     }
