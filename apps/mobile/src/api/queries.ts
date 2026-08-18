@@ -2,7 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { apiGet, apiPost } from "./client";
 import type {
   Attendance, Board, ClassDetail, Conversation, ConversationSummary, Listing, MarketCategory,
-  MyProfile, PostDetail, PostPage, Today, Vacancy, WeekGrid,
+  InstructorProfile, MyProfile, PostDetail, PostPage, Reviewable, ReviewPage, ReviewTag,
+  Today, Vacancy, WeekGrid,
 } from "./types";
 
 export function useWeekGrid() {
@@ -217,6 +218,59 @@ export function useConversation(id: string | null) {
     // A live negotiation: poll while the screen is open. Realtime would be
     // better and is the natural upgrade, but polling is honest and cheap.
     refetchInterval: 8000,
+    retry: 1,
+  });
+}
+
+/**
+ * The professor profile. Aggregates only — ungated by design, because a
+ * rating summary is what makes the contribution wall worth climbing.
+ */
+export function useInstructor(id: string | null) {
+  return useQuery({
+    queryKey: ["reviews", "instructor", id],
+    queryFn: () => apiGet<InstructorProfile>(`/reviews/instructors/${id}`),
+    enabled: Boolean(id),
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+}
+
+/**
+ * Written reviews, optionally narrowed to one course.
+ *
+ * Returns 200 with an empty list and the wall's state when the caller has not
+ * contributed, so this is never an error path.
+ */
+export function useInstructorReviews(id: string | null, courseId?: string | null) {
+  return useQuery({
+    queryKey: ["reviews", "instructor", id, "reviews", courseId ?? "all"],
+    queryFn: () =>
+      apiGet<ReviewPage>(
+        `/reviews/instructors/${id}/reviews${courseId ? `?course_id=${courseId}` : ""}`,
+      ),
+    enabled: Boolean(id),
+    staleTime: 60 * 1000,
+    retry: 1,
+  });
+}
+
+/** The closed tag vocabulary. Changes about never, so it caches hard. */
+export function useReviewTags() {
+  return useQuery({
+    queryKey: ["reviews", "tags"],
+    queryFn: () => apiGet<ReviewTag[]>("/reviews/tags"),
+    staleTime: 60 * 60 * 1000,
+    retry: 1,
+  });
+}
+
+/** Course × instructor pairs the caller may review this term. */
+export function useReviewable() {
+  return useQuery({
+    queryKey: ["reviews", "reviewable"],
+    queryFn: () => apiGet<Reviewable[]>("/reviews/reviewable"),
+    staleTime: 60 * 1000,
     retry: 1,
   });
 }

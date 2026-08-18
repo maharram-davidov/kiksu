@@ -84,6 +84,21 @@ export default function DrawerLayout() {
           drawerLabel: t('nav.profile'),
         }}
       />
+      {/*
+        Reviews are a route group, not a destination. The product plan is
+        explicit that they do not get one: a lookup tool used hard for two
+        weeks at course registration and barely otherwise belongs where the
+        student is already picking courses, which is the class detail sheet.
+
+        This entry exists ONLY to hide it. Expo Router derives drawer items
+        from the filesystem, so without it `reviews` would appear as a seventh
+        item labelled "reviews" — and the six destinations in
+        docs/03-navigation.md are a settled decision, not a default.
+      */}
+      <Drawer.Screen
+        name="reviews"
+        options={{ drawerItemStyle: { display: 'none' }, headerShown: false }}
+      />
     </Drawer>
   );
 }

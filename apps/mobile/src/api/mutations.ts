@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiPatch, apiPost } from "./client";
 import type {
   ChatMessage, Comment, Conversation, Listing, ListingCondition, MyProfile, PostDetail, PrivacyKey,
+  ReviewAccess,
 } from "./types";
 
 /**
@@ -172,5 +173,36 @@ export function useSendMessage(conversationId: string) {
       qc.invalidateQueries({ queryKey: ["market", "conversation", conversationId] });
       qc.invalidateQueries({ queryKey: ["market", "conversations"] });
     },
+  });
+}
+
+/**
+ * Writes a review.
+ *
+ * The five ratings are required and the prose is not, mirroring the server's
+ * own reasoning: an average of numbers is what the product can defend, and the
+ * paragraph is what students come for.
+ *
+ * On success this invalidates the whole reviews tree rather than patching it.
+ * A new review changes the instructor's aggregates, the review list, the
+ * caller's remaining reviewable pairs, AND the contribution wall — four
+ * surfaces, and getting any one of them wrong locally would show a student a
+ * wall they have already climbed.
+ */
+export function useWriteReview() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      course_id: string;
+      instructor_id: string;
+      overall_rating: number;
+      quality: number;
+      fairness: number;
+      workload: number;
+      attendance_strictness: number;
+      tags: string[];
+      body?: string;
+    }) => apiPost<{ id: string; access: ReviewAccess }>("/reviews", input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["reviews"] }),
   });
 }

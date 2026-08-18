@@ -1,4 +1,7 @@
 {
+  "_meta": {
+    "status": "Azərbaycan dili mənbədir. Əksər sətirlər dizayn faylından götürülüb. ISTISNA: reviews blokunun bir hissəsi dizaynda yoxdur və yazılıb — wallTitle, wallBody, wallCta, noReviews, noReviewable, pickCourse, tagsHint, bodyLabel, bodyHint, submit, submitting, failed, ratingRequired, anonymousNote, alreadyWritten, overall. Bunları ana dili azərbaycanca olan redaktor yoxlamalıdır — eyni yoxlama ləqəb siyahısı üçün də gözləyir."
+  },
   "nav": {
     "today": "Bu gün",
     "timetable": "Cədvəl",
@@ -267,5 +270,38 @@
     "noThreads": "Hələ yazışma yoxdur",
     "loadFailed": "Yüklənmədi",
     "closed": "Bu yazışma bağlanıb"
+  },
+  "reviews": {
+    "title": "Müəllim profili",
+    "criteria": "Meyarlar üzrə",
+    "written": "Yazılı rəylər",
+    "write": "Rəy yaz — anonim",
+    "quality": "Dərs keyfiyyəti",
+    "fairness": "Ədalətli qiymət",
+    "workload": "İş yükü",
+    "attendance": "Davamiyyət tələbi",
+    "verified": "DOĞRULANMIŞ",
+    "anonymous": "ANONİM",
+    "courseFilter": "FƏNN",
+    "allCourses": "HAMISI",
+    "reviewCount": "{{count}} rəy",
+    "courseCount": "{{count}} fənn",
+    "noReviews": "Hələ rəy yoxdur. Birinci sən yaz.",
+    "wallTitle": "Yazılı rəyləri oxumaq üçün bir rəy yaz",
+    "wallBody": "Bu semestr {{written}}/{{required}} rəy yazmısan. Bir rəy yazsan, bu semestrdəki bütün yazılı rəylər açılır. Qiymətlər hər kəsə açıqdır.",
+    "wallCta": "İlk rəyimi yaz",
+    "overall": "Ümumi qiymət",
+    "pickCourse": "Fənn və müəllim seç",
+    "noReviewable": "Bu semestr rəy yaza biləcəyin fənn yoxdur. Rəy yalnız qeydiyyatdan keçdiyin fənlərə yazılır.",
+    "alreadyWritten": "Bu fənn üçün artıq rəy yazmısan.",
+    "tags": "Etiketlər",
+    "tagsHint": "Ən çox 6 ədəd",
+    "bodyLabel": "Rəyin (istəyə bağlı)",
+    "bodyHint": "Dərs haqqında yaz, şəxs haqqında yox. Ad, təhqir və ittiham qadağandır.",
+    "submit": "Rəyi göndər",
+    "submitting": "Göndərilir…",
+    "failed": "Rəy göndərilmədi. Yenidən cəhd et.",
+    "ratingRequired": "Bütün qiymətləri ver.",
+    "anonymousNote": "Rəyin tam anonimdir. Ləqəbin heç yerdə görünmür."
   }
 }

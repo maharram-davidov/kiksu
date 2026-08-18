@@ -318,3 +318,88 @@ export interface ConversationSummary {
   unread_count: number;
   is_closed: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Reviews (design screen 07)
+// ---------------------------------------------------------------------------
+
+/**
+ * One written review.
+ *
+ * NOTE WHAT IS ABSENT: there is no author field of any kind — not a handle,
+ * not a per-thread alias, not a tier. That is stricter than forum posts and
+ * deliberately so: a course cohort is small enough that "Anonim 3, spring
+ * term" narrows to a handful of people. The API cannot send one, and nothing
+ * on the screen may synthesise one.
+ */
+export interface Review {
+  id: string;
+  course_code: string;
+  course_title: string;
+  term_label: string;
+  overall_rating: number;
+  quality: number;
+  fairness: number;
+  workload: number;
+  attendance_strictness: number;
+  tags: ReviewTag[];
+  body: string | null;
+  /** The design's "DOĞRULANMIŞ" — the reviewer was enrolled in this section. */
+  is_enrollment_verified: boolean;
+  created_at: string;
+}
+
+export interface ReviewTag {
+  key: string;
+  label: string;
+  polarity: string;
+  applies_to?: string;
+}
+
+/**
+ * The contribution wall's state.
+ *
+ * Arrives on the review page rather than as a 403, so the screen renders a
+ * bargain — "write one and this opens" — instead of an error.
+ */
+export interface ReviewAccess {
+  can_read_text: boolean;
+  written_this_term: number;
+  required_this_term: number;
+}
+
+export interface InstructorProfile {
+  id: string;
+  full_name: string;
+  title_prefix: string | null;
+  department: string | null;
+  university_code: string;
+  review_count: number;
+  course_count: number;
+  rating_avg: number | null;
+  /** star_1..star_5, index 0 = one star. */
+  histogram: number[];
+  criteria: {
+    quality: number | null;
+    fairness: number | null;
+    workload: number | null;
+    attendance_strictness: number | null;
+  };
+  top_tags: ReviewTag[];
+  courses: Array<{ id: string; code: string; title: string; review_count: number; rating_avg: number | null }>;
+}
+
+export interface ReviewPage {
+  access: ReviewAccess;
+  items: Review[];
+}
+
+/** A course × instructor pair the caller may review this term. */
+export interface Reviewable {
+  course_id: string;
+  course_code: string;
+  course_title: string;
+  instructor_id: string;
+  instructor_name: string;
+  term_label: string;
+}

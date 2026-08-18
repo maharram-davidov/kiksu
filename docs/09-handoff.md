@@ -46,7 +46,7 @@ verification is logged behind the same gate.
 
     ./scripts/verify-schema.sh        # applies the monolith, asserts 11 invariants
     ./scripts/verify-migrations.sh    # same via the 22 split migrations
-    ./scripts/test-integration.sh     # stands up Postgres + seeds, runs 251 tests
+    ./scripts/test-integration.sh     # stands up Postgres + seeds, runs 261 tests
     ./scripts/seed-local.sh           # seeds twice, proves idempotency
 
 `npx vitest run` alone gives 119 unit tests; integration tests skip without
@@ -109,7 +109,7 @@ writing), commerce (listings, creation, vacancies), chat (deal threads,
 structured offers), me (profile, privacy, handle rotation), reports, admin
 (verification + moderation queues), moderation (tier 1 rules), ingest.
 
-**Mobile** (20 screens): onboarding flow, Bu gün, Cədvəl + class detail sheet,
+**Mobile** (22 screens): onboarding flow, Bu gün, Cədvəl + class detail sheet,
 Forum (boards → feed → thread, with composer, votes, reports), Bazar (list →
 detail → chat, plus listing creation), Karyera, Profil. All ten designed
 screens render real data.
@@ -164,8 +164,18 @@ screens render real data.
 - **No appeals.** `moderation.appeal` exists; nothing writes it. Content can be
   auto-limited with no way to contest it.
 - **No right of reply on reviews** — the mitigation the legal section leans on.
-- **No reviews screen.** The API is built; the class sheet links to a
-  placeholder.
+- **Reviews: 4 of the 11 RV screens.** Built: the professor profile, the
+  written-review list with its course filter, the composer, and the
+  contribution wall — the whole flow the class sheet links into. NOT built,
+  each because the API does not exist: reviews home/search, course profile,
+  grade distribution, syllabus and materials, "my reviews". Two new
+  endpoints came with this (`/reviews/tags`, `/reviews/reviewable`); the
+  latter exists because the instructor profile only lists courses that
+  already HAVE reviews, so it cannot drive a first review.
+- **Azerbaijani copy in the reviews block is partly unreviewed.** Strings
+  present in the design are verbatim; about sixteen are newly written and
+  listed by name in `az.json`'s `_meta`. Same native reviewer as the handle
+  wordlist.
 - **No web console** for the admin queues; a moderator needs curl.
 - **No photo upload** anywhere (listings, student cards).
 - **No push notifications or home-screen widget** — both need a development
