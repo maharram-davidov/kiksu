@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { apiGet, apiPost } from "./client";
 import type {
   Attendance, Board, ClassDetail, Conversation, ConversationSummary, Listing, MarketCategory,
@@ -312,10 +312,29 @@ export const SEARCH_MIN_LENGTH = 2;
  */
 export const SEARCH_DEBOUNCE_MS = 350;
 
-function searchQuery<T>(key: string, path: string, q: string, enabled: boolean) {
+/**
+ * One shared shape for all five corpora.
+ *
+ * `useInfiniteQuery` rather than `useQuery` even though the "all" chip never
+ * pages: two hook families for the same five endpoints would have drifted, and
+ * the cost of the infinite variant when nothing pages it is one array to
+ * flatten. `getNextPageParam` returns the API's opaque `next_cursor` verbatim —
+ * the cursor is HMAC-signed and bound to this exact query, so it must be handed
+ * back byte-for-byte and must never be parsed, constructed or cached across a
+ * changed query.
+ */
+function searchPages<T>(
+  key: string,
+  build: (cursorParam: string) => string,
+  q: string,
+  enabled: boolean,
+) {
   return {
     queryKey: ["search", key, q],
-    queryFn: () => apiGet<T>(path),
+    queryFn: ({ pageParam }: { pageParam: string | null }) =>
+      apiGet<SearchPage<T>>(build(pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : "")),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last: SearchPage<T>) => last.next_cursor,
     enabled: enabled && q.trim().length >= SEARCH_MIN_LENGTH,
     // A given query string returns the same thing for a while; re-typing a
     // recent search should not cost another bucket slot.
@@ -327,26 +346,31 @@ function searchQuery<T>(key: string, path: string, q: string, enabled: boolean) 
 const enc = encodeURIComponent;
 
 export function useSearchPosts(q: string, enabled = true, limit = 20) {
-  return useQuery(searchQuery<SearchPage<PostHit>>(
-    `posts:${limit}`, `/search/posts?q=${enc(q)}&limit=${limit}`, q, enabled));
+  return useInfiniteQuery(searchPages<PostHit>(
+    `posts:${limit}`, (c) => `/search/posts?q=${enc(q)}&limit=${limit}${c}`, q, enabled));
 }
 
 export function useSearchCourses(q: string, enabled = true, limit = 20) {
-  return useQuery(searchQuery<SearchPage<CourseHit>>(
-    `courses:${limit}`, `/search/courses?q=${enc(q)}&limit=${limit}`, q, enabled));
+  return useInfiniteQuery(searchPages<CourseHit>(
+    `courses:${limit}`, (c) => `/search/courses?q=${enc(q)}&limit=${limit}${c}`, q, enabled));
 }
 
 export function useSearchInstructors(q: string, enabled = true, limit = 20) {
-  return useQuery(searchQuery<SearchPage<InstructorHit>>(
-    `instructors:${limit}`, `/search/instructors?q=${enc(q)}&limit=${limit}`, q, enabled));
+  return useInfiniteQuery(searchPages<InstructorHit>(
+    `instructors:${limit}`, (c) => `/search/instructors?q=${enc(q)}&limit=${limit}${c}`, q, enabled));
 }
 
 export function useSearchListings(q: string, enabled = true, limit = 20) {
-  return useQuery(searchQuery<SearchPage<ListingHit>>(
-    `listings:${limit}`, `/search/listings?q=${enc(q)}&limit=${limit}`, q, enabled));
+  return useInfiniteQuery(searchPages<ListingHit>(
+    `listings:${limit}`, (c) => `/search/listings?q=${enc(q)}&limit=${limit}${c}`, q, enabled));
 }
 
 export function useSearchVacancies(q: string, enabled = true, limit = 20) {
-  return useQuery(searchQuery<SearchPage<VacancyHit>>(
-    `vacancies:${limit}`, `/search/vacancies?q=${enc(q)}&limit=${limit}`, q, enabled));
+  return useInfiniteQuery(searchPages<VacancyHit>(
+    `vacancies:${limit}`, (c) => `/search/vacancies?q=${enc(q)}&limit=${limit}${c}`, q, enabled));
+}
+
+/** Flattens the page list into the flat array every result surface renders. */
+export function flattenPages<T>(data: { pages: Array<SearchPage<T>> } | undefined): T[] {
+  return data ? data.pages.flatMap((p) => p.items) : [];
 }

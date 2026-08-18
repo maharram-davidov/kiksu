@@ -330,7 +330,8 @@
     "noRating": "No reviews yet",
     "noPeopleTitle": "There is no people search",
     "noPeopleBody": "Handles cannot be searched — only someone who already knows the full handle can look it up. That is what stops the user base being enumerated.",
-    "trendingUnavailable": "No trending searches yet."
+    "trendingUnavailable": "No trending searches yet.",
+    "allPreviewNote": "Top results from each section. Pick a section above to see them all."
   },
   "moderation": {
     "title": "My content",

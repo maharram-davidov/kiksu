@@ -156,6 +156,12 @@ Four things worth knowing before touching it:
   a de-anonymisation corpus — recent searches live in the device keystore and
   clearing them deletes the only copy).
 
+Results page to the end on a single scope chip; the `all` chip is a
+deliberate three-per-corpus preview and does not page, because the next page of
+three interleaved result sets with unrelated relevance scales has no sensible
+definition. Verified by walking the cursor chain against the running API — five
+single-item pages, no duplicates, order identical to one fifty-item page.
+
 Search shows `moderation_state in ('visible','limited')`, matching the board
 feed exactly. Hiding `limited` only here would hand a shadowbanned student a
 self-test. That tightening remains one decision to be taken across every read
@@ -336,9 +342,6 @@ ES256 was discovered; the OpenAPI document was missed.
   present in the design are verbatim; about sixteen are newly written and
   listed by name in `az.json`'s `_meta`. Same native reviewer as the handle
   wordlist.
-- **Search has no infinite scroll in the UI.** The API is fully keyset-paginated
-  and `next_cursor` is returned and tested; the screen renders the first page
-  only and never presents a cursor back. Wiring it is client work, not API work.
 - **Two course-search implementations over one corpus.** `/v1/search/courses`
   (ratings, paginated) and `GET /v1/timetable/courses` (instructor names, for
   the course picker) query `ref.course` with the same scope and the same three

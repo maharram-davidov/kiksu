@@ -330,7 +330,8 @@
     "noRating": "Rəy yoxdur",
     "noPeopleTitle": "İstifadəçi axtarışı yoxdur",
     "noPeopleBody": "Ləqəbləri axtarmaq mümkün deyil — yalnız tam ləqəbi bilən onu tapa bilər. Bu, təsadüfi tapılmağın qarşısını alır.",
-    "trendingUnavailable": "Populyar axtarışlar hələ yoxdur."
+    "trendingUnavailable": "Populyar axtarışlar hələ yoxdur.",
+    "allPreviewNote": "Hər bölmədən ilk nəticələr. Hamısını görmək üçün yuxarıdan bölmə seçin."
   },
   "moderation": {
     "title": "Məzmunum",

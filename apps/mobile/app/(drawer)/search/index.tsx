@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, NativeScrollEvent, NativeSyntheticEvent,
+  Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@/theme/ThemeProvider";
 import {
-  SEARCH_DEBOUNCE_MS, SEARCH_MIN_LENGTH,
+  SEARCH_DEBOUNCE_MS, SEARCH_MIN_LENGTH, flattenPages,
   useSearchCourses, useSearchInstructors, useSearchListings, useSearchPosts, useSearchVacancies,
 } from "@/api/queries";
 import type { SearchScope } from "@/api/types";
@@ -34,6 +35,11 @@ import {
  * **Trending is not built,** and the screen says that rather than filling the
  * space with something invented. See `recent-searches.ts` for why a server-side
  * query log is the wrong thing to build casually.
+ *
+ * **Paging happens only on a single scope.** The "all" chip is a preview — three
+ * of each corpus — and paging it would mean deciding which of three interleaved
+ * result sets the next page belongs to. Tapping a chip is what drills in, and
+ * that surface pages to the end.
  */
 export default function SearchScreen() {
   const theme = useTheme();
@@ -81,14 +87,49 @@ export default function SearchScreen() {
   const isLoading = active && queries.some((r) => r.isFetching && !r.data);
   const failed = active && queries.some((r) => r.error) && !queries.some((r) => r.data);
 
-  const total = useMemo(
-    () =>
-      (wantPosts ? posts.data?.items.length ?? 0 : 0) +
-      (wantCourses ? (courses.data?.items.length ?? 0) + (instructors.data?.items.length ?? 0) : 0) +
-      (wantListings ? listings.data?.items.length ?? 0 : 0) +
-      (wantVacancies ? vacancies.data?.items.length ?? 0 : 0),
-    [wantPosts, wantCourses, wantListings, wantVacancies,
-     posts.data, courses.data, instructors.data, listings.data, vacancies.data],
+  const postItems = flattenPages(posts.data);
+  const courseItems = flattenPages(courses.data);
+  const instructorItems = flattenPages(instructors.data);
+  const listingItems = flattenPages(listings.data);
+  const vacancyItems = flattenPages(vacancies.data);
+
+  const total =
+    (wantPosts ? postItems.length : 0) +
+    (wantCourses ? courseItems.length + instructorItems.length : 0) +
+    (wantListings ? listingItems.length : 0) +
+    (wantVacancies ? vacancyItems.length : 0);
+
+  /**
+   * The queries the active chip can page. Empty on "all" by design — see the
+   * component note. `courses` drills into two corpora, so both page together
+   * and the footer spinner covers whichever is still fetching.
+   */
+  const pageable = useMemo(() => {
+    switch (scope) {
+      case "posts": return [posts];
+      case "courses": return [courses, instructors];
+      case "listings": return [listings];
+      case "vacancies": return [vacancies];
+      default: return [];
+    }
+  }, [scope, posts, courses, instructors, listings, vacancies]);
+
+  const canPage = pageable.some((r) => r.hasNextPage);
+  const isPaging = pageable.some((r) => r.isFetchingNextPage);
+
+  const onScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (!active || !canPage || isPaging) return;
+      const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+      // Fire a screen's height before the end so the next page is usually
+      // already there by the time the student reaches the bottom.
+      const remaining = contentSize.height - contentOffset.y - layoutMeasurement.height;
+      if (remaining > layoutMeasurement.height) return;
+      for (const r of pageable) {
+        if (r.hasNextPage && !r.isFetchingNextPage) void r.fetchNextPage();
+      }
+    },
+    [active, canPage, isPaging, pageable],
   );
 
   const onClear = useCallback(() => { void clearRecent().then(() => setRecent([])); }, []);
@@ -154,7 +195,12 @@ export default function SearchScreen() {
         })}
       </ScrollView>
 
-      <ScrollView contentContainerStyle={styles.results} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.results}
+        keyboardShouldPersistTaps="handled"
+        onScroll={onScroll}
+        scrollEventThrottle={160}
+      >
         {!active ? (
           <View style={{ gap: 20 }}>
             <Text style={[styles.hint, { color: theme.colors.textMuted }]}>{t("search.hint")}</Text>
@@ -217,10 +263,10 @@ export default function SearchScreen() {
           </View>
         ) : (
           <View style={{ gap: 22 }}>
-            {wantPosts && posts.data?.items.length ? (
+            {wantPosts && postItems.length ? (
               <View style={{ gap: 8 }}>
                 <SectionLabel>{t("search.sectionPosts")}</SectionLabel>
-                {posts.data.items.map((h) => (
+                {postItems.map((h) => (
                   <PostHitRow
                     key={h.id}
                     hit={h}
@@ -230,19 +276,19 @@ export default function SearchScreen() {
               </View>
             ) : null}
 
-            {wantCourses && courses.data?.items.length ? (
+            {wantCourses && courseItems.length ? (
               <View style={{ gap: 8 }}>
                 <SectionLabel>{t("search.sectionCourses")}</SectionLabel>
-                {courses.data.items.map((h) => (
+                {courseItems.map((h) => (
                   <CourseHitRow key={h.id} hit={h} onPress={() => router.push("/timetable")} />
                 ))}
               </View>
             ) : null}
 
-            {wantCourses && instructors.data?.items.length ? (
+            {wantCourses && instructorItems.length ? (
               <View style={{ gap: 8 }}>
                 <SectionLabel>{t("search.sectionInstructors")}</SectionLabel>
-                {instructors.data.items.map((h) => (
+                {instructorItems.map((h) => (
                   <InstructorHitRow
                     key={h.id}
                     hit={h}
@@ -253,10 +299,10 @@ export default function SearchScreen() {
               </View>
             ) : null}
 
-            {wantListings && listings.data?.items.length ? (
+            {wantListings && listingItems.length ? (
               <View style={{ gap: 8 }}>
                 <SectionLabel>{t("search.sectionListings")}</SectionLabel>
-                {listings.data.items.map((h) => (
+                {listingItems.map((h) => (
                   <ListingHitRow
                     key={h.id}
                     hit={h}
@@ -267,13 +313,20 @@ export default function SearchScreen() {
               </View>
             ) : null}
 
-            {wantVacancies && vacancies.data?.items.length ? (
+            {wantVacancies && vacancyItems.length ? (
               <View style={{ gap: 8 }}>
                 <SectionLabel>{t("search.sectionVacancies")}</SectionLabel>
-                {vacancies.data.items.map((h) => (
+                {vacancyItems.map((h) => (
                   <VacancyHitRow key={h.id} hit={h} onPress={() => router.push("/careers")} />
                 ))}
               </View>
+            ) : null}
+
+            {isPaging ? <ActivityIndicator color={theme.colors.primary} /> : null}
+            {scope === "all" && total > 0 ? (
+              <Text style={[styles.note, { color: theme.colors.textMuted, textAlign: "center" }]}>
+                {t("search.allPreviewNote")}
+              </Text>
             ) : null}
           </View>
         )}
