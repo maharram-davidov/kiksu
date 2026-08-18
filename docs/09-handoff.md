@@ -186,13 +186,26 @@ screens render real data.
   `<uuid>@users.kiksu.invalid` is deliberately unchanged: `.invalid` is a
   reserved, unroutable TLD, and that is the point of it.
 
-  **The domain is VERIFIED** — DKIM, SPF TXT and the SPF MX all came back
-  verified on 18 Aug, so `kiksu.site` can send. What has NOT happened is a
-  single real send: no `SMTP_URL` is configured in any environment, and the
-  question that actually decides whether the email verification route works —
-  does a message reach an `.edu.az` university mailbox, and does it land in
-  the inbox rather than spam — is still unanswered. A verified domain means
-  Resend will accept the mail, not that a university will.
+  **The domain is VERIFIED and a real message was delivered** to
+  `mdavidov@std.beu.edu.az` (BMU) on 18 Aug — Resend reports `delivered`, so
+  a real Azerbaijani university mail server accepted mail from `kiksu.site`.
+  The body was rendered by the actual `verificationCodeMail` template, so what
+  arrived is byte-for-byte what onboarding would send.
+
+  Read that result precisely, because it is narrower than "mail works":
+
+  - `delivered` means BEU's server ACCEPTED it. It says nothing about inbox
+    versus spam placement, which is the thing that actually decides whether a
+    student ever sees the code. Someone has to look in the mailbox.
+  - **The SMTP transport was NOT exercised.** Every SMTP port (587, 465, 2587,
+    2465) is blocked outbound from the development machine, so the send went
+    over Resend's HTTPS API instead. `SmtpMailerService` — the code path
+    production uses — has still never made a successful connection. It was
+    observed failing correctly: an SMTP auth failure surfaced as
+    `service_unavailable`, which is the honest-failure behaviour, proven
+    against a real failure rather than a stub.
+  - No `SMTP_URL` is set in any environment, so onboarding still captures
+    rather than sends everywhere.
 
 - **`auth.otp.send.device_daily_addresses` is not enforced.** The other three
   OTP send caps are (60s cooldown, 3/hour, 10/day, keyed on the credential
