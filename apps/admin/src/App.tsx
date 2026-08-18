@@ -2,9 +2,10 @@ import React from "react";
 import { ApiError, adminApi, isAuthConfigured, supabase } from "./api";
 import { VerificationQueue } from "./VerificationQueue";
 import { ModerationQueue } from "./ModerationQueue";
+import { AppealsQueue } from "./AppealsQueue";
 import { Login } from "./Login";
 
-type Tab = "verification" | "moderation";
+type Tab = "verification" | "moderation" | "appeals";
 
 /**
  * The internal console (AD-01 and AD-02).
@@ -96,9 +97,14 @@ export function App() {
         <button aria-current={tab === "moderation"} onClick={() => setTab("moderation")}>
           Moderasiya növbəsi
         </button>
+        <button aria-current={tab === "appeals"} onClick={() => setTab("appeals")}>
+          Etirazlar
+        </button>
       </nav>
 
-      {tab === "verification" ? <VerificationQueue /> : <ModerationQueue />}
+      {tab === "verification" ? <VerificationQueue />
+        : tab === "moderation" ? <ModerationQueue />
+        : <AppealsQueue />}
     </div>
   );
 }

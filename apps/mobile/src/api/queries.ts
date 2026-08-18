@@ -2,8 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { apiGet, apiPost } from "./client";
 import type {
   Attendance, Board, ClassDetail, Conversation, ConversationSummary, Listing, MarketCategory,
-  InstructorProfile, MyProfile, PostDetail, PostPage, Reviewable, ReviewPage, ReviewTag,
-  Today, Vacancy, WeekGrid,
+  InstructorProfile, MyModerationAction, MyProfile, PostDetail, PostPage, Reviewable,
+  ReviewPage, ReviewTag, Today, Vacancy, WeekGrid,
 } from "./types";
 
 export function useWeekGrid() {
@@ -271,6 +271,22 @@ export function useReviewable() {
     queryKey: ["reviews", "reviewable"],
     queryFn: () => apiGet<Reviewable[]>("/reviews/reviewable"),
     staleTime: 60 * 1000,
+    retry: 1,
+  });
+}
+
+/**
+ * What has been done to my content.
+ *
+ * Not cached long: a student who has just filed an appeal will pull to refresh
+ * looking for an answer, and showing them a stale "waiting" for minutes
+ * afterwards is the wrong side to err on.
+ */
+export function useMyModeration() {
+  return useQuery({
+    queryKey: ["me", "moderation"],
+    queryFn: () => apiGet<MyModerationAction[]>("/me/moderation"),
+    staleTime: 30 * 1000,
     retry: 1,
   });
 }

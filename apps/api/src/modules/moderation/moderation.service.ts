@@ -47,7 +47,33 @@ export class ModerationService {
     const severity = worstSeverity(hits) ?? 1;
     const limit = severity >= 5;
 
-    await this.openCase(tx, input, hits, severity);
+    const caseId = await this.openCase(tx, input, hits, severity);
+
+    // An action, not just a case — and this is the whole point of it.
+    //
+    // moderation.appeal.action_id is NOT NULL, so an appeal can only contest a
+    // recorded ACTION. Human decisions have always written one; automod never
+    // did, which meant content the classifier limited had, structurally,
+    // nothing to appeal against. A student could be silenced by a regex with
+    // no route to argue with it.
+    //
+    // Only written when we actually limit. A severity below the threshold
+    // changes nothing a student can see, so recording an "action" for it would
+    // put a decision in their history that never happened.
+    if (limit && caseId) {
+      await tx`
+        insert into moderation.action
+          (case_id, actor_staff_id, kind, target_type, target_id, note)
+        values (${caseId},
+                -- Null, deliberately: no person decided this. The column is
+                -- nullable and null is the honest value.
+                null,
+                'limit'::moderation.action_kind,
+                ${input.targetType}::public.report_target_type,
+                ${input.targetId}::uuid,
+                ${hits.map((h) => h.rule).join(", ")})
+      `;
+    }
 
     if (limit) {
       this.logger.warn(
@@ -63,11 +89,15 @@ export class ModerationService {
     input: { targetType: string; targetId: string; universityId: string },
     hits: RuleHit[],
     severity: number,
-  ): Promise<void> {
+  ): Promise<string | null> {
     // Notes only, never the matched text. A queue row that quotes the phone
     // number it found has copied the personal information into a second place.
     const note = hits.map((h) => `${h.rule}: ${h.note}`).join(" ");
 
+    // Returns the case id so the caller can hang an action off it. `on
+    // conflict do nothing` returns no row when the case already exists — a
+    // second rule firing on the same content — so the id is fetched
+    // explicitly rather than assumed present.
     await tx`
       insert into moderation.mod_case
         (subject_type, subject_id, university_id, opened_by, state, severity,
@@ -76,5 +106,12 @@ export class ModerationService {
               ${input.universityId}, 'automod', 'open', ${severity}, 0, ${note})
       on conflict do nothing
     `;
+
+    const [row] = await tx<Array<{ id: string }>>`
+      select id from moderation.mod_case
+       where subject_type = ${input.targetType}::public.report_target_type
+         and subject_id = ${input.targetId}::uuid
+    `;
+    return row?.id ?? null;
   }
 }

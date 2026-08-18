@@ -23,7 +23,7 @@ alternates. All UI copy is Azerbaijani first.
       apps/scraper                work.az vacancy scraper
       packages/db                 generated Supabase types
       packages/tokens             design tokens from the design file
-      supabase/migrations         22 migrations
+      supabase/migrations         23 migrations
       docs/                       the contracts — read before changing anything
       scripts/                    verification and dev tooling
       design/kiksu-mobile-screens.html   the 10 designed screens
@@ -49,7 +49,7 @@ verification is logged behind the same gate.
 
     ./scripts/verify-schema.sh        # applies the monolith, asserts 11 invariants
     ./scripts/verify-migrations.sh    # same via the 22 split migrations
-    ./scripts/test-integration.sh     # stands up Postgres + seeds, runs 288 tests
+    ./scripts/test-integration.sh     # stands up Postgres + seeds, runs 304 tests
     ./scripts/seed-local.sh           # seeds twice; see the note below
 
 `npx vitest run` alone gives 119 unit tests; integration tests skip without
@@ -118,7 +118,7 @@ writing), commerce (listings, creation, vacancies), chat (deal threads,
 structured offers), me (profile, privacy, handle rotation), reports, admin
 (verification + moderation queues), moderation (tier 1 rules), ingest.
 
-**Mobile** (22 screens): onboarding flow, Bu gün, Cədvəl + class detail sheet,
+**Mobile** (23 screens): onboarding flow, Bu gün, Cədvəl + class detail sheet,
 Forum (boards → feed → thread, with composer, votes, reports), Bazar (list →
 detail → chat, plus listing creation), Karyera, Profil. All ten designed
 screens render real data.
@@ -178,9 +178,16 @@ screens render real data.
 - **Account sanctions do nothing.** `decideModeration` accepts `mute`,
   `suspend`, `ban` and `shadowban`, writes an audit row, and never touches
   `app_user.status`. A banned student keeps posting. The console offers these
-  actions because the API accepts them, in a box that says so.
-- **The console is 2 of the 10 AD screens.** AD-01 moderation and AD-02
-  verification. Not built: sanctions/appeals, catalogue editor, university
+  actions because the API accepts them, in a box that says so. Appeals do not
+  depend on this: an action is recorded either way, so it is contestable
+  either way, and when sanctions become real they inherit a working appeal
+  path.
+- **Appeals cover CONTENT decisions only in practice.** The path itself is
+  kind-agnostic, but the only decisions that currently change what a student
+  sees are `limit` (automod) and `remove_content`. There is no notification
+  when either happens — a student finds out by opening Profil → Məzmunum.
+- **The console is 3 of the 10 AD screens.** AD-01 moderation, AD-02
+  verification and AD-03 appeals. Not built: sanctions/appeals, catalogue editor, university
   onboarding, employer accounts, broadcast, analytics, feature flags, and the
   Layer 1 legal-request log (AD-10) — `identity.access_log` now has real rows
   and nothing reads them back.
@@ -190,8 +197,6 @@ screens render real data.
   regardless, which is the property that matters and is tested both ways.
 - **No tier 2 moderation** (LLM pass) — deferred by decision. Abuse and
   defamation are caught only by human reports.
-- **No appeals.** `moderation.appeal` exists; nothing writes it. Content can be
-  auto-limited with no way to contest it.
 - **No right of reply on reviews** — the mitigation the legal section leans on.
 - **Reviews: 4 of the 11 RV screens.** Built: the professor profile, the
   written-review list with its course filter, the composer, and the

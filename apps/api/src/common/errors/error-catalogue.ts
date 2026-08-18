@@ -139,6 +139,11 @@ export const ERROR_MESSAGES: Record<ErrorCode, Record<Locale, string>> = {
     ru: "Этот способ подтверждения недоступен для этого университета.",
     en: "This verification method isn't available for this university.",
   },
+  appeal_already_filed: {
+    az: "Bu qərara artıq etiraz etmisən. Cavab gözlənilir.",
+    ru: "Ты уже обжаловал это решение. Ответ ожидается.",
+    en: "You have already appealed this decision. It is waiting for a response.",
+  },
   // Distinct from verification_domain_not_allowed, which means "that address
   // does not match the university you picked". This one means "Kiksu does not
   // know this university at all yet", and it is deliberately reported rather

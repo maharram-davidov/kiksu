@@ -112,3 +112,9 @@ nav.tabs button[aria-current="true"] { background: var(--teal-soft); color: var(
   width: 100%; padding: 11px; background: var(--teal); color: #fff;
   border: 0; border-radius: 4px; font-size: 15px; font-weight: 600;
 }
+
+.notefield {
+  width: 100%; padding: 8px 10px; font-size: 14px; margin-top: 10px;
+  border: 1px solid var(--line); border-radius: 4px;
+  background: var(--surface); color: var(--ink); font-family: var(--ui);
+}

@@ -206,3 +206,20 @@ export function useWriteReview() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["reviews"] }),
   });
 }
+
+/**
+ * Files an appeal against a moderation decision.
+ *
+ * Invalidates the whole `me` tree rather than patching: filing changes the
+ * action's own row (it becomes un-appealable) and adds an appeal state, and
+ * getting either wrong locally would show a student an appeal button that no
+ * longer does anything.
+ */
+export function useFileAppeal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { action_id: string; body: string }) =>
+      apiPost<{ id: string; state: string }>("/me/appeals", input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["me"] }),
+  });
+}

@@ -144,6 +144,13 @@ export const FIXED_BUCKETS = {
     windowSeconds: 86_400,
     note: "5 DISTINCT addresses per device per day — a set-cardinality limit, not a counter. Needs bespoke storage.",
   },
+  "moderation.appeal.daily": {
+    name: "moderation.appeal.daily",
+    kind: "fixed",
+    limit: 5,
+    windowSeconds: 86_400,
+    note: "5 appeals per person per day. An unlimited appeal endpoint is a way to generate staff workload at no cost, and the queue is a promise about response time.",
+  },
   "auth.otp.verify": {
     name: "auth.otp.verify",
     kind: "fixed",

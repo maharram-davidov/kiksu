@@ -134,6 +134,25 @@ export interface ModerationCase {
   reasons: string[];
 }
 
+/**
+ * An open appeal.
+ *
+ * No author, like ModerationCase — T4(e) again. `body` is the student's own
+ * words, which is different: choosing to argue your case is not the same as
+ * having your identity handed over.
+ */
+export interface Appeal {
+  appeal_id: string;
+  action_id: string;
+  action_kind: string;
+  /** True when automod decided it — a rule firing, not a person's judgement. */
+  decided_by_machine: boolean;
+  target_type: string;
+  excerpt: string | null;
+  body: string;
+  created_at: string;
+}
+
 export interface EvidenceUrl {
   url: string;
   expires_in_seconds: number;
@@ -147,6 +166,12 @@ export const adminApi = {
     api.post<{ state: string; handle: string | null }>(
       `/admin/verification/${attemptId}/decide`,
       { approve, ...(reasonCode ? { reason_code: reasonCode } : {}) },
+    ),
+  appealQueue: () => api.get<Appeal[]>("/admin/appeals"),
+  decideAppeal: (appealId: string, outcome: "upheld" | "overturned", note?: string) =>
+    api.post<{ state: string; content_restored: boolean }>(
+      `/admin/appeals/${appealId}/decide`,
+      { outcome, ...(note ? { note } : {}) },
     ),
   moderationQueue: () => api.get<ModerationCase[]>("/admin/moderation/queue"),
   decideModeration: (caseId: string, kind: string, note?: string) =>

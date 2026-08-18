@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "status": "Azərbaycan dili mənbədir. Əksər sətirlər dizayn faylından götürülüb. ISTISNA: reviews blokunun bir hissəsi dizaynda yoxdur və yazılıb — wallTitle, wallBody, wallCta, noReviews, noReviewable, pickCourse, tagsHint, bodyLabel, bodyHint, submit, submitting, failed, ratingRequired, anonymousNote, alreadyWritten, overall. Bunları ana dili azərbaycanca olan redaktor yoxlamalıdır — eyni yoxlama ləqəb siyahısı üçün də gözləyir."
+    "status": "Azərbaycan dili mənbədir. Əksər sətirlər dizayn faylından götürülüb. ISTISNA: reviews blokunun bir hissəsi dizaynda yoxdur və yazılıb — wallTitle, wallBody, wallCta, noReviews, noReviewable, pickCourse, tagsHint, bodyLabel, bodyHint, submit, submitting, failed, ratingRequired, anonymousNote, alreadyWritten, overall. Bunları ana dili azərbaycanca olan redaktor yoxlamalıdır — eyni yoxlama ləqəb siyahısı üçün də gözləyir. Eyni qeyd moderation bloku üçün də keçərlidir — bütün sətirlər yazılıb, dizayn faylında yoxdur."
   },
   "nav": {
     "today": "Bu gün",
@@ -303,5 +303,36 @@
     "failed": "Rəy göndərilmədi. Yenidən cəhd et.",
     "ratingRequired": "Bütün qiymətləri ver.",
     "anonymousNote": "Rəyin tam anonimdir. Ləqəbin heç yerdə görünmür."
+  },
+  "moderation": {
+    "title": "Məzmunum",
+    "nothing": "Məzmununa qarşı heç bir tədbir görülməyib.",
+    "loadFailed": "Yüklənmədi. Yenidən cəhd et.",
+    "appeal": "Etiraz et",
+    "appealHint": "Nə üçün bu qərarın səhv olduğunu izah et. Etirazını moderator oxuyacaq. Kimliyin göstərilmir.",
+    "appealSubmit": "Etirazı göndər",
+    "appealFailed": "Etiraz göndərilmədi. Yenidən cəhd et.",
+    "cancel": "Ləğv et",
+    "kind": {
+      "limit": "Məhdudlaşdırılıb",
+      "remove_content": "Silinib",
+      "warn": "Xəbərdarlıq",
+      "mute": "Səssiz",
+      "suspend": "Dayandırılıb",
+      "ban": "Ban",
+      "shadowban": "Məhdud"
+    },
+    "explain": {
+      "limit": "Avtomatik yoxlama bu məzmunu gizlədib. İnsan hələ baxmayıb.",
+      "remove_content": "Moderator bu məzmunu silib.",
+      "warn": "Moderator xəbərdarlıq edib. Məzmun yerindədir.",
+      "default": "Bu məzmuna qarşı tədbir görülüb."
+    },
+    "appealState": {
+      "open": "Etirazın gözləyir.",
+      "upheld": "Etiraz qəbul edilmədi — qərar dəyişmir.",
+      "overturned": "Etiraz qəbul edildi — məzmun bərpa olundu.",
+      "withdrawn": "Etiraz geri götürülüb."
+    }
   }
 }

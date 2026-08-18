@@ -1,5 +1,6 @@
 import React from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useMyProfile } from "@/api/queries";
@@ -9,6 +10,7 @@ import type { PrivacyKey } from "@/api/types";
 
 export default function ProfileScreen() {
   const theme = useTheme();
+  const router = useRouter();
   const { t } = useTranslation();
   const { data, isPending, error } = useMyProfile();
   const privacy = useUpdatePrivacy();
@@ -150,11 +152,37 @@ export default function ProfileScreen() {
         />
       </View>
 
+      {/*
+        The route into "what happened to my content". Placed with the privacy
+        controls rather than buried in a menu because it belongs to the same
+        promise those toggles make — this is the surface that tells a student
+        their post was hidden and gives them a way to argue with it, which the
+        product had no route for at all.
+      */}
+      <Pressable
+        onPress={() => router.push("/profile/moderation")}
+        style={({ pressed }) => [
+          styles.modLink,
+          { borderColor: theme.colors.borderLight, opacity: pressed ? 0.6 : 1 },
+        ]}
+      >
+        <Text style={[styles.modLinkLabel, { color: theme.colors.textPrimary }]}>
+          {t("moderation.title")}
+        </Text>
+        <Text style={[styles.modLinkChevron, { color: theme.colors.textPlaceholder }]}>›</Text>
+      </Pressable>
+
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  modLink: {
+    borderWidth: 1, borderRadius: 6, paddingVertical: 14, paddingHorizontal: 14,
+    marginTop: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+  },
+  modLinkLabel: { fontSize: 15, fontWeight: "600" },
+  modLinkChevron: { fontSize: 20 },
   centre: { flex: 1, alignItems: "center", justifyContent: "center" },
   avatar: { width: 62, height: 62, borderRadius: 31, alignItems: "center", justifyContent: "center" },
   avatarText: { fontSize: 20, fontWeight: "700" },

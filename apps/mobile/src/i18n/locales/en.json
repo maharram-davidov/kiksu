@@ -303,5 +303,36 @@
     "failed": "Review not submitted. Try again.",
     "ratingRequired": "Give all the ratings.",
     "anonymousNote": "Your review is fully anonymous. Your handle never appears."
+  },
+  "moderation": {
+    "title": "My content",
+    "nothing": "Nothing has been actioned on your content.",
+    "loadFailed": "Couldn't load. Try again.",
+    "appeal": "Appeal",
+    "appealHint": "Explain why this decision is wrong. A moderator will read it. Your identity is not shown.",
+    "appealSubmit": "Send appeal",
+    "appealFailed": "Appeal not sent. Try again.",
+    "cancel": "Cancel",
+    "kind": {
+      "limit": "Limited",
+      "remove_content": "Removed",
+      "warn": "Warning",
+      "mute": "Muted",
+      "suspend": "Suspended",
+      "ban": "Banned",
+      "shadowban": "Restricted"
+    },
+    "explain": {
+      "limit": "An automated check hid this. No person has looked at it yet.",
+      "remove_content": "A moderator removed this.",
+      "warn": "A moderator issued a warning. The content is still up.",
+      "default": "This content was actioned."
+    },
+    "appealState": {
+      "open": "Your appeal is waiting.",
+      "upheld": "Appeal declined — the decision stands.",
+      "overturned": "Appeal accepted — the content is back.",
+      "withdrawn": "Appeal withdrawn."
+    }
   }
 }

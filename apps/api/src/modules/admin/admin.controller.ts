@@ -3,11 +3,17 @@ import type { Request } from "express";
 import { z } from "zod";
 import { AdminService, type ModerationCaseDto, type QueueCaseDto } from "./admin.service";
 import { EvidenceService, type EvidenceUrlDto } from "./evidence.service";
+import { AppealsService, type AppealQueueItemDto } from "../moderation/appeals.service";
 import { StaffGuard } from "./staff.guard";
 
 const decideVerification = z.object({
   approve: z.boolean(),
   reason_code: z.string().max(60).optional(),
+});
+
+const decideAppeal = z.object({
+  outcome: z.enum(["upheld", "overturned"]),
+  note: z.string().trim().max(1000).optional(),
 });
 
 const decideModeration = z.object({
@@ -29,6 +35,7 @@ export class AdminController {
   constructor(
     private readonly admin: AdminService,
     private readonly evidence: EvidenceService,
+    private readonly appeals: AppealsService,
   ) {}
 
   @Get("verification/queue")
@@ -73,5 +80,27 @@ export class AdminController {
   ): Promise<{ state: string }> {
     const b = decideModeration.parse(body);
     return this.admin.decideModeration(id, req.kiksuStaff!.id, b.kind, b.note);
+  }
+
+  /**
+   * Open appeals, oldest first. AD-03.
+   *
+   * No author here either, for the same reason as the moderation queue: T4(e).
+   * The appeal body is the student's own words, which they chose to send to
+   * staff — that is not the same as staff being handed their identity.
+   */
+  @Get("appeals")
+  appealQueue(): Promise<AppealQueueItemDto[]> {
+    return this.appeals.queue();
+  }
+
+  @Post("appeals/:id/decide")
+  decideAppeal(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ): Promise<{ state: string; content_restored: boolean }> {
+    const b = decideAppeal.parse(body);
+    return this.appeals.decide(id, req.kiksuStaff!.id, b.outcome, b.note);
   }
 }

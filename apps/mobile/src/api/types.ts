@@ -403,3 +403,31 @@ export interface Reviewable {
   instructor_name: string;
   term_label: string;
 }
+
+// ---------------------------------------------------------------------------
+// Moderation, from the student's side
+// ---------------------------------------------------------------------------
+
+/**
+ * Something that was done to my content.
+ *
+ * NOTE WHAT IS ABSENT: no moderator, no reporter, no other case. The mirror
+ * image of the rule that keeps authors hidden from moderators — staff are
+ * drawn from the same small campuses as the students they moderate, so naming
+ * one to the other invites exactly the retaliation the anonymity model exists
+ * to prevent.
+ */
+export interface MyModerationAction {
+  action_id: string;
+  /** 'limit' | 'remove_content' | 'warn' | 'mute' | 'suspend' | 'ban' | 'shadowban' */
+  kind: string;
+  target_type: string;
+  /** 'visible' | 'limited' | 'removed' — what the content looks like now. */
+  content_state: string;
+  excerpt: string | null;
+  created_at: string;
+  appeal_state: string | null;
+  appeal_decided_at: string | null;
+  appeal_decision_note: string | null;
+  can_appeal: boolean;
+}
