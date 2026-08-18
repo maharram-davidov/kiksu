@@ -3,7 +3,7 @@
 Companion to `docs/01-schema.sql` (the source of truth, unmodified) and
 `supabase/migrations/` (what actually applies). This file documents every
 place the two differ, why, and why the difference does not weaken any of
-the 9 invariants in `scripts/schema-invariants.sql`.
+the 11 invariants in `scripts/schema-invariants.sql`.
 
 `docs/01-schema.sql` itself was **not** touched. The migration split in
 `supabase/migrations/0000_extensions_and_roles.sql` .. `0016_grants_and_public_profile.sql`
@@ -16,10 +16,10 @@ character-identical extracts).
 
 | | |
 |---|---|
-| Migrations | 17 (`0000`–`0016`), applied in order, 0 errors on the second attempt |
-| Local verification | Pass — `scripts/verify-migrations.sh`, 0 errors, all 9 invariants hold |
-| Live Supabase verification | Pass — all 9 invariants hold, checked with the same `scripts/schema-invariants.sql` via `execute_sql` |
-| Deviations from `docs/01-schema.sql` | 2 root causes, touching 3 migration files |
+| Migrations | 23 (`0000`–`0022`) applied live; see "Deviation 3" for how `0021`/`0022` got there |
+| Local verification | Pass — `scripts/verify-migrations.sh`, 0 errors, all 11 invariants hold |
+| Live Supabase verification | Pass — all 11 invariants hold, re-checked via `execute_sql` after 0021/0022; a deliberate control exception confirmed failures do surface |
+| Deviations from `docs/01-schema.sql` | 3 root causes |
 | Project | `houicgsdduzzcarxkuuo` ("Kiksu", `eu-central-1`, Postgres 17.6.1) — was empty, nothing preserved |
 
 ## Migration file map
@@ -303,3 +303,51 @@ actually running on the platform's own linter.
   SQL semantics while splitting." Both are pre-existing properties of
   `docs/01-schema.sql`, not things Supabase rejected or that this
   adaptation introduced.
+
+
+## Deviation 3 — 0021 and 0022 were applied through the MCP tool, reformatted
+
+**What happened.** `0021_auth_claims_hook` and `0022_automod_actions` were
+applied to `houicgsdduzzcarxkuuo` through Supabase's `apply_migration` tool
+rather than by running the repo file with `psql`. The SQL sent differs from the
+file **textually but not semantically**:
+
+- The function bodies are dollar-quoted `$fn$ … $fn$` instead of `$$ … $$`.
+  `apply_migration` wraps the statement, and a nested bare `$$` terminates the
+  outer quoting.
+- Several long explanatory comments were dropped, and `§` was written out,
+  to keep the payload manageable.
+
+**Why this is worth recording.** The premise of this document is that the repo
+is the source of truth and every difference from what is live is written down.
+The repo files remain authoritative and are what `verify-migrations.sh` runs;
+the live objects were then checked to match on the properties that matter
+rather than on their text:
+
+| Checked live | Result |
+|---|---|
+| `internal.token_claims` column list | exactly the six of invariant 11 |
+| tier mapping present (`unverified → provisional`) | yes |
+| `legal` role arm present | yes |
+| null-university row excluded | yes |
+| deactivated/erased excluded | yes |
+| hook fails closed (`not found or v_sid is null`) | yes |
+| hook `SECURITY DEFINER`, `STABLE`, `search_path` pinned | yes |
+| hook owned by `kiksu_auth_hook_owner` | yes |
+| hook role has no `identity` / `career` usage | correct — none |
+| `'limit'` present in `moderation.action_kind` | yes |
+
+All **11 invariants were then run against the live database** and passed. A
+control statement raising a deliberate exception was run afterwards to confirm
+that a failure would in fact surface through the tool, rather than the silent
+pass being an artefact of how errors are reported.
+
+**The hook was also exercised live**, not merely confirmed to exist: called with
+a synthetic event carrying a smuggled `tier: card` in `app_metadata`, it
+returned that block with the six keys stripped, which is the fail-closed path
+for a caller with no `app_user` row.
+
+**Still not done, and not SQL:** the hook is **not registered** in the project's
+Auth settings. Until it is, it exists and never runs, every token is claimless,
+and every authenticated route answers `token_invalid`. No query can detect that
+state — the API logs the caveat on every boot instead.

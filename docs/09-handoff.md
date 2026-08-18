@@ -29,6 +29,8 @@ alternates. All UI copy is Azerbaijani first.
       design/kiksu-mobile-screens.html   the 10 designed screens
 
 Supabase project: **`houicgsdduzzcarxkuuo`**, region `eu-central-1` (Frankfurt).
+All 23 migrations are applied there and all 11 invariants pass against it. The
+schema is current; **nothing else is** — see below.
 An older empty project `htwblkemseevvhnzvwdc` in Tokyo is superseded — do not
 use it.
 
@@ -135,9 +137,11 @@ screens render real data.
   Keychain store, and refreshes once on a 401 before retrying. Three things
   stand between that and a working sign-in, and none of them is code:
     1. **The hook is not registered** in the Supabase project's auth
-       settings. That is a dashboard action. Until it happens the function
-       exists and never runs, so every token is claimless and every
-       authenticated request answers `token_invalid`.
+       settings. That is a dashboard action. The function now EXISTS in
+       Frankfurt and has been exercised there (a smuggled `tier: card` came
+       back stripped), but until it is registered it never runs, so every
+       token is claimless and every authenticated request answers
+       `token_invalid`. No query can detect this state.
     2. **Anonymous sign-in is not enabled** on the project, and has no
        captcha — which leaves unlimited auth-user creation as an open abuse
        surface once it is.
@@ -154,10 +158,20 @@ screens render real data.
 - **Mail needs SMTP configured.** `MailerService` sends over plain SMTP
   (`SMTP_URL`, `MAIL_FROM`); with neither set it captures the message in
   memory instead, which is the local path. `parseEnv()` refuses to boot in
-  production without them. **No provider has been chosen or tested** —
-  deliverability to `.edu.az` university mail servers is the real unknown and
-  is an empirical question, which is why this is a URL rather than a vendor
-  SDK.
+  production without them. Deliverability to `.edu.az` university mail servers
+  is the real unknown and is an empirical question, which is why this is a URL
+  rather than a vendor SDK.
+
+  **Resend is connected** and a `kiksu.az` sending domain exists (eu-west-1,
+  open and click tracking OFF — the code template deliberately carries no
+  tracking pixel and no link, and leaving tracking on would have Resend inject
+  both). Resend speaks plain SMTP, so `SMTP_URL=smtp://resend:<api-key>@smtp.resend.com:587`
+  works against the existing mailer with no code change.
+
+  **The domain is UNVERIFIED and no mail has been sent.** It needs the DKIM
+  and SPF records added to DNS; until then the only possible sender is
+  Resend's sandbox address, which will not reach a university mailbox. The
+  deliverability question is therefore still unanswered.
 - **`auth.otp.send.device_daily_addresses` is not enforced.** The other three
   OTP send caps are (60s cooldown, 3/hour, 10/day, keyed on the credential
   HMAC so no address reaches the limiter store). The fourth is a
