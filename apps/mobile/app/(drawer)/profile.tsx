@@ -84,13 +84,13 @@ export default function ProfileScreen() {
         </Pressable>
 
         <View style={styles.badges}>
-          {data.verification_tier !== "unverified" ? (
+          {data.verification_tier !== "provisional" ? (
             <Text style={[styles.badge, { color: theme.colors.primary, backgroundColor: theme.colors.primaryLight, fontFamily: theme.fontFamilies.mono }]}>
               ✓ {t("profile.emailVerified").toUpperCase()}
             </Text>
           ) : null}
           {/* Tier and card state are independent facts, as the design shows. */}
-          {data.verification_tier === "card_verified" ? (
+          {data.verification_tier === "card" ? (
             <Text style={[styles.badge, { color: theme.colors.secondaryDark, backgroundColor: theme.colors.secondaryLight, fontFamily: theme.fontFamilies.mono }]}>
               {t("profile.cardVerified").toUpperCase()}
             </Text>

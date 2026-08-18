@@ -49,7 +49,7 @@ verification is logged behind the same gate.
     ./scripts/test-integration.sh     # stands up Postgres + seeds, runs 226 tests
     ./scripts/seed-local.sh           # seeds twice, proves idempotency
 
-`npx vitest run` alone gives 64 unit tests; integration tests skip without
+`npx vitest run` alone gives 95 unit tests; integration tests skip without
 `DATABASE_URL`, which `test-integration.sh` provides.
 
 **Run the schema before committing a migration.** Three of the four defects
@@ -118,16 +118,36 @@ screens render real data.
 
 ## What is NOT built
 
-- **Supabase Auth is half wired.** The SERVER half is done: migration 0021
-  adds `internal.auth_epoch`, the six-column `internal.token_claims`
-  projection and `auth_hooks.custom_access_token_hook`, so a real token now
-  gets the claims `AuthGuard` has always verified, and `DbEpochService`
-  makes revocation work. **The CLIENT half is not.** `@supabase/supabase-js`
-  is still not a dependency of the mobile app, nothing calls
-  `signInAnonymously()`, no token is stored on the device, and the app still
-  depends on the dev bypass. The hook is also not yet registered in the
-  Supabase project's auth settings — that is a dashboard action, not SQL, and
-  until it happens the hook exists but never runs.
+- **Supabase Auth is wired but NOT RUNNING ANYWHERE YET.** The code is
+  complete on both sides: migration 0021 adds the epoch counter, the
+  six-column `internal.token_claims` projection and
+  `auth_hooks.custom_access_token_hook`; `DbEpochService` makes revocation
+  work; the app signs in anonymously, keeps the session in a chunked
+  Keychain store, and refreshes once on a 401 before retrying. Three things
+  stand between that and a working sign-in, and none of them is code:
+    1. **The hook is not registered** in the Supabase project's auth
+       settings. That is a dashboard action. Until it happens the function
+       exists and never runs, so every token is claimless and every
+       authenticated request answers `token_invalid`.
+    2. **Anonymous sign-in is not enabled** on the project, and has no
+       captcha — which leaves unlimited auth-user creation as an open abuse
+       surface once it is.
+    3. **No `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY`**
+       is set, so every build still takes the development-bypass branch.
+       That is the intended default for `dev-api.sh`, which has no GoTrue.
+- **The mobile auth path has never been executed.** It typechecks and the
+  iOS bundle builds, and the chunked session store has 11 tests covering
+  torn writes, stale tails and the byte ceiling — but no part of the app
+  has been RUN against a real Supabase project. Anonymous sign-in, the
+  refresh after verification, and the onboarding redirect are all unproven
+  on a device. Running the simulator needs `sudo xcode-select -s
+  /Applications/Xcode.app/Contents/Developer` first.
+- **No `--real-auth` dev mode.** `dev-api.sh` still stands up a throwaway
+  Postgres with a stubbed `auth.users` and no GoTrue, so the real token
+  path cannot be exercised locally at all.
+- **No production gates on the new config.** `parseEnv()` does not yet
+  reject a placeholder service-role key or a non-https `SUPABASE_URL`, and
+  nothing asserts at boot that the hook is registered.
 - **No Redis or `LISTEN/NOTIFY` for epoch invalidation.** `DbEpochService`
   caches in-process for 30s, so cross-instance revocation lands within 30s
   rather than the sub-second §7.4 describes. Inside the spec's stated ≤60s

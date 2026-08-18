@@ -221,7 +221,12 @@ export interface MyProfile {
   review_count: number;
   trade_rating_avg: number | null;
   deal_count: number;
-  verification_tier: string;
+  /**
+   * The token vocabulary: 'provisional' | 'email' | 'card'. The same string
+   * the access token carries, so a screen never has to know which surface a
+   * tier came from.
+   */
+  verification_tier: "provisional" | "email" | "card";
   /** Independent of tier: you can be email-verified with a card pending. */
   card_review_state: string;
   university_code: string | null;

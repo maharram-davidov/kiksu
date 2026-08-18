@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { SqlProvider } from "../../common/db/sql.provider";
 import type { KiksuRequestContext } from "../../common/auth/request-context";
+import { dbTierToToken, type DbTier, type TokenTier } from "../../common/auth/tier-vocabulary";
 import { canChangeHandle, generateHandle } from "../onboarding/handle-generator";
 
 /**
@@ -20,7 +21,14 @@ export interface MyProfileDto {
   review_count: number;
   trade_rating_avg: number | null;
   deal_count: number;
-  verification_tier: string;
+  /**
+   * TOKEN vocabulary ('provisional' | 'email' | 'card'), not the database's
+   * ('unverified' | 'email_verified' | 'card_verified'). The client compares
+   * this against the tier claim it sees on every token and against what
+   * onboarding returned, so all three have to be the same string — see
+   * common/auth/tier-vocabulary.ts.
+   */
+  verification_tier: TokenTier;
   /** The design's "KART: GÖZLƏYİR" — a card submitted and awaiting review. */
   card_review_state: string;
   university_code: string | null;
@@ -73,7 +81,7 @@ export class MeService {
       review_count: Number(row.review_count ?? 0),
       trade_rating_avg: row.trade_rating_avg === null ? null : Number(row.trade_rating_avg),
       deal_count: Number(row.deal_count ?? 0),
-      verification_tier: row.verification_tier as string,
+      verification_tier: dbTierToToken(row.verification_tier as DbTier),
       card_review_state: row.card_review_state as string,
       university_code: (row.university_code as string) ?? null,
       study_year: (row.display_study_year as number) ?? null,

@@ -25,11 +25,9 @@ export default function CodeScreen() {
     setErr(null);
     try {
       const result = await confirmEmailVerification(email, code, session.authUserId);
-      completeVerification({
-        appUserId: result.app_user_id,
-        handle: result.handle,
-        tier: result.tier,
-      });
+      // The app_user id the response also carries is deliberately dropped: no
+      // screen reads it, and the server already knows it from the token.
+      completeVerification({ handle: result.handle, tier: result.tier });
       router.replace({ pathname: "/(auth)/welcome", params: { handle: result.handle } });
     } catch {
       // The API deliberately does not distinguish a wrong code from an expired

@@ -8,6 +8,7 @@
  * client.
  */
 import Constants from "expo-constants";
+import { supabase } from "@/session/supabase";
 
 /**
  * Base URL. On a physical phone `localhost` is the PHONE, not your Mac, so
@@ -42,12 +43,16 @@ export class ApiError extends Error {
 }
 
 /**
- * Auth token holder.
+ * The current access token.
  *
- * DEVELOPMENT SHAPE ONLY. Real sessions come from Supabase Auth once the
- * onboarding screens exist; this exists so the app can be pointed at a running
- * API before that lands. It is deliberately in memory and not persisted, so a
- * token cannot linger on a device.
+ * Held in memory only, and deliberately: Supabase Auth owns durable session
+ * storage (see src/session/supabase.ts, which keeps it in the Keychain), and a
+ * second persisted copy here would be a second thing to expire, refresh and
+ * invalidate. `SessionProvider` keeps this in step by pushing every token
+ * change through `setAuthToken`.
+ *
+ * Null is a normal state, not an error: under the development bypass the API
+ * identifies the caller without a token at all.
  */
 let authToken: string | null = null;
 export function setAuthToken(token: string | null): void {
@@ -57,15 +62,86 @@ export function hasAuthToken(): boolean {
   return authToken !== null;
 }
 
-export async function apiGet<T>(path: string, locale = "az"): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}/v1${path}`, {
+/**
+ * One refresh at a time.
+ *
+ * A screen that fires several queries at once produces several simultaneous
+ * 401s the moment a token goes stale. Without this they would each call
+ * `refreshSession`, and because refresh tokens rotate with reuse detection, the
+ * losers of that race present an already-rotated token — which Supabase treats
+ * as a replay and answers by revoking the entire token family. The user is
+ * signed out for doing nothing but opening a busy screen.
+ */
+let inFlightRefresh: Promise<boolean> | null = null;
+
+async function refreshOnce(): Promise<boolean> {
+  if (!supabase) return false; // development bypass: nothing to refresh
+  if (inFlightRefresh) return inFlightRefresh;
+
+  inFlightRefresh = (async () => {
+    try {
+      const { data, error } = await supabase.auth.refreshSession();
+      if (error || !data.session) return false;
+      setAuthToken(data.session.access_token);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      // Cleared inside the same promise so the next 401 after this settles
+      // starts a fresh attempt rather than reusing a stale result.
+      inFlightRefresh = null;
+    }
+  })();
+
+  return inFlightRefresh;
+}
+
+interface RequestInitLike {
+  method: string;
+  path: string;
+  body?: unknown;
+  locale: string;
+}
+
+function buildInit({ method, body, locale }: RequestInitLike): RequestInit {
+  return {
+    method,
     headers: {
       Accept: "application/json",
       "Accept-Language": locale,
       "X-Kiksu-Client": "mobile",
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     },
-  });
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  };
+}
+
+/**
+ * Every request the app makes.
+ *
+ * This was three near-identical copies of the same fetch-and-unwrap; they are
+ * one function now because the retry below has to apply to all of them and
+ * three copies of it would have drifted.
+ *
+ * THE RETRY: the API answers `401 token_stale` when a token's revocation epoch
+ * is behind the live one — the normal consequence of a tier being granted or a
+ * sanction being applied (identity spec §7.4). The correct response is not to
+ * show the user an error: it is to refresh, which mints claims reflecting
+ * whatever changed, and try again. Exactly one retry, because a second failure
+ * means the session is genuinely gone rather than merely stale, and retrying a
+ * dead session in a loop is how a client hammers an auth endpoint.
+ */
+async function request<T>(init: RequestInitLike): Promise<T> {
+  const url = `${API_BASE_URL}/v1${init.path}`;
+
+  let res = await fetch(url, buildInit(init));
+
+  if (res.status === 401 && (await refreshOnce())) {
+    // buildInit is called again rather than reused: it reads authToken, which
+    // the refresh just replaced.
+    res = await fetch(url, buildInit(init));
+  }
 
   if (!res.ok) {
     // The API returns { error: { code, message, action } }. Fall back to the
@@ -75,43 +151,16 @@ export async function apiGet<T>(path: string, locale = "az"): Promise<T> {
     let message = `Request failed (${res.status})`;
     let action: string | undefined;
     try {
-      const body = (await res.json()) as { error?: { code?: string; message?: string; action?: string } };
-      if (body?.error?.code) code = body.error.code;
-      if (body?.error?.message) message = body.error.message;
-      action = body?.error?.action;
+      const parsed = (await res.json()) as {
+        error?: { code?: string; message?: string; action?: string };
+      };
+      if (parsed?.error?.code) code = parsed.error.code;
+      if (parsed?.error?.message) message = parsed.error.message;
+      action = parsed?.error?.action;
     } catch {
       /* keep the status-derived fallback */
     }
     throw new ApiError(code, res.status, message, action);
-  }
-
-  return (await res.json()) as T;
-}
-
-export async function apiPost<T>(path: string, body: unknown, locale = "az"): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}/v1${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      "Accept-Language": locale,
-      "X-Kiksu-Client": "mobile",
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    let code = `http_${res.status}`;
-    let message = `Request failed (${res.status})`;
-    try {
-      const parsed = (await res.json()) as { error?: { code?: string; message?: string } };
-      if (parsed?.error?.code) code = parsed.error.code;
-      if (parsed?.error?.message) message = parsed.error.message;
-    } catch {
-      /* keep the status-derived fallback */
-    }
-    throw new ApiError(code, res.status, message);
   }
 
   // 204 and friends have no body; callers of those ignore the return anyway.
@@ -119,25 +168,14 @@ export async function apiPost<T>(path: string, body: unknown, locale = "az"): Pr
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
-export async function apiPatch<T>(path: string, body: unknown, locale = "az"): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}/v1${path}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      "Accept-Language": locale,
-      "X-Kiksu-Client": "mobile",
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    let code = `http_${res.status}`;
-    try {
-      const parsed = (await res.json()) as { error?: { code?: string } };
-      if (parsed?.error?.code) code = parsed.error.code;
-    } catch { /* keep the fallback */ }
-    throw new ApiError(code, res.status, `Request failed (${res.status})`);
-  }
-  return (await res.json()) as T;
+export function apiGet<T>(path: string, locale = "az"): Promise<T> {
+  return request<T>({ method: "GET", path, locale });
+}
+
+export function apiPost<T>(path: string, body: unknown, locale = "az"): Promise<T> {
+  return request<T>({ method: "POST", path, body, locale });
+}
+
+export function apiPatch<T>(path: string, body: unknown, locale = "az"): Promise<T> {
+  return request<T>({ method: "PATCH", path, body, locale });
 }

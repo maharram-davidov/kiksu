@@ -45,7 +45,10 @@ suite("me service (integration)", () => {
     const p = await service.getProfile(user);
     // The design shows "✓ E-POÇT DOĞRULANDI" and "KART: GÖZLƏYİR" as two
     // independent facts, because they are.
-    expect(p.verification_tier).toBe("email_verified");
+    // The TOKEN vocabulary. /v1/me, the onboarding response and the tier claim
+    // all speak the same one, so a screen never has to know which surface a
+    // tier arrived from.
+    expect(p.verification_tier).toBe("email");
     expect(p.card_review_state).toBeTruthy();
   });
 

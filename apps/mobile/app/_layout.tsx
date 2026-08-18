@@ -7,7 +7,7 @@ import React from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Slot } from 'expo-router';
+import { Redirect, Slot, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
@@ -40,19 +40,25 @@ function ThemedStatusBar() {
 /**
  * Routes between onboarding and the app.
  *
- * The drawer mounts only once a session is verified, so there is no way to
- * reach the app's contents by dismissing a signup screen — the routes simply
- * are not there yet.
+ * An unverified caller is sent to onboarding and kept there. The drawer's
+ * routes are still mounted — Expo Router builds the tree from the filesystem,
+ * not from this component — so this redirect is a navigation rule, not a
+ * security boundary. It does not need to be one: every drawer screen's data
+ * comes from the API, which authorises each request against the token, and a
+ * caller with no `app_user` has no claims in that token. Reaching /today
+ * without verifying gets you the screen's own empty state, not someone's
+ * timetable.
  *
- * NOTE: while the development auth bypass is active the API already treats
- * every request as a seeded student, so the app skips straight to the drawer.
- * Onboarding is reachable at /(auth)/university to walk it deliberately. Once
- * Supabase Auth is wired this becomes an unconditional redirect on
- * `status !== 'verified'`.
+ * The redirect is skipped while already inside the (auth) group, or it would
+ * fight the onboarding flow's own navigation on every step.
  */
 function RootNavigator() {
   const { session } = useSession();
   const theme = useTheme();
+  const segments = useSegments();
+
+  const inAuthGroup = segments[0] === '(auth)';
+  const needsOnboarding = session.status === 'anonymous';
 
   if (session.status === 'loading') {
     return (
@@ -60,6 +66,10 @@ function RootNavigator() {
         <ActivityIndicator color={theme.colors.primary} />
       </View>
     );
+  }
+
+  if (needsOnboarding && !inAuthGroup) {
+    return <Redirect href="/(auth)/university" />;
   }
 
   return <Slot />;
