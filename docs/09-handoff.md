@@ -178,10 +178,14 @@ screens render real data.
   `<uuid>@users.kiksu.invalid` is deliberately unchanged: `.invalid` is a
   reserved, unroutable TLD, and that is the point of it.
 
-  **The domain is UNVERIFIED and no mail has been sent.** It needs the DKIM
-  and SPF records added to DNS; until then the only possible sender is
-  Resend's sandbox address, which will not reach a university mailbox. The
-  deliverability question is therefore still unanswered.
+  **The domain is VERIFIED** — DKIM, SPF TXT and the SPF MX all came back
+  verified on 18 Aug, so `kiksu.site` can send. What has NOT happened is a
+  single real send: no `SMTP_URL` is configured in any environment, and the
+  question that actually decides whether the email verification route works —
+  does a message reach an `.edu.az` university mailbox, and does it land in
+  the inbox rather than spam — is still unanswered. A verified domain means
+  Resend will accept the mail, not that a university will.
+
 - **`auth.otp.send.device_daily_addresses` is not enforced.** The other three
   OTP send caps are (60s cooldown, 3/hour, 10/day, keyed on the credential
   HMAC so no address reaches the limiter store). The fourth is a
