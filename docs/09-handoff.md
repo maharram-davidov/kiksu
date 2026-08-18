@@ -194,9 +194,11 @@ screens render real data.
 
   Read that result precisely, because it is narrower than "mail works":
 
-  - `delivered` means BEU's server ACCEPTED it. It says nothing about inbox
-    versus spam placement, which is the thing that actually decides whether a
-    student ever sees the code. Someone has to look in the mailbox.
+  - **It landed in the INBOX**, confirmed by opening the mailbox — not just
+    accepted by the server. That is the deliverability question answered for
+    BMU (`std.beu.edu.az`) with no DMARC record beyond the SPF and DKIM Resend
+    requires. The other three campuses are untested; BDU, ADA and UNEC each
+    run their own mail and can differ.
   - **The SMTP transport was NOT exercised.** Every SMTP port (587, 465, 2587,
     2465) is blocked outbound from the development machine, so the send went
     over Resend's HTTPS API instead. `SmtpMailerService` — the code path
