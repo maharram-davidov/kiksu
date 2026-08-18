@@ -77,6 +77,16 @@ export class ConfigService {
     return this.env.SUPABASE_JWT_AUDIENCE;
   }
 
+  /** SMTP connection string. Absent locally; required in production. */
+  get smtpUrl(): string | undefined {
+    return this.env.SMTP_URL;
+  }
+
+  /** Envelope sender for verification mail. */
+  get mailFrom(): string | undefined {
+    return this.env.MAIL_FROM;
+  }
+
   get cursorHmacSecret(): string {
     return this.env.CURSOR_HMAC_SECRET;
   }

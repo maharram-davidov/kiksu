@@ -1,6 +1,9 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import postgres from "postgres";
 import { DbEpochService } from "../src/common/auth/epoch.service";
+import { CaptureMailerService } from "../src/common/mail/mailer.service";
+import { InMemoryRateLimitStore } from "../src/common/rate-limit/rate-limit.store";
+import { RateLimiterService } from "../src/common/rate-limit/rate-limit.service";
 import { AdminService } from "../src/modules/admin/admin.service";
 import { OnboardingService } from "../src/modules/onboarding/onboarding.service";
 
@@ -23,7 +26,10 @@ suite("admin queues (integration)", () => {
     };
     const epochs = new DbEpochService(db as never);
     admin = new AdminService(db as never, db as never, epochs);
-    onboarding = new OnboardingService(db as never, db as never, { credentialPepper: PEPPER } as never, epochs);
+    onboarding = new OnboardingService(
+      db as never, db as never, { credentialPepper: PEPPER } as never, epochs,
+      new CaptureMailerService(), new RateLimiterService(new InMemoryRateLimitStore()),
+    );
 
     const [uni] = await sql`select id from ref.university where code = 'BDU'`;
     uniId = uni!.id;

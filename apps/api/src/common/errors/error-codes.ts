@@ -38,6 +38,7 @@ export const ERROR_CODES = [
 
   // Onboarding / verification
   "verification_route_unavailable",
+  "email_domain_not_recognised",
   "verification_domain_not_allowed",
   "verification_challenge_invalid",
   "verification_challenge_locked",
@@ -149,6 +150,7 @@ export const HTTP_STATUS_BY_CODE: Record<ErrorCode, number> = {
   not_campus_member: 403,
 
   verification_route_unavailable: 409,
+  email_domain_not_recognised: 400,
   verification_domain_not_allowed: 422,
   verification_challenge_invalid: 400,
   verification_challenge_locked: 429,
@@ -216,6 +218,9 @@ export const DEFAULT_ACTION_BY_CODE: Record<ErrorCode, ErrorAction> = {
   not_campus_member: "none",
 
   verification_route_unavailable: "none",
+  // The student can do something about it: pick a different address, or use
+  // the card route. Not "none".
+  email_domain_not_recognised: "retry",
   verification_domain_not_allowed: "none",
   verification_challenge_invalid: "retry",
   verification_challenge_locked: "wait_cooldown",

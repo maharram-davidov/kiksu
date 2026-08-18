@@ -22,6 +22,8 @@ function baseEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
     CURSOR_HMAC_SECRET: "y".repeat(32),
     SUPABASE_URL: "https://houicgsdduzzcarxkuuo.supabase.co",
     SUPABASE_SERVICE_ROLE_KEY: "a-real-looking-service-role-key-value",
+    SMTP_URL: "smtps://user:pass@smtp.example.com:587",
+    MAIL_FROM: "Kiksu <noreply@kiksu.az>",
     IOS_STORE_URL: "https://apps.apple.com/az/app/kiksu/id000000000",
     ANDROID_STORE_URL: "https://play.google.com/store/apps/details?id=az.kiksu.mobile",
     ...overrides,
@@ -60,6 +62,18 @@ describe("production environment gates", () => {
     expect(() => parseEnv(baseEnv({ SUPABASE_URL: "https://localhost:54321" }))).toThrow(
       /localhost/,
     );
+  });
+
+  it("refuses to boot in production with no mail configured", () => {
+    // An API that accepts signups it cannot deliver codes for is worse than
+    // one that will not start: the student completes the form, waits for a
+    // message that never arrives, and nothing reports an error because from
+    // the API's point of view nothing failed.
+    const { SMTP_URL: _s, ...noSmtp } = baseEnv();
+    expect(() => parseEnv(noSmtp as NodeJS.ProcessEnv)).toThrow(/SMTP_URL and MAIL_FROM/);
+
+    const { MAIL_FROM: _m, ...noFrom } = baseEnv();
+    expect(() => parseEnv(noFrom as NodeJS.ProcessEnv)).toThrow(/SMTP_URL and MAIL_FROM/);
   });
 
   it("leaves development environments alone", () => {

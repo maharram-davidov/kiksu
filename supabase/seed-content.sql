@@ -252,6 +252,15 @@ begin
    where university_id = v_uni and method = 'student_card';
   if v_uni is null or v_route_sla is null then return; end if;
 
+  -- Idempotent. There is no natural conflict key on a verification attempt —
+  -- one person legitimately makes many — so a second run would silently
+  -- double the queue instead of erroring. Guarding on "has this seed already
+  -- run" is the only thing that works for a table shaped like this.
+  if exists (select 1 from identity.verification_attempt
+              where method = 'student_card' and state = 'in_review') then
+    return;
+  end if;
+
   for i in 1 .. array_length(v_offsets, 1) loop
     insert into auth.users (id) values (gen_random_uuid()) returning id into v_auth;
 
@@ -304,6 +313,14 @@ declare
 begin
   select id into v_uni from ref.university where code = 'BDU';
   if v_uni is null then return; end if;
+
+  -- Same reasoning as the verification block above: mod_case has a unique key
+  -- on (subject_type, subject_id), but its ON CONFLICT branch INCREMENTS the
+  -- report count, so a second run would inflate every case rather than
+  -- duplicate it — which is worse, because it looks plausible.
+  if exists (select 1 from moderation.mod_case where opened_by = 'report') then
+    return;
+  end if;
 
   for v_post in
     select p.id from public.post p

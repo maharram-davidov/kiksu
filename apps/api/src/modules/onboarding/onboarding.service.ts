@@ -1,10 +1,16 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { randomInt } from "node:crypto";
 import { EpochService } from "../../common/auth/epoch.service";
+import { MailerService } from "../../common/mail/mailer.service";
+import { verificationCodeMail } from "../../common/mail/verification-code.template";
+import { DEFAULT_LOCALE, type Locale } from "../../common/locale/locale";
+import { FIXED_BUCKETS } from "../../common/rate-limit/rate-limit.buckets";
+import { RateLimiterService } from "../../common/rate-limit/rate-limit.service";
 import { dbTierToToken, type TokenTier } from "../../common/auth/tier-vocabulary";
 import { IdentitySqlProvider } from "../../common/db/identity-sql.provider";
 import { SqlProvider } from "../../common/db/sql.provider";
 import { ConfigService } from "../../config/config.service";
+import { AppError } from "../../common/errors/app-error";
 import {
   CREDENTIAL_KEY_VERSION, hashChallenge, hashCredentialBytes, normaliseCredential,
 } from "./credential-hash";
@@ -33,7 +39,50 @@ export class OnboardingService {
     private readonly identity: IdentitySqlProvider,
     private readonly config: ConfigService,
     private readonly epochs: EpochService,
+    private readonly mailer: MailerService,
+    private readonly rateLimiter: RateLimiterService,
   ) {}
+
+  /**
+   * The send limits from `rate-limit.buckets.ts`, applied.
+   *
+   * They were specified there and never wired — the file's own comment says
+   * the bookkeeping "doesn't exist in this scaffold". That was harmless while
+   * nothing was sent. With real delivery it is an email-bombing vector:
+   * without these, anyone can make Kiksu mail any address on a known
+   * university domain without limit, and every bounce lands on Kiksu's own
+   * sending reputation, which is the asset that makes the email route work at
+   * all.
+   *
+   * THE PRINCIPAL KEY IS THE CREDENTIAL HMAC, NOT THE ADDRESS. The limiter
+   * store is keyed by principal, and a Redis-backed store persists those keys
+   * — so keying on the address would put university emails in a cache, which
+   * is the same leak as storing them, by a different route. The HMAC is
+   * already this product's non-reversible identifier for an address, so it is
+   * both the correct key and free.
+   */
+  private async enforceSendLimits(credentialHmac: Buffer): Promise<void> {
+    const principalKey = credentialHmac.toString("hex");
+
+    for (const bucket of [
+      FIXED_BUCKETS["auth.otp.send.cooldown"],
+      FIXED_BUCKETS["auth.otp.send.hourly"],
+      FIXED_BUCKETS["auth.otp.send.daily"],
+    ]) {
+      const decision = await this.rateLimiter.consumeFixed({
+        bucketName: bucket.name,
+        policyName: bucket.name,
+        principalKey,
+        limit: bucket.limit,
+        windowSeconds: bucket.windowSeconds,
+      });
+      if (!decision.allowed) {
+        throw new AppError("rate_limited", {
+          details: { retry_after_seconds: decision.resetSeconds },
+        });
+      }
+    }
+  }
 
   /** Public: the university picker, before the caller has any identity. */
   async listUniversities(): Promise<UniversityDto[]> {
@@ -63,7 +112,10 @@ export class OnboardingService {
    * de-anonymisation primitive: an attacker who knows a classmate's university
    * email could confirm their membership.
    */
-  async startEmailVerification(email: string): Promise<{ expires_in_seconds: number }> {
+  async startEmailVerification(
+    email: string,
+    locale: Locale = DEFAULT_LOCALE,
+  ): Promise<{ expires_in_seconds: number }> {
     const normalised = normaliseCredential(email);
     const domain = normalised.split("@")[1] ?? "";
 
@@ -76,12 +128,22 @@ export class OnboardingService {
     // An unknown domain IS reported, unlike an existing account: the student
     // needs to know their university is not onboarded yet, and the domain is
     // not personal information.
-    if (!match) throw new BadRequestException("email_domain_not_recognised");
+    // AppError, not BadRequestException. A stock Nest exception is flattened
+    // by the filter to `malformed_request` by status — the message is never
+    // passed through — so the specific code this comment promises never
+    // reached the client, and the mobile screen's branch on it was dead code
+    // showing a generic failure instead.
+    if (!match) throw new AppError("email_domain_not_recognised");
 
     const code = String(randomInt(100_000, 1_000_000));
     const pepper = this.config.credentialPepper;
 
     const credentialHmac = hashCredentialBytes("university_email", normalised, pepper);
+
+    // Before any write. A refused send should leave no trace: superseding the
+    // caller's live challenge and then declining to mail a new one would
+    // invalidate a code they may still be about to type.
+    await this.enforceSendLimits(credentialHmac);
 
     await this.identity.transaction(async (tx) => {
       // The subject is the stable handle for one verified human. It is created
@@ -114,25 +176,45 @@ export class OnboardingService {
       `;
     });
 
-    // TODO(delivery): no mail provider is wired yet. The code is deliberately
-    // NOT returned in the response — doing so would make the whole flow
-    // decorative and would hand it to anyone who can call the endpoint.
+    // Sent INLINE, inside the request that carries the address.
     //
-    // It IS logged, but only when the development gate is open. Without that,
-    // onboarding cannot be walked by hand at all, and an unwalkable signup
-    // flow is one nobody checks. The gate is the same one that guards the auth
-    // bypass, so this cannot reach production: parseEnv() refuses to boot
-    // there with it set.
-    this.pendingCodeForDevelopment = code;
+    // This cannot become a queued job without changing what the product
+    // stores: the address is nowhere in the database — only its HMAC is — so a
+    // worker picking this up later would need it persisted, which would put a
+    // real student email in a table for the first time. The cost of inline is
+    // that this endpoint is as available as the mail provider. That is the
+    // right trade.
+    //
+    // The code is never returned in the response. Doing so would make the
+    // whole flow decorative and hand a credential to anyone who can call the
+    // endpoint. It is logged only behind the development gate — the same one
+    // that guards the auth bypass, which parseEnv() refuses to boot with in
+    // production.
     if (this.config.devAuthAppUserId) {
       this.logger.warn(`DEV OTP ${code} for ${normalised} — development only`);
     }
 
+    try {
+      await this.mailer.send(
+        verificationCodeMail({
+          to: normalised,
+          code,
+          ttlMinutes: OTP_TTL_MINUTES,
+          locale,
+        }),
+      );
+    } catch (err) {
+      // Fail honestly rather than returning success. A student who is told the
+      // code is on its way, and then waits for a message that will never
+      // arrive, has no way to find out and no reason to try the card route
+      // instead. This leaks nothing new either: the endpoint already reports
+      // an unrecognised domain, so it was never an account-existence oracle.
+      this.logger.error(`verification mail failed to send: ${String(err)}`);
+      throw new AppError("service_unavailable", { cause: err });
+    }
+
     return { expires_in_seconds: OTP_TTL_MINUTES * 60 };
   }
-
-  /** Development-only escape hatch so the flow is testable before mail exists. */
-  pendingCodeForDevelopment: string | null = null;
 
   /**
    * Submits a student card for manual review.

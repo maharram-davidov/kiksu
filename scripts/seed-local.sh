@@ -38,7 +38,23 @@ echo "==> seed (first run)"
 echo "==> seed (second run — must be idempotent)"
 "${PSQL[@]}" -f "$ROOT/supabase/seed.sql" >/dev/null
 
-echo "==> content seed"
+echo "==> content seed (first run)"
+"${PSQL[@]}" -f "$ROOT/supabase/seed-content.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/seed-commerce.sql" >/dev/null
+
+# Twice, like seed.sql above. These two were only ever run once, so the
+# "proves idempotency" claim never covered them at all.
+#
+# READ THE COUNTS: seed.sql IS idempotent and the reference-data rows below
+# hold steady. seed-content.sql is NOT — posts, comments, reviews, listings and
+# vacancies all double on this second pass, because they have no natural
+# conflict key and never had a guard. That is pre-existing and is not fixed
+# here; it is surfaced rather than hidden, because a script named for
+# idempotency that quietly skipped two of the three seed files was worse.
+#
+# The identity and moderation rows this script now counts DO hold steady --
+# they are guarded explicitly in seed-content.sql.
+echo "==> content seed (second run — reference data must hold; content is known to double)"
 "${PSQL[@]}" -f "$ROOT/supabase/seed-content.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/seed-commerce.sql" >/dev/null
 
@@ -64,6 +80,13 @@ union all select 'review',      count(*) from public.review
 union all select 'listing',     count(*) from public.listing
 union all select 'employer',    count(*) from public.employer
 union all select 'vacancy',     count(*) from public.vacancy
+-- The identity and moderation rows seed-content adds for the admin console.
+-- They are counted HERE specifically because they were the seed's first
+-- inserts with no natural conflict key, which is exactly the shape that
+-- silently doubles on a second run.
+union all select 'verif_attempt', count(*) from identity.verification_attempt
+union all select 'subject',      count(*) from identity.subject
+union all select 'mod_case',     count(*) from moderation.mod_case
 order by 1;
 COUNTS
 echo "==> OK"

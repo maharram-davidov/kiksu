@@ -1,4 +1,6 @@
-import { Body, Controller, Get, HttpCode, NotFoundException, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, NotFoundException, Post, Query, Req } from "@nestjs/common";
+import type { Request } from "express";
+import { resolveLocaleFromRequest } from "../../common/locale/locale";
 import { z } from "zod";
 import { Public } from "../../common/auth/public.decorator";
 import { OnboardingService, type UniversityDto } from "./onboarding.service";
@@ -85,8 +87,15 @@ export class OnboardingController {
   @Public()
   @Post("verify/email/start")
   @HttpCode(202)
-  start(@Body() body: unknown): Promise<{ expires_in_seconds: number }> {
-    return this.onboarding.startEmailVerification(startBody.parse(body).email);
+  start(@Req() req: Request, @Body() body: unknown): Promise<{ expires_in_seconds: number }> {
+    // The code email is written in the caller's language. Second real caller of
+    // §3.2's negotiation after /reviews/tags — and the one where getting it
+    // wrong is most visible, since this message reaches a student before any
+    // screen does.
+    return this.onboarding.startEmailVerification(
+      startBody.parse(body).email,
+      resolveLocaleFromRequest(req),
+    );
   }
 
   /**

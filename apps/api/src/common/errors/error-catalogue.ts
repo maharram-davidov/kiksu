@@ -139,6 +139,17 @@ export const ERROR_MESSAGES: Record<ErrorCode, Record<Locale, string>> = {
     ru: "Этот способ подтверждения недоступен для этого университета.",
     en: "This verification method isn't available for this university.",
   },
+  // Distinct from verification_domain_not_allowed, which means "that address
+  // does not match the university you picked". This one means "Kiksu does not
+  // know this university at all yet", and it is deliberately reported rather
+  // than folded into a generic failure: an unrecognised domain is not personal
+  // information, and a student whose university is not onboarded needs to know
+  // that instead of retrying an address that will never work.
+  email_domain_not_recognised: {
+    az: "Bu universitet hələ Kiksu-da yoxdur. Tələbə bileti ilə davam edə bilərsən.",
+    ru: "Этого университета пока нет в Kiksu. Можно продолжить со студенческим билетом.",
+    en: "This university isn't on Kiksu yet. You can continue with a student card.",
+  },
   verification_domain_not_allowed: {
     az: "Bu e-poçt ünvanı seçdiyin universitetə uyğun gəlmir.",
     ru: "Этот адрес эл. почты не соответствует выбранному университету.",

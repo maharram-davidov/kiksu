@@ -3,6 +3,7 @@ import { APP_FILTER, APP_GUARD } from "@nestjs/core";
 import { ConfigModule } from "./config/config.module";
 import { DbModule } from "./common/db/db.module";
 import { AuthModule } from "./common/auth/auth.module";
+import { MailModule } from "./common/mail/mail.module";
 import { AuthGuard } from "./common/auth/auth.guard";
 import { KiksuExceptionFilter } from "./common/errors/http-exception.filter";
 import { PaginationModule } from "./common/pagination/pagination.module";
@@ -27,6 +28,7 @@ import { IngestModule } from "./modules/ingest/ingest.module";
   imports: [
     ConfigModule,
     DbModule,
+    MailModule,
     AuthModule,
     PaginationModule,
     RateLimitModule,

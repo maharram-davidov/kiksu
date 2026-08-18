@@ -33,7 +33,12 @@ select u.id, d.domain, d.audience, d.sample, d.primary_
   join (values
     ('BDU', 'std.bsu.edu.az',  'student', 'ad.soyad@std.bsu.edu.az',  true),
     ('BDU', 'bsu.edu.az',      'staff',   'ad.soyad@bsu.edu.az',      false),
-    ('ADA', 'ada.edu.az',      'student', 'ad.soyad@ada.edu.az',      true),
+    -- The student domain rule is std.<uni>.edu.az across the board. ADA was the
+    -- one row that diverged, which would have shown its students an address
+    -- that does not exist. ada.edu.az is kept as STAFF, matching how BDU and
+    -- UNEC are already structured.
+    ('ADA', 'std.ada.edu.az',  'student', 'ad.soyad@std.ada.edu.az',  true),
+    ('ADA', 'ada.edu.az',      'staff',   'ad.soyad@ada.edu.az',      false),
     ('UNEC','std.unec.edu.az', 'student', 'ad.soyad@std.unec.edu.az', true),
     ('UNEC','unec.edu.az',     'staff',   'ad.soyad@unec.edu.az',     false),
     ('BMU', 'std.beu.edu.az',  'student', 'ad.soyad@std.beu.edu.az',  true),

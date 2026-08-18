@@ -49,11 +49,17 @@ verification is logged behind the same gate.
 
     ./scripts/verify-schema.sh        # applies the monolith, asserts 11 invariants
     ./scripts/verify-migrations.sh    # same via the 22 split migrations
-    ./scripts/test-integration.sh     # stands up Postgres + seeds, runs 272 tests
-    ./scripts/seed-local.sh           # seeds twice, proves idempotency
+    ./scripts/test-integration.sh     # stands up Postgres + seeds, runs 288 tests
+    ./scripts/seed-local.sh           # seeds twice; see the note below
 
 `npx vitest run` alone gives 119 unit tests; integration tests skip without
 `DATABASE_URL`, which `test-integration.sh` provides.
+
+`seed-local.sh` runs every seed twice. `seed.sql` (reference data) is
+idempotent and holds steady. **`seed-content.sql` and `seed-commerce.sql` are
+not** — posts, comments, reviews, listings and vacancies double on the second
+pass. Pre-existing, surfaced rather than hidden; the identity and moderation
+blocks added for the admin console are explicitly guarded and do hold.
 
 **Run the schema before committing a migration.** Three of the four defects
 that blocked the original schema from applying at all were invisible to review
@@ -145,6 +151,17 @@ screens render real data.
   refresh after verification, and the onboarding redirect are all unproven
   on a device. Running the simulator needs `sudo xcode-select -s
   /Applications/Xcode.app/Contents/Developer` first.
+- **Mail needs SMTP configured.** `MailerService` sends over plain SMTP
+  (`SMTP_URL`, `MAIL_FROM`); with neither set it captures the message in
+  memory instead, which is the local path. `parseEnv()` refuses to boot in
+  production without them. **No provider has been chosen or tested** —
+  deliverability to `.edu.az` university mail servers is the real unknown and
+  is an empirical question, which is why this is a URL rather than a vendor
+  SDK.
+- **`auth.otp.send.device_daily_addresses` is not enforced.** The other three
+  OTP send caps are (60s cooldown, 3/hour, 10/day, keyed on the credential
+  HMAC so no address reaches the limiter store). The fourth is a
+  set-cardinality limit needing a device identifier the product does not have.
 - **No `--real-auth` dev mode.** `dev-api.sh` still stands up a throwaway
   Postgres with a stubbed `auth.users` and no GoTrue, so the real token
   path cannot be exercised locally at all. Not attempted: it needs
@@ -171,7 +188,6 @@ screens render real data.
   60s signed URL against `SUPABASE_EVIDENCE_BUCKET`; locally there is no
   storage, so the image fails to load. The access-log write happens first
   regardless, which is the property that matters and is tested both ways.
-- **No mail delivery.** OTP is logged behind the dev gate only.
 - **No tier 2 moderation** (LLM pass) — deferred by decision. Abuse and
   defamation are caught only by human reports.
 - **No appeals.** `moderation.appeal` exists; nothing writes it. Content can be

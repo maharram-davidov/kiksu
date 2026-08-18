@@ -1,6 +1,9 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import postgres from "postgres";
 import { DbEpochService } from "../src/common/auth/epoch.service";
+import { CaptureMailerService } from "../src/common/mail/mailer.service";
+import { InMemoryRateLimitStore } from "../src/common/rate-limit/rate-limit.store";
+import { RateLimiterService } from "../src/common/rate-limit/rate-limit.service";
 import { OnboardingService } from "../src/modules/onboarding/onboarding.service";
 
 /**
@@ -19,6 +22,16 @@ const PEPPER = "integration-test-pepper-long-enough-32+";
 suite("onboarding (integration)", () => {
   let sql: postgres.Sql;
   let service: OnboardingService;
+  let mailer: CaptureMailerService;
+  let limiter: RateLimiterService;
+
+  /** Reads the code a student would actually receive, not an internal mirror of it. */
+  function sentCode(): string {
+    const body = mailer.lastMail?.text ?? "";
+    const match = body.match(/\b(\d{6})\b/);
+    if (!match) throw new Error("no verification code was mailed");
+    return match[1]!;
+  }
 
   beforeAll(() => {
     sql = postgres(url!, { prepare: false, onnotice: () => {} });
@@ -27,10 +40,17 @@ suite("onboarding (integration)", () => {
       transaction: <T,>(fn: (tx: postgres.TransactionSql) => Promise<T>) =>
         sql.begin(fn) as Promise<T>,
     };
+    mailer = new CaptureMailerService();
+    // A fresh limiter per suite. The OTP send caps are per-address and real,
+    // so tests that send twice for one address would otherwise trip the 60s
+    // cooldown on each other.
+    limiter = new RateLimiterService(new InMemoryRateLimitStore());
     service = new OnboardingService(
       pool as never, pool as never,
       { credentialPepper: PEPPER } as never,
       new DbEpochService(pool as never),
+      mailer,
+      limiter,
     );
   });
 
@@ -55,7 +75,7 @@ suite("onboarding (integration)", () => {
 
   it("never stores the code itself, only its HMAC", async () => {
     await service.startEmailVerification("gizli.kod@std.bsu.edu.az");
-    const code = service.pendingCodeForDevelopment!;
+    const code = sentCode();
     const rows = await sql`
       select challenge_hmac::text as h from identity.verification_attempt
        where state = 'pending'`;
@@ -65,7 +85,7 @@ suite("onboarding (integration)", () => {
   it("provisions a generated handle on a correct code", async () => {
     const email = "yeni.telebe@std.bsu.edu.az";
     await service.startEmailVerification(email);
-    const code = service.pendingCodeForDevelopment!;
+    const code = sentCode();
     const [authUser] = await sql`insert into auth.users (id) values (gen_random_uuid()) returning id`;
 
     const result = await service.confirmEmailVerification(email, code, authUser!.id);
@@ -87,10 +107,31 @@ suite("onboarding (integration)", () => {
   });
 
   it("invalidates the previous code when a new one is requested", async () => {
+    // Two sends for one address, which the 60s cooldown would normally refuse.
+    // A second service with its own limiter isolates the behaviour under test —
+    // superseding — from the rate limit, which has its own tests below.
+    const unlimited = new OnboardingService(
+      { sql, transaction: <T,>(fn: (tx: postgres.TransactionSql) => Promise<T>) => sql.begin(fn) as Promise<T> } as never,
+      { sql, transaction: <T,>(fn: (tx: postgres.TransactionSql) => Promise<T>) => sql.begin(fn) as Promise<T> } as never,
+      { credentialPepper: PEPPER } as never,
+      new DbEpochService({ sql } as never),
+      mailer,
+      new RateLimiterService(new InMemoryRateLimitStore()),
+    );
+
     const email = "tekrar@std.bsu.edu.az";
-    await service.startEmailVerification(email);
-    const firstCode = service.pendingCodeForDevelopment!;
-    await service.startEmailVerification(email);   // supersedes
+    await unlimited.startEmailVerification(email);
+    const firstCode = sentCode();
+    // A fresh limiter for the second send, standing in for 60s having passed.
+    const unlimited2 = new OnboardingService(
+      { sql, transaction: <T,>(fn: (tx: postgres.TransactionSql) => Promise<T>) => sql.begin(fn) as Promise<T> } as never,
+      { sql, transaction: <T,>(fn: (tx: postgres.TransactionSql) => Promise<T>) => sql.begin(fn) as Promise<T> } as never,
+      { credentialPepper: PEPPER } as never,
+      new DbEpochService({ sql } as never),
+      mailer,
+      new RateLimiterService(new InMemoryRateLimitStore()),
+    );
+    await unlimited2.startEmailVerification(email);   // supersedes
     const [authUser] = await sql`insert into auth.users (id) values (gen_random_uuid()) returning id`;
     await expect(
       service.confirmEmailVerification(email, firstCode, authUser!.id),
@@ -102,7 +143,7 @@ suite("onboarding (integration)", () => {
     // uppercases differently must still land on the same verification attempt.
     const email = "ilkin.test@std.bsu.edu.az";
     await service.startEmailVerification(email);
-    const code = service.pendingCodeForDevelopment!;
+    const code = sentCode();
     const [authUser] = await sql`insert into auth.users (id) values (gen_random_uuid()) returning id`;
     const result = await service.confirmEmailVerification(
       "İLKİN.TEST@std.bsu.edu.az", code, authUser!.id,
@@ -179,7 +220,7 @@ suite("onboarding (integration)", () => {
   it("keeps the sealed link out of the public schema entirely", async () => {
     const email = "sizinti.yoxlamasi@std.bsu.edu.az";
     await service.startEmailVerification(email);
-    const code = service.pendingCodeForDevelopment!;
+    const code = sentCode();
     const [authUser] = await sql`insert into auth.users (id) values (gen_random_uuid()) returning id`;
     const { app_user_id } = await service.confirmEmailVerification(email, code, authUser!.id);
 

@@ -87,6 +87,23 @@ export const envSchema = z.object({
   IDEMPOTENCY_STORE: z.enum(["memory", "redis"]).default("memory"),
   REDIS_URL: z.string().url().optional(),
 
+  // --- Mail (verification codes) ---
+  /**
+   * SMTP connection string, e.g. `smtps://user:pass@smtp.postmarkapp.com:587`.
+   *
+   * Deliberately a URL rather than a provider SDK: deliverability to `.edu.az`
+   * university mail servers is the real risk in this feature, and finding out
+   * which provider actually gets through should be a config change, not a code
+   * change.
+   *
+   * Optional so local development works with no mail infrastructure — the
+   * capture transport holds the message instead. The production check below
+   * refuses to boot without it.
+   */
+  SMTP_URL: z.string().optional(),
+  /** Envelope sender, e.g. `Kiksu <noreply@kiksu.az>`. */
+  MAIL_FROM: z.string().optional(),
+
   // --- Rate limiting (05-api-conventions.md §5) ---
   // Same caveat as IDEMPOTENCY_STORE: "memory" does not coordinate across instances.
   RATE_LIMIT_STORE: z.enum(["memory", "redis"]).default("memory"),
@@ -162,6 +179,18 @@ export function parseEnv(raw: NodeJS.ProcessEnv): Env {
     // The issuer check inside JwtVerifierService is derived from SUPABASE_URL,
     // so a plaintext or loopback value is not merely insecure — it means tokens
     // are verified against an issuer no real token will ever carry.
+    // A deployment that accepts signups and cannot deliver a code is worse
+    // than one that refuses to start: the student completes the form, waits
+    // for a message that never arrives, and nothing anywhere reports an error
+    // because from the API's point of view nothing failed.
+    if (!result.data.SMTP_URL || !result.data.MAIL_FROM) {
+      throw new Error(
+        "SMTP_URL and MAIL_FROM are required in production. Refusing to boot: " +
+          "without them verification codes are captured in memory and never sent, " +
+          "so email signup silently does nothing.",
+      );
+    }
+
     if (!result.data.SUPABASE_URL.startsWith("https://")) {
       throw new Error(
         `SUPABASE_URL must be https in production (got ${result.data.SUPABASE_URL}). ` +

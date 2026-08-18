@@ -165,6 +165,8 @@ describe("development auth bypass", () => {
       CURSOR_HMAC_SECRET: "y".repeat(40),
       SUPABASE_URL: "https://p.supabase.co",
       SUPABASE_SERVICE_ROLE_KEY: "k".repeat(40),
+      SMTP_URL: "smtps://user:pass@smtp.example.com:587",
+      MAIL_FROM: "Kiksu <noreply@kiksu.az>",
       SUPABASE_JWT_AUDIENCE: "authenticated",
       IOS_STORE_URL: "https://apps.apple.com/app/id1",
       ANDROID_STORE_URL: "https://play.google.com/store/apps/details?id=a",

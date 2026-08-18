@@ -49,7 +49,12 @@ export default function EmailScreen() {
         <TextInput
           value={email}
           onChangeText={setEmail}
-          placeholder={sample || "ad.soyad@std.bsu.edu.az"}
+          // The real sample comes from ref.university_email_domain, per
+          // university. The fallback is deliberately generic: it used to be
+          // BDU's address, which meant a student at any other university saw
+          // an address that does not exist for them whenever sample_pattern
+          // was missing.
+          placeholder={sample || "ad.soyad@std.universitet.edu.az"}
           placeholderTextColor={theme.colors.textPlaceholder}
           autoCapitalize="none"
           autoCorrect={false}
