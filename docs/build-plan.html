@@ -169,7 +169,7 @@
     <span>Build plan <b style="color:var(--teal)">v1</b> · revised 18 Aug</span>
     <span>Design import: Kiksu Mobile UI Design · 10 screens</span>
     <span>13 agents · 3 model tiers</span>
-    <span>Status <b style="color:var(--bronze)">Spine closing · schema, auth and mail all live and proven; global search is the last gap</b></span>
+    <span>Status <b style="color:var(--bronze)">Spine feature-complete · global search shipped; the dev build is the last item, the wordlist the last blocker</b></span>
   </p>
   <h1>Kiksu build plan</h1>
   <p class="sub">Stack, phone-preview workflow, and the agent orchestration — who builds what, on which model, and why the cheap tier is safe to use where it is.</p>
@@ -186,8 +186,10 @@
   <p>Both switches §0.2 used to warn about have been flipped, and neither was flipped on
   trust. The access-token hook is registered and was proven end to end against the live
   project; a real verification code was delivered to a real Azerbaijani university mailbox
-  and landed in the inbox. Account sanctions are real rather than recorded-only. What is
-  left in Spine is one ordinary feature.</p>
+  and landed in the inbox. Account sanctions are real rather than recorded-only.
+  <strong>Global search shipped since, which was the last Spine feature</strong> — so what
+  remains in Spine is not a feature at all, it is the development build that was scheduled
+  for week three.</p>
 
   <p><strong>The top risk is no longer a switch, and it is still not code.</strong>
   Frankfurt is current, all 11 invariants pass against it, auth mints correct claims and
@@ -197,10 +199,10 @@
   amount of engineering retires.</p>
 
   <dl class="statgrid">
-    <div><dt>Commits</dt><dd>67</dd></div>
-    <div><dt>Tests</dt><dd>323</dd></div>
-    <div><dt>API modules</dt><dd>14</dd></div>
-    <div><dt>Mobile screens</dt><dd>22</dd></div>
+    <div><dt>Commits</dt><dd>69</dd></div>
+    <div><dt>Tests</dt><dd>355</dd></div>
+    <div><dt>API modules</dt><dd>15</dd></div>
+    <div><dt>Mobile screens</dt><dd>23</dd></div>
     <div><dt>Console screens</dt><dd>3</dd></div>
     <div><dt>Schema invariants</dt><dd>11</dd></div>
     <div><dt>Tables</dt><dd>97</dd></div>
@@ -219,9 +221,9 @@
       </tr>
       <tr>
         <td class="k">Spine</td><td class="mono">3–6</td>
-        <td><span class="bar part"><i style="width:92%"></i></span></td>
-        <td><span class="m s-part">~92%</span></td>
-        <td>Reviews and the admin console are built; class detail and the profile are real screens. <strong>Left: global search</strong> — the only remaining Spine feature. The attendance gap listed here previously was wrong twice over: attendance is self-reported, <code>ClassDetailSheet</code> already renders it against the exclusion limit, and the standalone screen was dropped by product decision rather than left undone. Still on Expo Go — no <code>eas.json</code>, so push, the widget, MMKV and on-device OCR remain untestable.</td>
+        <td><span class="bar part"><i style="width:97%"></i></span></td>
+        <td><span class="m s-part">~97%</span></td>
+        <td><strong>Feature-complete.</strong> Reviews, the admin console, class detail, the profile and now global search across five corpora, paginated to the end. The attendance gap listed here in earlier revisions was wrong twice over: attendance is self-reported, <code>ClassDetailSheet</code> already renders it against the exclusion limit, and the standalone screen was dropped by product decision rather than left undone. <strong>Left: the dev build only</strong> — still on Expo Go with no <code>eas.json</code>, so push, the widget, MMKV and on-device OCR remain untestable. That is tooling, not product, which is why this row is at 97 rather than 100.</td>
       </tr>
       <tr>
         <td class="k">Community</td><td class="mono">7–10</td>
@@ -239,7 +241,7 @@
         <td class="k">Hardening</td><td class="mono">15–16</td>
         <td><span class="bar"><i style="width:0%"></i></span></td>
         <td><span class="m s-none">Not started</span></td>
-        <td>Everything. The gate has grown to 323 tests and 11 invariants and runs on every change, which is still not the same as an audit. The invariants have now been run against the live project; the test suite still has not.</td>
+        <td>Everything. The gate has grown to 355 tests and 11 invariants and runs on every change, which is still not the same as an audit. The invariants have now been run against the live project; the test suite still has not.</td>
       </tr>
     </tbody>
   </table>
@@ -287,36 +289,69 @@
     <li><strong>Appeals</strong> — an automod <code>limit</code> or a <code>remove_content</code> decision can be contested and an overturn restores the content. There is no notification when either happens; a student finds out by opening Profil → Məzmunum.</li>
     <li><strong>Onboarding</strong> — university picker, email OTP <em>delivered</em>, student card submission. Sends are capped at 1/60s, 3/hour, 10/day, keyed on the credential HMAC so no address reaches the limiter.</li>
     <li><strong>Reviews</strong> — professor profile, review list, composer and contribution wall. 4 of the 11 RV screens; the other 7 need endpoints that do not exist.</li>
+    <li><strong>Global search</strong> — five endpoints over posts, courses, instructors, listings and vacancies, paginated to the end, with the mobile screen behind the header search icons that were inert placeholders until now. Five endpoints rather than one aggregate because a combined response would carry a thread alias and a seller handle in one body, which assertion 21 forbids and CI checks mechanically. <strong>No people corpus, and there must never be one</strong> — T11: fuzzy handle matching enumerates the user base along with each student's university and year.</li>
     <li><strong>Internal console</strong> — a fourth workspace. Verification queue with signed-URL card viewing (logged to <code>identity.access_log</code> before the URL is minted), moderation queue, appeals queue.</li>
     <li><strong>Forum, Today, Bazar, Karyera</strong> — boards through to thread with per-thread aliasing; the landing screen in one round trip; listings, deal chat and offers writable; vacancies scraped from work.az.</li>
   </ul>
 
   <h3>0.4 What I would do next, in order</h3>
-  <p>The previous list is worked through in full: the hook is registered, a real code
-  reached a real <code>.edu.az</code> inbox, and sanctions actually stop somebody. What
-  remains is one feature, one overdue piece of tooling, and one thing no engineer can
-  finish.</p>
+  <p>Global search has come off this list since the last revision, and nothing has replaced
+  it. Every remaining item is either tooling or a person — there is no outstanding product
+  feature in Spine.</p>
   <ol>
-    <li><strong>Close Spine with global search.</strong> The last Spine feature. Four of the
-    seven searchable corpora already carry a <code>search_vector</code> and a GIN index, and
-    only the course catalogue has a query path written. Three constraints shape it more than
-    the schema does: folding must be applied to the query exactly as it was to the index, or
-    Azerbaijani search silently returns nothing for the most common spelling; each row's
-    vector was built with that row's own language config, so the query needs one constant
-    arm per language to stay index-usable; and there is <strong>no People corpus, ever</strong>
-    — T11 permits exact-full-handle lookup only, because prefix or fuzzy matching walks the
-    adjective×noun space and enumerates the user base.</li>
-    <li><strong>Take the dev build.</strong> Scheduled for week 3 and now four phases overdue.
-    It blocks push notifications, the home-screen widget, MMKV and on-device OCR, and every
-    week it slips is a week those four stay unproven.</li>
-    <li><strong>Get the handle wordlist reviewed by a native speaker.</strong> Listed last
-    because it needs a person rather than a commit, and first in consequence: it is the only
-    item on this page that blocks launch outright.</li>
+    <li><strong>Take the dev build.</strong> Now the oldest thing on the page: scheduled for
+    week 3 and four phases overdue. It blocks push notifications, the home-screen widget,
+    MMKV and on-device OCR, and every week it slips is another week those four stay entirely
+    unproven rather than merely unfinished. It is also the only Spine item left, which makes
+    it the thing standing between this phase and done.</li>
+    <li><strong>Get the handle wordlist reviewed by a native speaker.</strong> Second by
+    order, first by consequence: it is the only item anywhere on this page that blocks launch
+    outright, and no amount of engineering retires it.</li>
+    <li><strong>Decide what <code>limited</code> means on read paths.</strong> Shadowban
+    writes the status and limits new content at write time, but <code>limited</code> content
+    still appears in the forum feed, so the sanction currently hides someone only in chat.
+    Search deliberately matches the feed rather than tightening on its own — hiding it in one
+    surface and not another hands a shadowbanned student a reliable self-test. This wants one
+    decision applied everywhere at once, and nobody has taken it.</li>
   </ol>
   <p>Deliberately not on this list: <strong>the attendance screen</strong>, dropped by
   product decision. Attendance is self-reported, the endpoints work, and
   <code>ClassDetailSheet</code> already renders the count against the exclusion limit —
   earlier revisions of this page described a gap that was never there.</p>
+
+  <h3>0.5 What execution caught that review would not have</h3>
+  <p>The organising claim of this project is that running things finds what reading them
+  does not. Building search produced four more, and the largest was not in the feature.</p>
+  <div class="box">
+    <span class="t">0.5 The test harness could not test Azerbaijani</span>
+    <p>All four verification scripts stood their throwaway Postgres up with
+    <code>initdb --locale=C</code>. Under a C ctype, <code>lower()</code> only touches ASCII
+    — so <code>lower('Ə')</code> is <code>'Ə'</code> — and <code>util.fold_text()</code>
+    translates the <em>lowercase</em> set <code>əğıöşüçё</code>. Every uppercase Azerbaijani
+    letter therefore survived folding unfolded: the stored <code>name_folded</code> for
+    <code>Nigar Əliyeva</code> was <code>nigar Əliyeva</code>, and searching
+    <code>Eliyeva</code> returned nothing at all.</p>
+    <p><strong>The fold rules the entire Azerbaijani search story rests on had never once
+    been exercised</strong>, across 323 tests and every previous phase. The two tests that
+    caught it were the first to try an uppercase non-ASCII query. Supabase runs a UTF-8
+    ctype, so production was never affected — which is exactly why it survived: the bug was
+    in the instrument, not the product, and an instrument does not complain.</p>
+    <p>Now <code>--lc-collate=C --lc-ctype=C.UTF-8</code>: ordering stays byte-deterministic
+    so assertions do not depend on the developer's machine, while casing folds properly.
+    Applied to all four scripts including <code>dev-api.sh</code>, where a developer
+    searching the local app and getting nothing would have concluded search was broken.</p>
+  </div>
+  <p>The other three, each found by running rather than reading: every date and price sort
+  raised <code>numeric field overflow</code>, because the keyset projected sorts into a
+  <code>numeric(12,8)</code> that holds four integer digits where an epoch needs twelve —
+  relevance sorts passed throughout, since a rank is below 1, so the bug appeared the moment
+  a non-relevance sort was first executed. <code>validation_failed</code> came back as
+  <strong>two different HTTP statuses</strong> depending on whether a controller threw it or
+  let a schema parse throw: the filter hardcoded 400 while its own table and the conventions
+  document both say 422, pre-existing and affecting every validated endpoint. And three
+  cursor tests were <strong>passing without asserting anything</strong> — they early-returned
+  when there was no second page, and the content seed holds six posts of which exactly one
+  matched the query they used.</p>
 
   <div class="box ok">
     <span class="t">Unchanged, and still blocking launch</span>
@@ -550,7 +585,7 @@ application(vacancy_id, career_profile_id)        <b>-- the only Layer-4 join</b
     <thead><tr><th>Phase</th><th>Weeks</th><th>Ships</th><th>Agents</th><th>Now</th></tr></thead>
     <tbody>
       <tr><td class="k">Contracts</td><td class="mono">1–2</td><td>Schema, identity spec, OpenAPI, tokens, repo and CI skeleton.</td><td><span class="m m-o">Opus ×3</span> <span class="m m-h">Haiku ×1</span></td><td><span class="m s-done">Done</span></td></tr>
-      <tr><td class="k">Spine</td><td class="mono">3–6</td><td>Onboarding and verification end to end, timetable with attendance, the ten screens as real components. First dev build on your phone.</td><td><span class="m m-s">Sonnet ×5</span> <span class="m m-o">Opus ×2</span></td><td><span class="m s-part">~92%</span></td></tr>
+      <tr><td class="k">Spine</td><td class="mono">3–6</td><td>Onboarding and verification end to end, timetable with attendance, the ten screens as real components. First dev build on your phone.</td><td><span class="m m-s">Sonnet ×5</span> <span class="m m-o">Opus ×2</span></td><td><span class="m s-part">~97%</span></td></tr>
       <tr><td class="k">Community</td><td class="mono">7–10</td><td>Boards, posts, polls, thread aliasing, comments, moderation queue, reviews with the contribution wall.</td><td><span class="m m-s">Sonnet ×4</span> <span class="m m-o">Opus ×2</span></td><td><span class="m s-part">~80%</span></td></tr>
       <tr><td class="k">Commerce</td><td class="mono">11–14</td><td>Marketplace with deal chat and trade ratings, vacancies, employer console. <em>Career identity dropped — careers is aggregation-only.</em></td><td><span class="m m-s">Sonnet ×4</span> <span class="m m-o">Opus ×2</span></td><td><span class="m s-part">~55%</span></td></tr>
       <tr><td class="k">Hardening</td><td class="mono">15–16</td><td>Full security audit, performance pass on seeded data, store submission, catalogue loaded for campus one.</td><td><span class="m m-o">Opus ×3</span></td><td><span class="m s-none">—</span></td></tr>
