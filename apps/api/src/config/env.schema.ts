@@ -67,7 +67,11 @@ export const envSchema = z.object({
    */
   SUPABASE_EVIDENCE_BUCKET: z.string().min(1).default("verification-evidence"),
 
-  // --- Auth token verification (05-api-conventions.md §2.1: Supabase JWT, RS256, 900s TTL) ---
+  // --- Auth token verification (05-api-conventions.md §2.1: Supabase JWT, 900s TTL) ---
+  // The signing algorithm is whatever the project publishes in its JWKS — it is
+  // ES256 on houicgsdduzzcarxkuuo, not the RS256 originally assumed. Nothing
+  // here pins it, deliberately: Supabase rotates signing keys and can change
+  // curve, and a hardcoded algorithm would turn that into an outage.
   // Used to build the JWKS URL: `${SUPABASE_URL}/auth/v1/.well-known/jwks.json`.
   // Overridable for self-hosted / non-standard gateways.
   SUPABASE_JWKS_URL: z.string().url().optional(),

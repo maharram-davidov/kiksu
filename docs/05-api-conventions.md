@@ -153,7 +153,7 @@ fails.
 Authorization: Bearer <supabase access token>
 ```
 
-A Supabase-issued JWT, RS256, TTL 900 s, refresh-token rotation on with reuse detection
+A Supabase-issued JWT, TTL 900 s, refresh-token rotation on with reuse detection
 (identity spec §7.3). Nothing else authenticates a request: no API key, no cookie, no query
 parameter. **A token must never appear in a URL** — it would land in access logs, in the
 Referer header and in crash reports.

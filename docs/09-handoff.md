@@ -136,19 +136,23 @@ screens render real data.
   work; the app signs in anonymously, keeps the session in a chunked
   Keychain store, and refreshes once on a 401 before retrying. Three things
   stand between that and a working sign-in, and none of them is code:
-    1. **The hook IS registered** (18 Aug) and its grants are correct:
-       `supabase_auth_admin` has USAGE on `auth_hooks` and EXECUTE on the
-       function, while `anon` and `authenticated` have neither. It has still
-       never run — see the next point — so it remains unproven end to end.
-    2. **Anonymous sign-in is DISABLED**, confirmed empirically: a signup
-       request against the live project answers
-       `422 anonymous_provider_disabled`. This is the blocker now. The mobile
-       app's only sign-in path is `supabase.auth.signInAnonymously()`
-       (`session.ts`), so **no token can be minted at all** — which means the
-       app cannot authenticate, and the access-token hook cannot be tested,
-       because there is nothing for it to run on. Enabling it is a dashboard
-       setting. It also needs a captcha decision: anonymous sign-in with none
-       is unlimited auth-user creation.
+    1. **The hook is registered and PROVEN** (18 Aug). Verified end to end
+       against the live project, not inferred: anonymous sign-in, then an
+       `app_user` created for that subject, then a refresh — and the new
+       token carried all six claims in `app_metadata`, with `tier` correctly
+       mapped `card_verified → card` and `sid` equal to the token's own
+       `session_id`. Bumping `internal.auth_epoch` then produced a token
+       carrying the higher epoch, so revocation works live too. The test rows
+       were removed afterwards; the project is back to zero.
+    2. **The tokens are ES256, not RS256.** Found by verifying a real token:
+       the header says ES256 and the JWKS publishes one EC key. The service's
+       doc comment and `docs/05-api-conventions.md` both said RS256, and the
+       e2e suite only ever minted RS256 — so it was proving the guard against
+       an algorithm the product does not use. Both are corrected and the suite
+       now covers ES256. **`JwtVerifierService` deliberately does not pin an
+       algorithm**: jose resolves the key by `kid` from the published set, so
+       a Supabase key rotation or curve change is a non-event. Pinning would
+       turn that routine change into every token being rejected at once.
     3. **No `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY`**
        is set, so every build still takes the development-bypass branch.
        That is the intended default for `dev-api.sh`, which has no GoTrue.

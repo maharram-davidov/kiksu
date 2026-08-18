@@ -20,11 +20,20 @@ export interface SupabaseJwtClaims {
 export const JWKS_RESOLVER = Symbol("JWKS_RESOLVER");
 
 /**
- * Verifies a Supabase-issued access token: signature (RS256, against the project's
+ * Verifies a Supabase-issued access token: signature (against the project's
  * JWKS), issuer, audience, and expiry. Everything else about "is this claim set
  * trustworthy" — the allowlist, the `user_metadata` trap — is a separate concern
  * handled in `claims.ts` and `auth.guard.ts`; this service answers exactly one
  * question: "did Supabase mint this token, and is it still valid."
+ *
+ * THE ALGORITHM IS NOT PINNED, and that is deliberate. This was written
+ * assuming RS256; the live project actually signs ES256, which was only
+ * discovered by verifying a real token against the real JWKS. `jwtVerify`
+ * resolves the key by `kid` from the published set and validates against
+ * whatever that key is, so both work and a key rotation or curve change is a
+ * non-event. Adding an `algorithms` allowlist here would convert exactly that
+ * routine platform change into a total outage — every token rejected, with a
+ * signature error that looks like an attack rather than a config drift.
  */
 @Injectable()
 export class JwtVerifierService {

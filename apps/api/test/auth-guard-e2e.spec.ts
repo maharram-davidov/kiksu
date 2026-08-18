@@ -50,6 +50,9 @@ const SYNTHETIC_EMAIL = `${SUBJECT}@users.kiksu.invalid`;
 let privateKey: KeyLike;
 let otherPrivateKey: KeyLike;
 let jwks: JWTVerifyGetKey;
+/** The algorithm the live project actually signs with — see the ES256 test. */
+let ecPrivateKey: KeyLike;
+let ecJwks: JWTVerifyGetKey;
 
 beforeAll(async () => {
   const pair = await generateKeyPair("RS256");
@@ -61,6 +64,17 @@ beforeAll(async () => {
 
   const jwk = await exportJWK(pair.publicKey);
   jwks = createLocalJWKSet({ keys: [{ ...jwk, alg: "RS256", use: "sig" }] });
+
+  // ES256, because that is what Supabase actually issues. This file was
+  // written against RS256 on the assumption in the service's own doc comment;
+  // verifying a real token from the live project showed the header says
+  // ES256. The guard was fine — jose resolves the key from the JWKS and does
+  // not care — but the suite was proving it against an algorithm the product
+  // does not use, which is a test that cannot fail the way production would.
+  const ecPair = await generateKeyPair("ES256");
+  ecPrivateKey = ecPair.privateKey;
+  const ecJwk = await exportJWK(ecPair.publicKey);
+  ecJwks = createLocalJWKSet({ keys: [{ ...ecJwk, alg: "ES256", use: "sig" }] });
 });
 
 interface TokenOptions {
@@ -151,6 +165,55 @@ describe("AuthGuard against real signed tokens", () => {
   // -------------------------------------------------------------------
   // The half a mocked verifier could never exercise
   // -------------------------------------------------------------------
+
+  it("accepts an ES256 token, which is what the live project actually issues", async () => {
+    // Verified against houicgsdduzzcarxkuuo on 18 Aug: header alg ES256, one
+    // EC key in the published JWKS. Nothing in JwtVerifierService pins an
+    // algorithm, deliberately — pinning would turn a Supabase key rotation
+    // into every token being rejected at once.
+    const token = await new SignJWT({ app_metadata: VALID_APP_METADATA, session_id: SESSION })
+      .setProtectedHeader({ alg: "ES256" })
+      .setSubject(SUBJECT)
+      .setIssuedAt()
+      .setIssuer(`${ISSUER_BASE}/auth/v1`)
+      .setAudience(AUDIENCE)
+      .setExpirationTime("900s")
+      .sign(ecPrivateKey);
+
+    const config = { supabaseUrl: ISSUER_BASE, supabaseJwtAudience: AUDIENCE, devAuthAppUserId: undefined };
+    const verifier = new JwtVerifierService(ecJwks, config as never);
+    const epochs = { getCurrentEpoch: vi.fn().mockResolvedValue(0) } as unknown as EpochService;
+    const guard = new AuthGuard(
+      new Reflector(), verifier, epochs, new SecurityMetricsService(), config as never,
+    );
+
+    const req: Record<string, unknown> = {
+      headers: { authorization: `Bearer ${token}` }, requestId: "req-es256",
+    };
+    expect(await guard.canActivate(makeContext(req))).toBe(true);
+    expect((req.kiksu as { appUserId: string }).appUserId).toBe(APP_USER);
+  });
+
+  it("rejects an ES256 token signed with a key that is not ours", async () => {
+    // The same signature check, on the real algorithm.
+    const other = await generateKeyPair("ES256");
+    const token = await new SignJWT({ app_metadata: VALID_APP_METADATA, session_id: SESSION })
+      .setProtectedHeader({ alg: "ES256" })
+      .setSubject(SUBJECT).setIssuedAt()
+      .setIssuer(`${ISSUER_BASE}/auth/v1`).setAudience(AUDIENCE)
+      .setExpirationTime("900s")
+      .sign(other.privateKey);
+
+    const config = { supabaseUrl: ISSUER_BASE, supabaseJwtAudience: AUDIENCE, devAuthAppUserId: undefined };
+    const guard = new AuthGuard(
+      new Reflector(), new JwtVerifierService(ecJwks, config as never),
+      { getCurrentEpoch: vi.fn().mockResolvedValue(0) } as unknown as EpochService,
+      new SecurityMetricsService(), config as never,
+    );
+    await expect(
+      guard.canActivate(makeContext({ headers: { authorization: `Bearer ${token}` }, requestId: "r" })),
+    ).rejects.toThrow(expect.objectContaining({ code: "token_invalid" }) as never);
+  });
 
   it("rejects a token signed with a key that is not ours", async () => {
     // The single most important assertion in this file: without it, anyone able
