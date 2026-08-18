@@ -63,3 +63,44 @@ export interface ReviewPageDto {
   access: ReviewAccessDto;
   items: ReviewDto[];
 }
+
+/**
+ * One entry of the tag vocabulary (`ref.review_tag`).
+ *
+ * Exposed because the composer has to render selectable chips and `POST /reviews`
+ * rejects unknown keys with `review_tag_unknown` (422) — the client cannot guess
+ * them, so without this endpoint the tag half of a review is unwritable.
+ *
+ * The vocabulary is deliberately CLOSED (see the comment above the seed in
+ * supabase/seed.sql): reviews are free text about a named person, and an open
+ * tag list would become a place to write the things the prose guardrails exist
+ * to prevent.
+ */
+export interface ReviewTagDto {
+  key: string;
+  /** Resolved for the request's locale, falling back to Azerbaijani. */
+  label: string;
+  polarity: string;
+  /** 'instructor' | 'course' | 'both' — lets the composer group the chips. */
+  applies_to: string;
+}
+
+/**
+ * A course × instructor pair the caller may review this term.
+ *
+ * Needed because the composer cannot be driven from the instructor profile:
+ * `InstructorProfileDto.courses` only lists courses that ALREADY have reviews,
+ * so an instructor with none — precisely the cold-start case the contribution
+ * wall exists to solve — would offer an empty picker.
+ *
+ * Sourced from the caller's own enrollments, which is also what RV-07 in the
+ * product plan means by "pre-fills from your timetable".
+ */
+export interface ReviewableDto {
+  course_id: string;
+  course_code: string;
+  course_title: string;
+  instructor_id: string;
+  instructor_name: string;
+  term_label: string;
+}

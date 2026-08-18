@@ -147,3 +147,200 @@ suite("reviews service (integration)", () => {
     expect(page.items.every((r) => r.course_code === "CS 214")).toBe(true);
   });
 });
+
+suite("review composer inputs (integration)", () => {
+  let sql: postgres.Sql;
+  let service: ReviewsService;
+  let uniId: string;
+
+  /** A fresh student with no reviews and no enrollments. */
+  async function makeStudent(handle: string): Promise<KiksuRequestContext> {
+    const [au] = await sql`insert into auth.users (id) values (gen_random_uuid()) returning id`;
+    const [u] = await sql`
+      insert into public.app_user (auth_user_id, handle, university_id, verification_tier, status)
+      values (${au!.id}, ${handle}, ${uniId}, 'email_verified', 'active') returning id`;
+    return {
+      authUserId: au!.id as string, appUserId: u!.id as string, tier: "email",
+      role: "student", univId: uniId, epoch: 1, sid: "t",
+    };
+  }
+
+  /** Enrols them in every current-term section of one course. */
+  async function enrol(user: KiksuRequestContext, courseCode: string): Promise<void> {
+    await sql`
+      insert into public.enrollment (app_user_id, section_id, term_id, state)
+      select ${user.appUserId}, s.id, s.term_id, 'enrolled'
+        from ref.course_section s
+        join ref.course c on c.id = s.course_id
+        join ref.term t on t.id = s.term_id and t.is_current
+       where c.code = ${courseCode} and c.university_id = ${uniId}
+      on conflict do nothing`;
+  }
+
+  beforeAll(async () => {
+    sql = postgres(url!, { prepare: false, onnotice: () => {} });
+    const db = {
+      sql,
+      transaction: <T,>(fn: (tx: postgres.TransactionSql) => Promise<T>) => sql.begin(fn) as Promise<T>,
+    };
+    service = new ReviewsService(db as never, new ModerationService());
+    const [uni] = await sql`select id from ref.university where code = 'BDU'`;
+    uniId = uni!.id as string;
+  });
+
+  afterAll(async () => { await sql?.end({ timeout: 5 }); });
+
+  // -------------------------------------------------------------------
+  // The tag vocabulary
+  // -------------------------------------------------------------------
+
+  it("serves the closed tag vocabulary the composer needs", async () => {
+    // Without this the tag half of a review is unwritable: POST /reviews
+    // answers review_tag_unknown (422) to anything not in this list, so a
+    // client cannot guess a key.
+    const tags = await service.listTags("az");
+    expect(tags.length).toBeGreaterThan(0);
+    const keys = tags.map((t) => t.key);
+    expect(keys).toContain("slides_clear");
+    // The design's chips, in the design's words.
+    expect(tags.find((t) => t.key === "slides_clear")?.label).toBe("Slaydlar aydın");
+    expect(tags.find((t) => t.key === "strict_checking")?.polarity).toBe("negative");
+  });
+
+  it("returns tags in display order, so the chips are stable between renders", async () => {
+    const tags = await service.listTags("az");
+    const orders = await sql<Array<{ key: string; display_order: number }>>`
+      select key, display_order from ref.review_tag where is_active order by display_order, key`;
+    expect(tags.map((t) => t.key)).toEqual(orders.map((o) => o.key));
+  });
+
+  it("serves English labels to an English caller", async () => {
+    const tags = await service.listTags("en");
+    expect(tags.find((t) => t.key === "slides_clear")?.label).toBe("Clear slides");
+  });
+
+  it("falls back to Azerbaijani where a translation is missing", async () => {
+    // label_ru is nullable and unseeded. A Russian caller must see the
+    // Azerbaijani word, never an empty chip — the fallback is permanent
+    // correct behaviour, the missing copy is a separate gap.
+    const tags = await service.listTags("ru");
+    expect(tags.find((t) => t.key === "slides_clear")?.label).toBe("Slaydlar aydın");
+    expect(tags.every((t) => t.label.length > 0)).toBe(true);
+  });
+
+  // -------------------------------------------------------------------
+  // What the caller may review
+  // -------------------------------------------------------------------
+
+  it("offers nothing to a student with no enrollments", async () => {
+    const stranger = await makeStudent("rey-yazmayan-01");
+    expect(await service.listReviewable(stranger)).toEqual([]);
+  });
+
+  it("offers a course the student is enrolled in, with its instructor", async () => {
+    const student = await makeStudent("rey-yazan-01");
+    await enrol(student, "CS 214");
+
+    const options = await service.listReviewable(student);
+    const cs214 = options.find((o) => o.course_code === "CS 214");
+    expect(cs214, "an enrolled course should be reviewable").toBeDefined();
+    expect(cs214!.instructor_name).toBeTruthy();
+    expect(cs214!.term_label).toBeTruthy();
+  });
+
+  it("offers an instructor who has no reviews yet — the cold-start case", async () => {
+    // THE REASON THIS ENDPOINT EXISTS. InstructorProfileDto.courses is filtered
+    // to courses that already have reviews, so driving the composer from the
+    // profile would offer an empty picker for exactly the instructor the
+    // contribution wall is trying to get a first review for.
+    const [fresh] = await sql<Array<{ id: string; course_code: string }>>`
+      select i.id, c.code as course_code
+        from ref.instructor i
+        join ref.course_section s on s.primary_instructor_id = i.id
+        join ref.course c on c.id = s.course_id
+        join ref.term t on t.id = s.term_id and t.is_current
+       where i.university_id = ${uniId}
+         and not exists (select 1 from public.review r where r.instructor_id = i.id)
+       limit 1`;
+    if (!fresh) return; // seed has no unreviewed instructor; nothing to assert
+
+    const student = await makeStudent("rey-yazan-02");
+    await enrol(student, fresh.course_code);
+
+    const options = await service.listReviewable(student);
+    expect(options.some((o) => o.instructor_id === fresh.id)).toBe(true);
+
+    // And the profile-driven path would indeed have offered nothing.
+    const profile = await service.getInstructor(student, fresh.id);
+    expect(profile.courses).toEqual([]);
+  });
+
+  it("stops offering a pair once it has been reviewed", async () => {
+    const student = await makeStudent("rey-yazan-03");
+    await enrol(student, "CS 214");
+
+    const before = await service.listReviewable(student);
+    const target = before.find((o) => o.course_code === "CS 214");
+    expect(target).toBeDefined();
+
+    await service.createReview(student, {
+      courseId: target!.course_id, instructorId: target!.instructor_id,
+      overall: 4, quality: 4, fairness: 4, workload: 3, attendanceStrictness: 3,
+      tags: ["slides_clear"], body: "Dərs aydın izah olunur.",
+    });
+
+    // The unique constraint on internal.review_author would reject a second
+    // one anyway; excluding it here means the composer never offers a choice
+    // that is going to fail.
+    const after = await service.listReviewable(student);
+    expect(after.some(
+      (o) => o.course_id === target!.course_id && o.instructor_id === target!.instructor_id,
+    )).toBe(false);
+  });
+
+  it("does not offer another campus's courses", async () => {
+    // The pool is BYPASSRLS, so this predicate is the only thing scoping it.
+    const student = await makeStudent("rey-yazan-04");
+    await enrol(student, "CS 214");
+
+    const options = await service.listReviewable(student);
+    if (options.length === 0) return;
+
+    const ids = options.map((o) => o.course_id);
+    const [foreign] = await sql<Array<{ n: number }>>`
+      select count(*)::int as n from ref.course
+       where id = any(${ids}) and university_id <> ${uniId}`;
+    expect(foreign!.n).toBe(0);
+  });
+
+  it("opens the contribution wall once a review is written", async () => {
+    const student = await makeStudent("rey-yazan-05");
+    await enrol(student, "CS 214");
+    const target = (await service.listReviewable(student))
+      .find((o) => o.course_code === "CS 214");
+
+    const [instructor] = await sql`select id from ref.instructor where slug = 'nigar-eliyeva'`;
+
+    // Before: 200 with the wall's state, never a 403 — the client renders a
+    // bargain, not an error.
+    const locked = await service.listReviews(student, instructor!.id);
+    expect(locked.access.can_read_text).toBe(false);
+    expect(locked.items).toEqual([]);
+
+    await service.createReview(student, {
+      courseId: target!.course_id, instructorId: target!.instructor_id,
+      overall: 5, quality: 5, fairness: 4, workload: 3, attendanceStrictness: 2,
+      tags: [], body: undefined,
+    });
+
+    const open = await service.listReviews(student, instructor!.id);
+    expect(open.access.can_read_text).toBe(true);
+    expect(open.items.length).toBeGreaterThan(0);
+    // Even unlocked, no review carries an author of any kind.
+    for (const r of open.items) {
+      expect(r).not.toHaveProperty("author");
+      expect(r).not.toHaveProperty("alias");
+      expect(r).not.toHaveProperty("app_user_id");
+    }
+  });
+});

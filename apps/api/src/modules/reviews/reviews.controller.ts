@@ -1,9 +1,13 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Post, Query, Req } from "@nestjs/common";
+import type { Request } from "express";
 import { z } from "zod";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import type { KiksuRequestContext } from "../../common/auth/request-context";
+import { resolveLocaleFromRequest } from "../../common/locale/locale";
 import { ReviewsService } from "./reviews.service";
-import type { InstructorProfileDto, ReviewPageDto } from "./reviews.types";
+import type {
+  InstructorProfileDto, ReviewableDto, ReviewPageDto, ReviewTagDto,
+} from "./reviews.types";
 
 const rating = z.coerce.number().int().min(1).max(5);
 
@@ -25,6 +29,27 @@ const listQuery = z.object({ course_id: z.string().uuid().optional() });
 @Controller("reviews")
 export class ReviewsController {
   constructor(private readonly reviews: ReviewsService) {}
+
+  /**
+   * The tag vocabulary, for the composer's chips.
+   *
+   * Declared BEFORE `instructors/:id` deliberately — these are static segments
+   * under the same controller, and Nest matches in declaration order, so a
+   * later `tags` would be swallowed by an earlier `:id` pattern if the paths
+   * ever converge.
+   */
+  @Get("tags")
+  tags(@Req() req: Request): Promise<ReviewTagDto[]> {
+    // Reference-data labels are the exact case §3.2's locale negotiation was
+    // written for; this is its first real caller.
+    return this.reviews.listTags(resolveLocaleFromRequest(req));
+  }
+
+  /** Course x instructor pairs the caller may review this term. */
+  @Get("reviewable")
+  reviewable(@CurrentUser() user: KiksuRequestContext): Promise<ReviewableDto[]> {
+    return this.reviews.listReviewable(user);
+  }
 
   /** Aggregates are ungated: they are what makes the contribution wall worth climbing. */
   @Get("instructors/:id")

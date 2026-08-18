@@ -2,8 +2,10 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { SqlProvider } from "../../common/db/sql.provider";
 import { ModerationService } from "../moderation/moderation.service";
 import type { KiksuRequestContext } from "../../common/auth/request-context";
+import type { Locale } from "../../common/locale/locale";
 import type {
   InstructorProfileDto, ReviewAccessDto, ReviewDto, ReviewPageDto,
+  ReviewableDto, ReviewTagDto,
 } from "./reviews.types";
 
 /** Write one review a term to read other people's prose. */
@@ -267,6 +269,105 @@ export class ReviewsService {
     });
 
     return { id, access: await this.access(user) };
+  }
+
+  /**
+   * The tag vocabulary the composer renders as chips.
+   *
+   * Closed by design — `POST /reviews` answers `review_tag_unknown` (422) to
+   * anything not in here, so this endpoint is not a convenience but the only
+   * way a client can write the tag half of a review at all.
+   *
+   * `label_ru` is nullable in `ref.review_tag` and unset in the seed, so a
+   * Russian caller currently falls back to Azerbaijani rather than seeing an
+   * empty chip. That fallback is correct behaviour permanently; the missing
+   * Russian labels are a copy gap, not a code one, and belong with the same
+   * native reviewer the handle wordlist is waiting on.
+   */
+  async listTags(locale: Locale): Promise<ReviewTagDto[]> {
+    const column =
+      locale === "ru" ? this.db.sql`label_ru` :
+      locale === "en" ? this.db.sql`label_en` :
+      this.db.sql`label_az`;
+
+    return this.db.sql<ReviewTagDto[]>`
+      select key,
+             coalesce(${column}, label_az) as label,
+             polarity,
+             applies_to
+        from ref.review_tag
+       where is_active
+       order by display_order, key
+    `;
+  }
+
+  /**
+   * What the caller can review this term: their own enrollments, minus what
+   * they have already written.
+   *
+   * The instructor profile cannot drive the composer, because its `courses`
+   * list is filtered to courses that already HAVE reviews. An instructor with
+   * none would offer an empty picker — which is exactly the cold-start case
+   * the contribution wall exists to break, so the composer has to be driven
+   * from the student's timetable instead.
+   *
+   * Campus-scoped explicitly. The pool is BYPASSRLS (see SqlProvider), so a
+   * missing university predicate here would be a cross-campus data leak rather
+   * than a slow query — and this one joins enrollment, which is personal.
+   */
+  async listReviewable(user: KiksuRequestContext): Promise<ReviewableDto[]> {
+    return this.db.sql<ReviewableDto[]>`
+      select distinct
+             c.id            as course_id,
+             c.code          as course_code,
+             c.title_az      as course_title,
+             i.id            as instructor_id,
+             trim(coalesce(i.title_prefix, '') || ' ' || i.full_name) as instructor_name,
+             t.label         as term_label
+        from public.enrollment e
+        join ref.course_section s on s.id = e.section_id
+        join ref.course c         on c.id = s.course_id
+        join ref.term t           on t.id = s.term_id
+        -- Who teaches a section is recorded in TWO places and only one of them
+        -- is currently populated: every section carries
+        -- primary_instructor_id, while the many-to-many ref.section_instructor
+        -- exists in the schema and has no rows in any seed. Reading only the
+        -- latter returns nothing at all, which is what the first version of
+        -- this query did.
+        --
+        -- Both are unioned rather than picking one, so this keeps working when
+        -- section_instructor does start being filled — a course with a
+        -- separate lab instructor has someone worth reviewing who is not the
+        -- primary lecturer.
+        --
+        -- 'guest' is excluded deliberately: a one-off guest lecturer has no
+        -- body of teaching to review, and offering them would put a named
+        -- person in front of a rating form on the strength of one appearance.
+        join lateral (
+          select s.primary_instructor_id as instructor_id
+           where s.primary_instructor_id is not null
+          union
+          select si.instructor_id
+            from ref.section_instructor si
+           where si.section_id = s.id and si.role <> 'guest'
+        ) taught on true
+        join ref.instructor i     on i.id = taught.instructor_id
+       where e.app_user_id = ${user.appUserId}
+         and c.university_id = ${user.univId}
+         and t.is_current
+         -- Already written for this course x instructor x term. The unique
+         -- constraint on internal.review_author would reject a second one
+         -- anyway; excluding it here means the composer never offers a choice
+         -- that is going to fail.
+         and not exists (
+           select 1 from internal.review_author ra
+            where ra.app_user_id = ${user.appUserId}
+              and ra.course_id = c.id
+              and ra.instructor_id = i.id
+              and ra.term_id = t.id
+         )
+       order by c.code, instructor_name
+    `;
   }
 
   private async resolveTags(keys: string[]): Promise<Array<{ key: string; label: string; polarity: string }>> {
