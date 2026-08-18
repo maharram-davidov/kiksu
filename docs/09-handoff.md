@@ -167,6 +167,64 @@ feed exactly. Hiding `limited` only here would hand a shadowbanned student a
 self-test. That tightening remains one decision to be taken across every read
 path at once.
 
+## The dev build — taken, and what it exposed
+
+A **local iOS Simulator dev build** now compiles and runs: `expo prebuild` +
+`expo run:ios`, 0 errors, 0 warnings, launching against Metro with live API
+data. `apps/mobile/eas.json` exists with four profiles
+(`development-simulator`, `development`, `preview`, `production`).
+
+Reproducing it needs three things the repo cannot carry:
+
+- **CocoaPods.** Installed via `brew install cocoapods` (no sudo needed).
+- **A UTF-8 shell locale.** CocoaPods dies with
+  `Unicode Normalization not appropriate for ASCII-8BIT` under a C locale —
+  prefix the command: `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 npx expo prebuild`.
+- **`--ignore-scripts` on npm installs.** This environment refuses
+  `--allow-scripts` in project-scoped installs, so `npx expo install <pkg>`
+  fails; use `npm install <pkg> --workspace @kiksu/mobile --ignore-scripts`.
+
+`ios/` and `android/` stay gitignored — this is Continuous Native Generation,
+the native project is regenerated, never edited.
+
+**What is still NOT done:** the build is on the **Simulator**, not on a phone.
+Spine's own wording is "first dev build on your phone", and that needs an Expo
+login plus Apple signing credentials. Push notifications in particular remain
+unproven and cannot be proven this way at all — an iOS Simulator cannot receive
+remote push. The widget, likewise, has not been written. What the dev build
+actually unlocks today is that native modules now compile and link, so MMKV and
+anything else native is no longer blocked.
+
+### Expo Go was hiding two broken native dependencies
+
+This is the part worth reading. Expo Go ships its own bundled native modules and
+the JS calls those, so a wrong version in `package.json` is invisible. A dev
+build compiles the module that is actually installed, and both of these turned
+up in the first two minutes:
+
+- **`expo-secure-store` was at 57.0.1 where SDK 54 wants ~15.0.8** — an entirely
+  different major, from a future SDK train. This is the module holding the auth
+  session. Its 11 tests never caught it because `chunked-storage.ts`
+  deliberately imports nothing from Expo and runs against a fake backend, which
+  is good design and, here, a blind spot.
+- **`expo-font` was missing as a direct dependency** and resolved transitively to
+  57.0.1 through `@expo/vector-icons`, so it never autolinked. The dev build
+  failed instantly with `Cannot find native module 'ExpoFontLoader'`, which also
+  produced a misleading `_layout.tsx is missing the required default export`
+  warning — a knock-on, because the layout imports `HeaderIcon`, which throws at
+  module scope.
+
+Both pinned to the SDK 54 train (`~15.0.8`, `~14.0.12`) from
+`node_modules/expo/bundledNativeModules.json`, which is the authority. Note that
+`@expo/vector-icons@15.1.1` still drags its own `expo-font@57.0.1` into the root
+`node_modules`; autolinking resolves from the app directory and picks the correct
+14.0.12, confirmed in `ios/Podfile.lock` (`ExpoFont (14.0.12)`). Worth a look if
+anything font-related behaves oddly.
+
+Also caught by running it: the search screen's scope chips rendered as
+full-height columns, because a horizontal `ScrollView` in a flex column stretches
+unless given `flexGrow: 0`. Nothing in a type check or a unit test sees that.
+
 ## Defects found by execution this session
 
 All four were found by running things, not by reading them.
@@ -351,8 +409,12 @@ ES256 was discovered; the OpenAPI document was missed.
   files. `docs/05-openapi.yaml` also still documents a `/catalogue/courses` that
   was never implemented at that path.
 - **No photo upload** anywhere (listings, student cards).
-- **No push notifications or home-screen widget** — both need a development
-  build rather than Expo Go.
+- **No push notifications or home-screen widget.** The dev build that used to
+  block both now exists, but neither is unblocked by it in the way the old note
+  implied: an iOS Simulator **cannot receive remote push at all**, so proving
+  push needs a build on a physical device (Expo login + Apple signing), and the
+  widget is unwritten native work regardless. What the dev build did unblock is
+  MMKV and any other native module, which now compile and link.
 - **Scraper**: no pagination, no scheduling, no run history.
 
 ## Blocking launch

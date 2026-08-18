@@ -164,6 +164,11 @@ export default function SearchScreen() {
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.chipRow}
+        // A horizontal ScrollView inside a flex column stretches to fill the
+        // remaining height unless it is told not to, which renders the chips as
+        // full-height columns rather than pills. Caught by running the dev
+        // build; nothing in a type check or a unit test would show it.
+        style={styles.chipScroll}
       >
         {chips.map((c) => {
           const on = scope === c.key;
@@ -339,7 +344,8 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   searchBar: { margin: 16, marginBottom: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 14 },
   input: { height: 44, fontSize: 15 },
-  chipRow: { paddingHorizontal: 16, gap: 8, paddingBottom: 4 },
+  chipScroll: { flexGrow: 0, flexShrink: 0 },
+  chipRow: { paddingHorizontal: 16, gap: 8, paddingBottom: 4, alignItems: "center" },
   chip: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6 },
   chipText: { fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase" },
   results: { padding: 16, paddingBottom: 48 },
