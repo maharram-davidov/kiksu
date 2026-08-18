@@ -148,7 +148,7 @@ describe("KiksuExceptionFilter — envelope shape (05-api-conventions.md §3.1)"
 });
 
 describe("ZodError handling", () => {
-  it("maps a schema failure to 400 validation_failed, not a 500", async () => {
+  it("maps a schema failure to 422 validation_failed, not a 500 and not a 400", async () => {
     const { KiksuExceptionFilter } = await import("../src/common/errors/http-exception.filter");
     const { z } = await import("zod");
 
@@ -173,7 +173,11 @@ describe("ZodError handling", () => {
 
     new KiksuExceptionFilter().catch(thrown, host as never);
 
-    expect(captured.status).toBe(400);
+    // 422, from HTTP_STATUS_BY_CODE. This assertion used to read 400, matching
+    // a hardcoded literal in the filter rather than the code table, which meant
+    // `validation_failed` reached the client as 400 from a zod parse and 422
+    // from an explicit throw. §3's status table is the contract.
+    expect(captured.status).toBe(422);
     const body = captured.body as { error: { code: string; details?: { fields?: string[] } } };
     expect(body.error.code).toBe("validation_failed");
     // Field paths only — a validation error must not echo the submitted value.

@@ -431,3 +431,88 @@ export interface MyModerationAction {
   appeal_decision_note: string | null;
   can_appeal: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Global search (HM-03 – HM-06)
+// ---------------------------------------------------------------------------
+
+/**
+ * Five corpora, five requests. The API deliberately has no aggregate search
+ * endpoint: a response carrying both post hits (thread alias, Layer 3) and
+ * listing hits (seller handle, Layer 2) would break identity spec assertion 21.
+ * The "all" tab therefore fans out and this client merges for display.
+ *
+ * There is no people corpus. Handle lookup is exact-match only, opt-in and
+ * elsewhere (T11) — do not add a "People" chip.
+ */
+export interface SearchPage<T> {
+  items: T[];
+  next_cursor: string | null;
+}
+
+export interface PostHit {
+  id: string;
+  title: string;
+  excerpt: string | null;
+  board: { slug: string; name: string };
+  board_university_code: string | null;
+  scope: "campus" | "national";
+  author: { alias_number: number; tier: "unverified" | "email" | "card" };
+  author_university_code: string | null;
+  score: number;
+  comment_count: number;
+  created_at: string;
+}
+
+export interface CourseHit {
+  id: string;
+  code: string;
+  title: string;
+  credits: number | null;
+  department: string | null;
+  rating_avg: number | null;
+  review_count: number;
+}
+
+export interface InstructorHit {
+  id: string;
+  full_name: string;
+  title_prefix: string | null;
+  department: string | null;
+  rating_avg: number | null;
+  review_count: number;
+  course_count: number;
+}
+
+export interface ListingHit {
+  id: string;
+  title: string;
+  excerpt: string | null;
+  category_key: string;
+  category_name: string;
+  price_minor: number;
+  currency: string;
+  is_negotiable: boolean;
+  condition: string;
+  related_course_code: string | null;
+  seller: { handle: string; avatar_id: number; contributor_level: number | null } | null;
+  published_at: string;
+}
+
+export interface VacancyHit {
+  id: string;
+  title: string;
+  excerpt: string | null;
+  kind: string;
+  work_mode: string;
+  city: string | null;
+  is_paid: boolean;
+  stipend_minor: number | null;
+  currency: string;
+  apply_deadline: string | null;
+  days_left: number | null;
+  employer: { slug: string; name: string; logo_initials: string | null; brand_color: string | null };
+}
+
+/** The chips on HM-03. `all` fans out; the rest hit one endpoint. */
+export type SearchScope = "all" | "posts" | "courses" | "listings" | "vacancies";

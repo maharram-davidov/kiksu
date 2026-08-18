@@ -4,6 +4,7 @@ import type {
   Attendance, Board, ClassDetail, Conversation, ConversationSummary, Listing, MarketCategory,
   InstructorProfile, MyModerationAction, MyProfile, PostDetail, PostPage, Reviewable,
   ReviewPage, ReviewTag, Today, Vacancy, WeekGrid,
+  CourseHit, InstructorHit, ListingHit, PostHit, SearchPage, VacancyHit,
 } from "./types";
 
 export function useWeekGrid() {
@@ -289,4 +290,63 @@ export function useMyModeration() {
     staleTime: 30 * 1000,
     retry: 1,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Global search (HM-03 – HM-06)
+// ---------------------------------------------------------------------------
+
+/**
+ * The API's `q` has `minLength: 2`, so firing below that is a guaranteed 422.
+ * Queries stay disabled until the field holds two characters.
+ */
+export const SEARCH_MIN_LENGTH = 2;
+
+/**
+ * Debounce before a keystroke becomes a request.
+ *
+ * Not a UI nicety — a budget. All five endpoints share the `search.query`
+ * bucket (120/hour at the email tier) and the "all" scope spends three of it
+ * per query, so an undebounced field would exhaust an hour's allowance in
+ * about a dozen words typed.
+ */
+export const SEARCH_DEBOUNCE_MS = 350;
+
+function searchQuery<T>(key: string, path: string, q: string, enabled: boolean) {
+  return {
+    queryKey: ["search", key, q],
+    queryFn: () => apiGet<T>(path),
+    enabled: enabled && q.trim().length >= SEARCH_MIN_LENGTH,
+    // A given query string returns the same thing for a while; re-typing a
+    // recent search should not cost another bucket slot.
+    staleTime: 60 * 1000,
+    retry: 1,
+  } as const;
+}
+
+const enc = encodeURIComponent;
+
+export function useSearchPosts(q: string, enabled = true, limit = 20) {
+  return useQuery(searchQuery<SearchPage<PostHit>>(
+    `posts:${limit}`, `/search/posts?q=${enc(q)}&limit=${limit}`, q, enabled));
+}
+
+export function useSearchCourses(q: string, enabled = true, limit = 20) {
+  return useQuery(searchQuery<SearchPage<CourseHit>>(
+    `courses:${limit}`, `/search/courses?q=${enc(q)}&limit=${limit}`, q, enabled));
+}
+
+export function useSearchInstructors(q: string, enabled = true, limit = 20) {
+  return useQuery(searchQuery<SearchPage<InstructorHit>>(
+    `instructors:${limit}`, `/search/instructors?q=${enc(q)}&limit=${limit}`, q, enabled));
+}
+
+export function useSearchListings(q: string, enabled = true, limit = 20) {
+  return useQuery(searchQuery<SearchPage<ListingHit>>(
+    `listings:${limit}`, `/search/listings?q=${enc(q)}&limit=${limit}`, q, enabled));
+}
+
+export function useSearchVacancies(q: string, enabled = true, limit = 20) {
+  return useQuery(searchQuery<SearchPage<VacancyHit>>(
+    `vacancies:${limit}`, `/search/vacancies?q=${enc(q)}&limit=${limit}`, q, enabled));
 }

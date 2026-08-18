@@ -274,6 +274,14 @@ export class TimetableService {
   /**
    * Catalogue search, scoped to the caller's university and current term.
    *
+   * NOTE: `SearchService.searchCourses` queries the same corpus for the global
+   * search surface, with a different projection — ratings instead of instructor
+   * names, and keyset pagination. The scope predicates and the three fold
+   * predicates below are duplicated there deliberately (the two projections have
+   * no useful common shape), which means **a change to the fold rules has to be
+   * made in both places**, or the same query starts behaving differently
+   * depending on which screen the student came from.
+   *
    * Query text goes through `util.tsq()` so it is folded exactly the way the
    * indexed text was. Azerbaijani students type `e` for `ə` constantly, and
    * folding one side but not the other silently returns nothing for the most

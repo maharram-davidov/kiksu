@@ -51,10 +51,10 @@ verification is logged behind the same gate.
 
     ./scripts/verify-schema.sh        # applies the monolith, asserts 11 invariants
     ./scripts/verify-migrations.sh    # same via the 22 split migrations
-    ./scripts/test-integration.sh     # stands up Postgres + seeds, runs 304 tests
+    ./scripts/test-integration.sh     # stands up Postgres + seeds, runs 355 tests
     ./scripts/seed-local.sh           # seeds twice; see the note below
 
-`npx vitest run` alone gives 119 unit tests; integration tests skip without
+`npx vitest run` alone gives 91 unit tests; integration tests skip without
 `DATABASE_URL`, which `test-integration.sh` provides.
 
 `seed-local.sh` runs every seed twice. `seed.sql` (reference data) is
@@ -113,19 +113,92 @@ columns.
 
 ## What is built
 
-**API** (14 modules): onboarding (email OTP + student card), timetable (week
+**API** (15 modules): onboarding (email OTP + student card), timetable (week
 grid, attendance, catalogue search, class detail), today, forum (boards, feed,
 threads, posts, comments, votes, saves), reviews (profiles, contribution wall,
-writing), commerce (listings, creation, vacancies), chat (deal threads,
-structured offers), me (profile, privacy, handle rotation), reports, admin
-(verification + moderation queues), moderation (tier 1 rules), ingest.
+writing), **search (global, five corpora)**, commerce (listings, creation,
+vacancies), chat (deal threads, structured offers), me (profile, privacy,
+handle rotation), reports, admin (verification + moderation queues), moderation
+(tier 1 rules), ingest.
 
-**Mobile** (23 screens): onboarding flow, Bu gün, Cədvəl + class detail sheet,
+**Mobile** (24 screens): onboarding flow, Bu gün, Cədvəl + class detail sheet,
 Forum (boards → feed → thread, with composer, votes, reports), Bazar (list →
-detail → chat, plus listing creation), Karyera, Profil. All ten designed
-screens render real data.
+detail → chat, plus listing creation), Karyera, Profil, **global search**. All
+ten designed screens render real data.
 
 **Scraper**: work.az internships, JSON-LD based, robots-compliant.
+
+## Global search — built this session
+
+Five endpoints under `/v1/search`: `posts`, `courses`, `instructors`,
+`listings`, `vacancies`. Mobile route `/search`, reached from the header
+search icon on Forum and Bazar (those icons were inert placeholders until now).
+32 integration tests, all executed.
+
+Four things worth knowing before touching it:
+
+- **Five endpoints, not one aggregate, and that is a constraint rather than a
+  preference.** A combined response would carry post hits (thread alias,
+  Layer 3) and listing hits (seller handle, Layer 2) in one body, which
+  assertion 21 forbids and CI checks mechanically. The "all" chip fans out and
+  the client merges.
+- **No people corpus, ever.** T11. Handle lookup is exact-match, opt-in and
+  elsewhere. The empty state says so in the UI rather than leaving the absence
+  to read as an oversight.
+- **The language predicate is three constant arms paired to the row's `lang`.**
+  The obvious `util.tsq(util.locale_text(p.lang), $q)` makes the operand
+  row-dependent and the GIN index stops serving it, turning every search into a
+  sequential scan.
+- **Deliberately absent:** `ts_headline` snippets (the vector is folded, so a
+  highlight renders `Verilenler` where the row says `Verilənlər`); review prose
+  as a corpus (the contribution wall would be bypassed by the snippet);
+  server-side search history and trending (a query log keyed to a pseudonym is
+  a de-anonymisation corpus — recent searches live in the device keystore and
+  clearing them deletes the only copy).
+
+Search shows `moderation_state in ('visible','limited')`, matching the board
+feed exactly. Hiding `limited` only here would hand a shadowbanned student a
+self-test. That tightening remains one decision to be taken across every read
+path at once.
+
+## Defects found by execution this session
+
+All four were found by running things, not by reading them.
+
+1. **The test harness could not exercise Azerbaijani folding at all.** All four
+   scripts ran `initdb --locale=C`. Under C ctype `lower()` only touches ASCII,
+   so `lower('Ə')` is `'Ə'` and `util.fold_text` — which translates the
+   *lowercase* set `əğıöşüçё` — left every uppercase Azerbaijani letter
+   unfolded. The stored `name_folded` for `Nigar Əliyeva` was
+   `nigar Əliyeva`, and a search for `Eliyeva` returned nothing. Now
+   `--lc-collate=C --lc-ctype=C.UTF-8`: collation stays byte-deterministic so
+   ordering assertions do not depend on the machine, while ctype folds
+   correctly. Fixed in all four scripts. **Supabase was never affected** — it
+   runs a UTF-8 ctype — so this was a hole in the tests, not in the product.
+2. **`numeric field overflow` on every date and price sort.** The keyset
+   projected each sort into `numeric(12,8)`, which holds four integer digits; an
+   epoch needs twelve. Relevance sorts passed because a rank is below 1, so the
+   bug only appeared once a non-relevance sort was actually run. Now
+   `numeric(24,8)`. `coalesce(deadline, 'infinity'::date)` was a second bug in
+   the same line: an infinite epoch cannot cast to numeric.
+3. **`validation_failed` came back as two different statuses.** The exception
+   filter's ZodError branch hardcoded `400` while `HTTP_STATUS_BY_CODE` and
+   `05-api-conventions.md` §3 both say `422` — so the same code was 400 from a
+   `schema.parse()` and 422 from an explicit throw. Pre-existing, affecting every
+   zod-validated endpoint. The filter now reads its own table, and the test that
+   asserted 400 was encoding the bug.
+4. **Three cursor tests were passing without asserting anything.** They
+   early-returned when there was no second page, and the content seed holds six
+   posts of which exactly one matches `imtahan`, so `next_cursor` was always
+   null. They also asserted with `.rejects.toThrow(/cursor_invalid/)`, which
+   never matches: `AppError` keeps the student-facing message and the code as
+   two separate strings by construction, so `.message` is always `"App Error"`.
+   Now they build their own fixtures, assert on `.code`, and fail if the fixture
+   is too small to produce a cursor.
+
+Also corrected: `05-openapi.yaml` still described the access token as **RS256**.
+The handoff, the service comment and `05-api-conventions.md` were fixed when
+ES256 was discovered; the OpenAPI document was missed.
 
 ## What is NOT built
 
@@ -263,6 +336,17 @@ screens render real data.
   present in the design are verbatim; about sixteen are newly written and
   listed by name in `az.json`'s `_meta`. Same native reviewer as the handle
   wordlist.
+- **Search has no infinite scroll in the UI.** The API is fully keyset-paginated
+  and `next_cursor` is returned and tested; the screen renders the first page
+  only and never presents a cursor back. Wiring it is client work, not API work.
+- **Two course-search implementations over one corpus.** `/v1/search/courses`
+  (ratings, paginated) and `GET /v1/timetable/courses` (instructor names, for
+  the course picker) query `ref.course` with the same scope and the same three
+  fold predicates. Neither has a client consumer conflict, but **a change to the
+  fold rules must be made in both** or the same query behaves differently
+  depending on which screen the student came from. Cross-referenced in both
+  files. `docs/05-openapi.yaml` also still documents a `/catalogue/courses` that
+  was never implemented at that path.
 - **No photo upload** anywhere (listings, student cards).
 - **No push notifications or home-screen widget** — both need a development
   build rather than Expo Go.

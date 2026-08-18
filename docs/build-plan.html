@@ -1,0 +1,595 @@
+<title>Kiksu Build Plan</title>
+<style>
+  :root{
+    --paper:#E7E5DF;
+    --card:#FFFFFF;
+    --sunk:#F5F3EC;
+    --raise:#EDEBE4;
+    --ink:#141C24;
+    --ink-2:#3D444D;
+    --muted:#6D7580;
+    --faint:#8A9099;
+    --line:#DEDCD5;
+    --line-2:#EAE8E1;
+    --teal:#0F7A85;
+    --teal-soft:#E3EFF0;
+    --bronze:#8A6B21;
+    --bronze-soft:#F2E9D4;
+    --nar:#B23A2F;
+    --nar-soft:#F7E5E2;
+
+    --ui:-apple-system,"SF Pro Text","Segoe UI",Roboto,"Noto Sans","Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","Segoe UI Mono","Roboto Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --paper:#11171E;
+      --card:#1A222B;
+      --sunk:#151D25;
+      --raise:#202932;
+      --ink:#E7E5DF;
+      --ink-2:#BFC5CC;
+      --muted:#8D959F;
+      --faint:#6F7883;
+      --line:#2A343E;
+      --line-2:#212A33;
+      --teal:#46A8B2;
+      --teal-soft:#11302F;
+      --bronze:#D8B45E;
+      --bronze-soft:#2C2413;
+      --nar:#E1786A;
+      --nar-soft:#32191A;
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#11171E;
+    --card:#1A222B;
+    --sunk:#151D25;
+    --raise:#202932;
+    --ink:#E7E5DF;
+    --ink-2:#BFC5CC;
+    --muted:#8D959F;
+    --faint:#6F7883;
+    --line:#2A343E;
+    --line-2:#212A33;
+    --teal:#46A8B2;
+    --teal-soft:#11302F;
+    --bronze:#D8B45E;
+    --bronze-soft:#2C2413;
+    --nar:#E1786A;
+    --nar-soft:#32191A;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);
+    font-family:var(--ui);font-size:16px;line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--teal);text-decoration:underline;text-underline-offset:2px;}
+  a:focus-visible,summary:focus-visible{outline:2px solid var(--teal);outline-offset:3px;}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:0 clamp(1rem,4vw,2.25rem) 5rem;}
+
+  header.top{padding:clamp(2.5rem,7vw,4.5rem) 0 2rem;border-bottom:1px solid var(--line);}
+  .kick{
+    font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--muted);display:flex;flex-wrap:wrap;gap:.4rem 1.15rem;margin:0 0 1.1rem;
+  }
+  h1{font-size:clamp(2.1rem,5.5vw,3.4rem);font-weight:700;letter-spacing:-.03em;line-height:1.02;margin:0;text-wrap:balance;}
+  .sub{font-size:clamp(1rem,2vw,1.16rem);color:var(--ink-2);max-width:56ch;margin:1rem 0 0;text-wrap:pretty;}
+
+  .swatches{display:flex;flex-wrap:wrap;gap:1.1rem;margin-top:1.75rem;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
+  .swatches span{display:flex;align-items:center;gap:.45rem;}
+  .sw{width:10px;height:10px;display:inline-block;}
+
+  section{padding:clamp(2.25rem,5vw,3.5rem) 0;border-bottom:1px solid var(--line-2);}
+  section:last-of-type{border-bottom:0;}
+  .hd{display:flex;gap:.9rem;align-items:baseline;margin-bottom:.5rem;}
+  .n{font-family:var(--mono);font-size:.74rem;color:var(--nar);padding-top:.3rem;}
+  h2{font-size:clamp(1.45rem,3.2vw,2.05rem);font-weight:700;letter-spacing:-.025em;line-height:1.1;margin:0;text-wrap:balance;}
+  h3{font-size:1.06rem;font-weight:650;letter-spacing:-.012em;margin:2rem 0 .5rem;}
+  h4{font-size:.92rem;font-weight:650;margin:1.25rem 0 .35rem;}
+  p,li{max-width:70ch;text-wrap:pretty;}
+  section>p:first-of-type{color:var(--ink-2);}
+  li{margin-bottom:.35rem;}
+  li::marker{color:var(--teal);}
+  code{font-family:var(--mono);font-size:.85em;background:var(--sunk);border:1px solid var(--line-2);padding:.08em .34em;border-radius:3px;}
+
+  .scroll{overflow-x:auto;margin:1.35rem 0;border:1px solid var(--line);background:var(--card);}
+  table{border-collapse:collapse;width:100%;font-size:.87rem;min-width:640px;}
+  th{
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);
+    text-align:left;font-weight:400;padding:.7rem .85rem;background:var(--sunk);border-bottom:1px solid var(--line);white-space:nowrap;
+  }
+  td{padding:.65rem .85rem;border-bottom:1px solid var(--line-2);vertical-align:top;}
+  tr:last-child td{border-bottom:0;}
+  td.k{font-weight:620;white-space:nowrap;}
+  td.mono{font-family:var(--mono);font-size:.79rem;color:var(--muted);white-space:nowrap;}
+
+  .m{font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;padding:.2rem .45rem;white-space:nowrap;display:inline-block;font-weight:600;}
+  .m-o{background:var(--nar-soft);color:var(--nar);}
+  .m-s{background:var(--teal-soft);color:var(--teal);}
+  .m-h{background:var(--bronze-soft);color:var(--bronze);}
+  .s-done{background:var(--teal-soft);color:var(--teal);}
+  .s-part{background:var(--bronze-soft);color:var(--bronze);}
+  .s-none{background:var(--line-2);color:var(--muted);}
+
+  .bar{height:5px;background:var(--line);border-radius:3px;overflow:hidden;min-width:78px;}
+  .bar i{display:block;height:5px;background:var(--teal);}
+  .bar.part i{background:var(--bronze);}
+  .statgrid{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);grid-template-columns:repeat(auto-fit,minmax(112px,1fr));margin:1.2rem 0;}
+  .statgrid div{background:var(--card);padding:.75rem .85rem;}
+  .statgrid dt{font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 .3rem;}
+  .statgrid dd{margin:0;font-family:var(--ui);font-weight:700;font-size:1.15rem;letter-spacing:-.02em;}
+
+  .grid{display:grid;gap:.9rem;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));margin:1.35rem 0;}
+  .c{border:1px solid var(--line);background:var(--card);padding:1rem 1.05rem;}
+  .c h4{margin:0 0 .35rem;font-size:.97rem;}
+  .c p{font-size:.85rem;color:var(--muted);margin:0;max-width:none;}
+  .c .t{font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--teal);display:block;margin-bottom:.45rem;}
+
+  .box{border-left:3px solid var(--nar);background:var(--nar-soft);padding:.95rem 1.15rem;margin:1.4rem 0;}
+  .box p{margin:0;font-size:.9rem;max-width:66ch;}
+  .box p+p{margin-top:.5rem;}
+  .box .t{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--nar);display:block;margin-bottom:.35rem;font-weight:600;}
+  .box.ok{border-left-color:var(--teal);background:var(--teal-soft);}
+  .box.ok .t{color:var(--teal);}
+
+  .flow{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);margin:1.4rem 0;}
+  @media(min-width:820px){.flow{grid-template-columns:repeat(4,1fr);}}
+  .step{background:var(--card);padding:.95rem 1rem;}
+  .step .s{font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:.4rem;}
+  .step b{display:block;font-size:.92rem;font-weight:650;margin-bottom:.3rem;letter-spacing:-.01em;}
+  .step p{font-size:.82rem;color:var(--muted);margin:0;max-width:none;}
+
+  .ph{border-left:2px solid var(--line);padding:0 0 1.4rem 1.25rem;margin-left:.35rem;position:relative;}
+  .ph:last-child{padding-bottom:0;}
+  .ph::before{content:"";position:absolute;left:-5px;top:.45rem;width:8px;height:8px;border-radius:50%;background:var(--teal);}
+  .ph .w{font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--teal);}
+  .ph h4{margin:.15rem 0 .3rem;font-size:1rem;}
+  .ph p{font-size:.87rem;color:var(--muted);margin:0 0 .45rem;}
+  .ph .who{display:flex;flex-wrap:wrap;gap:.35rem;}
+
+  pre{
+    background:var(--sunk);border:1px solid var(--line);padding:.9rem 1rem;overflow-x:auto;
+    font-family:var(--mono);font-size:.78rem;line-height:1.6;margin:1rem 0;color:var(--ink-2);
+  }
+  pre b{color:var(--teal);font-weight:600;}
+
+  footer{padding:2.5rem 0 0;border-top:1px solid var(--line);margin-top:1.5rem;}
+  footer p{font-family:var(--mono);font-size:.7rem;color:var(--muted);line-height:1.75;}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <p class="kick">
+    <span>Build plan <b style="color:var(--teal)">v1</b> · revised 18 Aug</span>
+    <span>Design import: Kiksu Mobile UI Design · 10 screens</span>
+    <span>13 agents · 3 model tiers</span>
+    <span>Status <b style="color:var(--bronze)">Spine closing · schema, auth and mail all live and proven; global search is the last gap</b></span>
+  </p>
+  <h1>Kiksu build plan</h1>
+  <p class="sub">Stack, phone-preview workflow, and the agent orchestration — who builds what, on which model, and why the cheap tier is safe to use where it is.</p>
+  <div class="swatches">
+    <span><i class="sw" style="background:#0F7A85"></i>Şirvan turkuazı</span>
+    <span><i class="sw" style="background:#C8952A"></i>Tunc / kart</span>
+    <span><i class="sw" style="background:#B23A2F"></i>Nar / son tarix</span>
+    <span>palette carried from your design file</span>
+  </div>
+</header>
+
+<section id="status">
+  <div class="hd"><span class="n">0</span><h2>Where the build actually is</h2></div>
+  <p>Both switches §0.2 used to warn about have been flipped, and neither was flipped on
+  trust. The access-token hook is registered and was proven end to end against the live
+  project; a real verification code was delivered to a real Azerbaijani university mailbox
+  and landed in the inbox. Account sanctions are real rather than recorded-only. What is
+  left in Spine is one ordinary feature.</p>
+
+  <p><strong>The top risk is no longer a switch, and it is still not code.</strong>
+  Frankfurt is current, all 11 invariants pass against it, auth mints correct claims and
+  mail reaches an <code>.edu.az</code> inbox. The thing standing between this build and a
+  campus is <strong>a native Azerbaijani review of the handle wordlist</strong> — unchanged
+  from the last three revisions of this page, and now the only launch blocker that no
+  amount of engineering retires.</p>
+
+  <dl class="statgrid">
+    <div><dt>Commits</dt><dd>67</dd></div>
+    <div><dt>Tests</dt><dd>323</dd></div>
+    <div><dt>API modules</dt><dd>14</dd></div>
+    <div><dt>Mobile screens</dt><dd>22</dd></div>
+    <div><dt>Console screens</dt><dd>3</dd></div>
+    <div><dt>Schema invariants</dt><dd>11</dd></div>
+    <div><dt>Tables</dt><dd>97</dd></div>
+  </dl>
+
+  <h3>0.1 Phase status</h3>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Phase</th><th>Weeks</th><th></th><th>State</th><th>What is missing</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="k">Contracts</td><td class="mono">1–2</td>
+        <td><span class="bar"><i style="width:100%"></i></span></td>
+        <td><span class="m s-done">Complete</span></td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td class="k">Spine</td><td class="mono">3–6</td>
+        <td><span class="bar part"><i style="width:92%"></i></span></td>
+        <td><span class="m s-part">~92%</span></td>
+        <td>Reviews and the admin console are built; class detail and the profile are real screens. <strong>Left: global search</strong> — the only remaining Spine feature. The attendance gap listed here previously was wrong twice over: attendance is self-reported, <code>ClassDetailSheet</code> already renders it against the exclusion limit, and the standalone screen was dropped by product decision rather than left undone. Still on Expo Go — no <code>eas.json</code>, so push, the widget, MMKV and on-device OCR remain untestable.</td>
+      </tr>
+      <tr>
+        <td class="k">Community</td><td class="mono">7–10</td>
+        <td><span class="bar part"><i style="width:80%"></i></span></td>
+        <td><span class="m s-part">~80%</span></td>
+        <td>Both gaps closed: the moderation queue exists and the contribution wall gates review prose. Appeals were added on top — automod now records an action, so a limited post can be contested and an overturn restores it. Left: no notifications, no DMs, no board directory.</td>
+      </tr>
+      <tr>
+        <td class="k">Commerce</td><td class="mono">11–14</td>
+        <td><span class="bar part"><i style="width:55%"></i></span></td>
+        <td><span class="m s-part">~55%</span></td>
+        <td>Writable now: listing creation, deal chat and structured offers. Left: trade ratings and the employer console. Career identity and applications are <em>removed</em> rather than outstanding — careers became aggregation-only, so Kiksu holds no real names at all.</td>
+      </tr>
+      <tr>
+        <td class="k">Hardening</td><td class="mono">15–16</td>
+        <td><span class="bar"><i style="width:0%"></i></span></td>
+        <td><span class="m s-none">Not started</span></td>
+        <td>Everything. The gate has grown to 323 tests and 11 invariants and runs on every change, which is still not the same as an audit. The invariants have now been run against the live project; the test suite still has not.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="box ok">
+    <span class="t">0.2 Both switches are flipped — and what that does not mean</span>
+    <p><strong>The hook is registered and proven end to end.</strong> Not inferred from the
+    settings page: signed in anonymously against the live project, created an
+    <code>app_user</code> for that subject, refreshed, and read the new token — all six
+    claims present in <code>app_metadata</code>, <code>tier</code> correctly mapped
+    <code>card_verified → card</code>, and <code>sid</code> equal to the token's own
+    <code>session_id</code>. Bumping <code>internal.auth_epoch</code> then produced a token
+    carrying the higher epoch, so revocation works against the live project too. The test
+    rows were removed afterwards.</p>
+    <p><strong>Verifying that token found a real defect.</strong> The tokens are
+    <strong>ES256, not RS256</strong> — the header says so and the JWKS publishes one EC
+    key. The service's doc comment and <code>05-api-conventions.md</code> both claimed
+    RS256, and the e2e suite had only ever minted RS256, so it was proving the guard
+    against an algorithm the product does not use. Both are corrected.
+    <code>JwtVerifierService</code> deliberately pins no algorithm: jose resolves the key by
+    <code>kid</code>, so a Supabase key rotation or curve change is a non-event, where
+    pinning would turn a routine platform change into every token being rejected at once.</p>
+    <p><strong>Mail reached a real university inbox.</strong> A code rendered by the actual
+    <code>verificationCodeMail</code> template was delivered to
+    <code>mdavidov@std.beu.edu.az</code> and <em>landed in the inbox</em>, confirmed by
+    opening the mailbox rather than by trusting a <code>delivered</code> webhook. That
+    answers the deliverability question for BMU with no DMARC record beyond the SPF and
+    DKIM Resend requires. BDU, ADA and UNEC each run their own mail and are untested.</p>
+    <p><strong>Read that result narrowly, because it is narrower than "mail works".</strong>
+    Every outbound SMTP port (587, 465, 2587, 2465) is blocked from this machine, so the
+    send went over Resend's HTTPS API. <code>SmtpMailerService</code> — the code path
+    production actually uses — has still never completed a connection. It was observed
+    failing correctly: an SMTP auth failure surfaced as <code>service_unavailable</code>,
+    which is the honest-failure behaviour proven against a real failure rather than a stub.
+    No <code>SMTP_URL</code> is set in any environment, so onboarding still captures rather
+    than sends everywhere.</p>
+  </div>
+
+  <h3>0.3 Built and verified</h3>
+  <ul>
+    <li><strong>Schema</strong> — 23 migrations, 97 tables, 11 invariants, each negative-tested to confirm it actually fails when violated. Verified two ways on every change: against the monolith and against the split.</li>
+    <li><strong>Auth</strong> — registered, live, and exercised against the real project. The access-token hook stamps the six trusted claims of identity spec §7.1 into <code>app_metadata</code>; a dedicated role reaches nothing but a six-column projection, so a token mint can never become a sealed-store read. Revocation works through an epoch counter, verified by bumping it and reading the next token. The app signs in anonymously and keeps the session in a chunked Keychain store.</li>
+    <li><strong>Sanctions</strong> — real, not recorded-only. Mute, suspend, ban and unban write <code>app_user.status</code> and every write path checks it through <code>SanctionsService</code>. Shadowban is the partial one: it limits new content at write time rather than joining <code>internal.post_author</code> into every feed query, which is what invariant 8 exists to prevent — so a shadowbanned student is hidden only where <code>limited</code> is actually hidden, which today is chat.</li>
+    <li><strong>Appeals</strong> — an automod <code>limit</code> or a <code>remove_content</code> decision can be contested and an overturn restores the content. There is no notification when either happens; a student finds out by opening Profil → Məzmunum.</li>
+    <li><strong>Onboarding</strong> — university picker, email OTP <em>delivered</em>, student card submission. Sends are capped at 1/60s, 3/hour, 10/day, keyed on the credential HMAC so no address reaches the limiter.</li>
+    <li><strong>Reviews</strong> — professor profile, review list, composer and contribution wall. 4 of the 11 RV screens; the other 7 need endpoints that do not exist.</li>
+    <li><strong>Internal console</strong> — a fourth workspace. Verification queue with signed-URL card viewing (logged to <code>identity.access_log</code> before the URL is minted), moderation queue, appeals queue.</li>
+    <li><strong>Forum, Today, Bazar, Karyera</strong> — boards through to thread with per-thread aliasing; the landing screen in one round trip; listings, deal chat and offers writable; vacancies scraped from work.az.</li>
+  </ul>
+
+  <h3>0.4 What I would do next, in order</h3>
+  <p>The previous list is worked through in full: the hook is registered, a real code
+  reached a real <code>.edu.az</code> inbox, and sanctions actually stop somebody. What
+  remains is one feature, one overdue piece of tooling, and one thing no engineer can
+  finish.</p>
+  <ol>
+    <li><strong>Close Spine with global search.</strong> The last Spine feature. Four of the
+    seven searchable corpora already carry a <code>search_vector</code> and a GIN index, and
+    only the course catalogue has a query path written. Three constraints shape it more than
+    the schema does: folding must be applied to the query exactly as it was to the index, or
+    Azerbaijani search silently returns nothing for the most common spelling; each row's
+    vector was built with that row's own language config, so the query needs one constant
+    arm per language to stay index-usable; and there is <strong>no People corpus, ever</strong>
+    — T11 permits exact-full-handle lookup only, because prefix or fuzzy matching walks the
+    adjective×noun space and enumerates the user base.</li>
+    <li><strong>Take the dev build.</strong> Scheduled for week 3 and now four phases overdue.
+    It blocks push notifications, the home-screen widget, MMKV and on-device OCR, and every
+    week it slips is a week those four stay unproven.</li>
+    <li><strong>Get the handle wordlist reviewed by a native speaker.</strong> Listed last
+    because it needs a person rather than a commit, and first in consequence: it is the only
+    item on this page that blocks launch outright.</li>
+  </ol>
+  <p>Deliberately not on this list: <strong>the attendance screen</strong>, dropped by
+  product decision. Attendance is self-reported, the endpoints work, and
+  <code>ClassDetailSheet</code> already renders the count against the exclusion limit —
+  earlier revisions of this page described a gap that was never there.</p>
+
+  <div class="box ok">
+    <span class="t">Unchanged, and still blocking launch</span>
+    <p>The generated-handle wordlist is 64 Azerbaijani words with a two-entry blocklist and
+    <strong>needs a native reviewer</strong>. Some adjective–noun pairs will read as insults or
+    personal names in ways a non-native check cannot catch, and a handle stays attached to a
+    person for fourteen days at a time.</p>
+  </div>
+</section>
+
+<section>
+  <div class="hd"><span class="n">1</span><h2>What I read in the design file</h2></div>
+  <p>I pulled <code>Kiksu Mobile Screens.dc.html</code> and <code>support.js</code> from the design project. All ten screens are there and the content is real Azerbaijani, not placeholder — which means the design is specific enough to act as the API contract's source of truth. Several details in it are <em>new information</em> that the product plan did not specify, and each one changes the schema.</p>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>What the design establishes</th><th>Backend consequence</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Pseudonyms are generated, not chosen</td><td><code>sakit-pərvanə-37</code>, <code>quru-püstə-19</code> — adjective-noun-number from an Azerbaijani wordlist. Needs a curated dictionary with an offensive-combination blocklist, plus collision handling.</td></tr>
+      <tr><td class="k">Handle changes every 14 days</td><td>A cooldown timestamp on the user, and a handle-history table so blocks and sanctions survive a rename.</td></tr>
+      <tr><td class="k">Verification tier is a visible badge</td><td>Posts show <code>ANONİM ✓</code> (email-verified) vs <code>ANONİM KART</code> (card-verified). Tier is denormalised onto every post read — plan the index for it.</td></tr>
+      <tr><td class="k">Thread aliases show before you post</td><td>The composer reads <em>"write as Anonim 5"</em>. Alias assignment must be queryable ahead of the write, and reserved so two simultaneous posters don't both get 5.</td></tr>
+      <tr><td class="k">Attendance is <code>4 / 12</code>, expulsion at 12</td><td>The limit is per-course and per-university, not a global constant. It belongs in course config, and the 33%-used calculation is derived, not stored.</td></tr>
+      <tr><td class="k">Reviews have four fixed criteria</td><td>Dərs keyfiyyəti, Ədalətli qiymət, İş yükü, Davamiyyət tələbi — plus a tag vocabulary (<code>SLAYDLAR AYDIN</code>, <code>YOXLAMA SIX</code>). Fixed columns, not a generic EAV table.</td></tr>
+      <tr><td class="k">Reviews are scoped to a semester</td><td><code>2024/25 YAZ · CS 214</code> — confirms the <code>course × instructor × semester</code> key.</td></tr>
+      <tr><td class="k">Seller stats are rich</td><td>4.8 rating, 12 deals, 100% response rate, ~2h response time, 0 complaints. Response time needs message-timestamp aggregation, so it is a materialised counter, not a live query.</td></tr>
+      <tr><td class="k">Onboarding quotes verification SLAs</td><td>Email "2 dəqiqə", card "24 saata qədər". These are promises rendered in the UI — the queue has to actually hit them, and they should come from config so they can be tuned per campus.</td></tr>
+      <tr><td class="k">Boards carry follower counts</td><td>BDU · Dərs və müəllim · 9,214 followers. Counter cache, not <code>COUNT(*)</code>.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="box ok">
+    <span class="t">Resolved: the tab bar is gone</span>
+    <p>The design showed <code>BU GÜN · CƏDVƏL · FORUM · BAZAR · PROFİL</code> on eight
+    screens but <code>İŞ</code> in the fourth slot on the Vacancies screen, so Bazar
+    disappeared exactly where Vacancies appeared. That was flagged here as needing a
+    decision before the navigator was built.</p>
+    <p>It was decided the other way: <strong>a drawer, not tabs</strong>, with six
+    destinations — Bu gün, Cədvəl, Forum, Bazar, Karyera, Profil. Reviews deliberately
+    get no destination of their own; they are a lookup tool used hard for two weeks at
+    course registration, so they live where the student is already choosing courses.</p>
+  </div>
+</section>
+
+<section>
+  <div class="hd"><span class="n">2</span><h2>The stack</h2></div>
+  <p>Chosen so one team can ship both platforms, preview on a phone from day one, and not repaint the anonymity architecture later.</p>
+
+  <div class="box ok">
+    <span class="t">Flag before we commit</span>
+    <p>You asked for an iOS app. Azerbaijan's phone market is overwhelmingly Android — building iOS-first would put the product in front of a minority of the students you are targeting. The stack below is cross-platform for exactly this reason: you get iOS because you asked for it, and Android for free from the same codebase. If you truly want iOS-only, say so and I will swap in native Swift, but I would argue hard against it.</p>
+  </div>
+
+  <h3>Mobile</h3>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Concern</th><th>Choice</th><th>Why this one</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Framework</td><td class="mono">React Native + Expo (SDK 54+)</td><td>iOS and Android from one codebase, the deepest hiring pool in Baku, and the Expo toolchain is what makes requirement 2 trivial rather than a project.</td></tr>
+      <tr><td class="k">Language</td><td class="mono">TypeScript, strict</td><td>Types shared end-to-end with the API — the single highest-leverage thing you can do to make cheap-model agents reliable.</td></tr>
+      <tr><td class="k">Navigation</td><td class="mono">Expo Router</td><td>File-based, typed routes, deep links work for free — needed for board and listing share links.</td></tr>
+      <tr><td class="k">Server state</td><td class="mono">TanStack Query</td><td>Caching, retries, offline-ish behaviour on flaky campus wifi. Feeds and timetable are read-heavy and cache beautifully.</td></tr>
+      <tr><td class="k">Client state</td><td class="mono">Zustand</td><td>Small. Session, language, draft composer state. Redux is overkill here.</td></tr>
+      <tr><td class="k">Local storage</td><td class="mono">SecureStore (session) · MMKV later</td><td><strong>Changed in build.</strong> The Supabase session lives in chunked <code>expo-secure-store</code>, not AsyncStorage: a refresh token is a long-lived credential for an account whose whole purpose is to stay unlinkable from a real student, and AsyncStorage is plaintext on disk. Chunked because SecureStore caps a value at 2048 bytes and a session exceeds it. MMKV still wanted for offline timetable, after the dev build.</td></tr>
+      <tr><td class="k">Styling</td><td class="mono">Unistyles or Tamagui</td><td>Token-driven, so the palette extracted from your design file is the single source of truth and dark mode is a token swap.</td></tr>
+      <tr><td class="k">i18n</td><td class="mono">i18next + ICU plurals</td><td>AZ / RU / EN from the first commit. Retrofitting three languages is far worse than starting with them.</td></tr>
+      <tr><td class="k">Errors</td><td class="mono">Sentry</td><td>Crash-free rate per campus is a launch gate.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Backend</h3>
+  <p>Supabase gives you managed Postgres, auth, object storage and realtime on day one at near-zero cost. But the anonymity model makes direct client-to-database access genuinely dangerous — one loose row-level-security policy and you have leaked the mapping between a real student and their forum pseudonym. So: <strong>Supabase for infrastructure, a real API service in front of it for everything that touches identity.</strong> The client never receives a table grant on an identity table.</p>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Concern</th><th>Choice</th><th>Why this one</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Database</td><td class="mono">Postgres 17 (Supabase)</td><td>Row-level security, good full-text search, real transactions. The identity model needs all three.</td></tr>
+      <tr><td class="k">API</td><td class="mono">NestJS (TypeScript) on Fly.io</td><td>Shares types with the app. Modular structure is what lets several agents work in parallel without colliding.</td></tr>
+      <tr><td class="k">ORM / migrations</td><td class="mono">Drizzle</td><td>SQL-first, so the Opus-authored schema stays readable and reviewable instead of hiding behind a DSL.</td></tr>
+      <tr><td class="k">Auth</td><td class="mono">Supabase Auth + access-token hook</td><td>Handles the email OTP path. Verification tier and university ride in a signed claim so the API doesn't refetch on every request.</td></tr>
+      <tr><td class="k">Storage</td><td class="mono">Supabase Storage</td><td>Listing photos public-read; student-card uploads in a private bucket with a 30-day lifecycle rule.</td></tr>
+      <tr><td class="k">Realtime</td><td class="mono">Supabase Realtime</td><td>Deal chat and DMs only. Feeds poll — realtime feeds are a cost trap at this scale.</td></tr>
+      <tr><td class="k">Cache / jobs</td><td class="mono">Redis + BullMQ</td><td>Hot-feed ranking, rate limits, moderation and verification queues, catalogue import jobs.</td></tr>
+      <tr><td class="k">Push</td><td class="mono">Expo Push → FCM/APNs</td><td>One API for both platforms. Free. Requires a dev build to test — see §3.</td></tr>
+      <tr><td class="k">Moderation</td><td class="mono">Claude (Haiku first pass)</td><td>Off-the-shelf toxicity APIs are effectively blind to Azerbaijani. A cheap model with a well-written AZ/RU prompt beats them, and escalates to a human queue.</td></tr>
+      <tr><td class="k">Catalogue parsing</td><td class="mono">Python workers + Claude extraction</td><td>Timetable PDFs and spreadsheets in inconsistent per-faculty layouts. This is the task LLM extraction is actually good at.</td></tr>
+      <tr><td class="k">Region</td><td class="mono">Frankfurt</td><td>Lowest-latency mainstream region for Baku. Revisit if counsel says data must stay onshore.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <div class="hd"><span class="n">3</span><h2>Previewing on your phone</h2></div>
+  <p>This works from day one, with one honest caveat about how long Expo Go carries you.</p>
+
+  <div class="flow">
+    <div class="step"><span class="s">Week 1</span><b>Expo Go</b><p>Install Expo Go from the store, run <code>npx expo start</code>, scan the QR. Live reload on your phone in seconds, no Xcode, no Apple account.</p></div>
+    <div class="step"><span class="s">Week 3–4</span><b>Dev build</b><p><code>eas build --profile development</code>. Install once. Identical QR-and-reload workflow, but native modules now work.</p></div>
+    <div class="step"><span class="s">Ongoing</span><b>Internal distribution</b><p>Every merge to main builds a shareable link. Your campus testers install without TestFlight review.</p></div>
+    <div class="step"><span class="s">Launch</span><b>EAS Update</b><p>Ship JS fixes over the air in minutes. This is what saves you during enrolment week.</p></div>
+  </div>
+
+  <div class="box">
+    <span class="t">The caveat, stated plainly</span>
+    <p>Expo Go cannot carry this app to launch. Remote push notifications stopped working in Expo Go on Android as of SDK 53 and are unavailable on iOS — a development build is required to test them end-to-end. The same is true of the home-screen timetable widget, MMKV, and on-device OCR for student cards.</p>
+    <p>This is not a problem, it is a scheduling note: plan to move to a dev build around week three, when you first need push. The developer experience is identical — same QR code, same hot reload — and it costs one <code>eas build</code> per person per platform. Anyone telling you Expo Go is enough for a production app with push has not shipped one.</p>
+  </div>
+</section>
+
+<section>
+  <div class="hd"><span class="n">4</span><h2>The agent workflow</h2></div>
+  <p>You asked for cheap models on grunt work and expensive models on hard problems. That split works, but only if you get the sequencing right — and the sequencing is the entire trick.</p>
+
+  <div class="box ok">
+    <span class="t">The organising principle</span>
+    <p><strong>Sonnet is cheap because the contract is expensive.</strong> Opus agents run first and produce four artifacts: the schema, the identity specification, the OpenAPI contract, and the design-token file. Every Sonnet agent afterwards is handed "implement this endpoint against that contract" — a task with no architectural judgment left in it.</p>
+    <p>The corollary is the quality gate: <strong>if a Sonnet agent has to make a judgment call, the contract was underspecified.</strong> Its instruction is to stop and escalate rather than guess. A cheap agent guessing at anonymity semantics is how you ship a de-anonymisation bug.</p>
+  </div>
+
+  <h3>The roster</h3>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Agent</th><th>Model</th><th>Owns</th><th>Why this tier</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Schema Architect</td><td><span class="m m-o">Opus 5</span></td><td>Postgres schema, the four identity layers, RLS policies, index strategy, migration ordering.</td><td>Unrecoverable if wrong. Must reason about what an attacker can join against what.</td></tr>
+      <tr><td class="k">Identity Architect</td><td><span class="m m-o">Opus 5</span></td><td>Verification flows, thread-alias assignment and reservation, pseudonym generator, k-anonymity floor, token and claim design, one-person-one-account enforcement.</td><td>The product's core promise. Subtle, adversarial, and full of race conditions.</td></tr>
+      <tr><td class="k">API Contract Author</td><td><span class="m m-o">Opus 5</span></td><td>The OpenAPI spec every other agent builds against — error taxonomy, pagination, auth semantics, rate-limit headers.</td><td>Cheap to get right once, expensive to change after eight agents have built against it.</td></tr>
+      <tr><td class="k">Security Auditor</td><td><span class="m m-o">Opus 5</span></td><td>Adversarial review each phase: can a pseudonym be correlated to a student? Enumeration, IDOR, RLS bypass, timing leaks, small-cohort exposure.</td><td>Needs to think like an attacker, not check a list. Runs as a gate, not a task.</td></tr>
+      <tr><td class="k">Code Reviewer</td><td><span class="m m-o">Opus 5</span></td><td>Reviews every Sonnet branch before merge.</td><td>Reviewing cheap output with an expensive model is what makes the cheap output trustworthy. This is where the savings are actually banked.</td></tr>
+      <tr><td class="k">Performance Engineer</td><td><span class="m m-o">Opus 5</span></td><td>Feed ranking queries, timetable grid fetch, N+1 elimination, counter caches, index tuning under real row counts.</td><td>Requires reading query plans and holding the whole data model in view.</td></tr>
+      <tr><td class="k">Screen Builder ×3</td><td><span class="m m-s">Sonnet 5</span></td><td>The ten designed screens as React Native components against the token file.</td><td>High volume, unambiguous spec — your design HTML <em>is</em> the spec. Parallelises cleanly, three agents by screen group.</td></tr>
+      <tr><td class="k">CRUD Engineer ×2</td><td><span class="m m-s">Sonnet 5</span></td><td>NestJS modules for boards, posts, listings, vacancies, events: controllers, services, DTOs, validation.</td><td>Mechanical once the contract exists. Split by module so the agents never touch the same files.</td></tr>
+      <tr><td class="k">Migration &amp; Seed</td><td><span class="m m-s">Sonnet 5</span></td><td>Drizzle migrations from the Opus schema; seed data — four universities, real course catalogue, Azerbaijani sample content matching the design.</td><td>Transcription plus volume. The thinking already happened upstream.</td></tr>
+      <tr><td class="k">Catalogue Pipeline</td><td><span class="m m-s">Sonnet 5</span></td><td>PDF/XLSX ingestion workers, diffing, the correction-report path.</td><td>Sonnet writes the workers; Opus writes the extraction prompt and the review heuristics it calls into.</td></tr>
+      <tr><td class="k">Test Engineer</td><td><span class="m m-s">Sonnet 5</span></td><td>Integration tests, fixtures, CI wiring. Owns the anonymity regression suite the Identity Architect specifies.</td><td>Volume work against a written spec — but the identity assertions are authored by Opus, not invented here.</td></tr>
+      <tr><td class="k">Token Extractor</td><td><span class="m m-h">Haiku 4.5</span></td><td>Pull every hex value, spacing step and type size out of the design file into a typed token module.</td><td>Purely mechanical transcription. Anything smarter is wasted spend.</td></tr>
+      <tr><td class="k">Localisation</td><td><span class="m m-h">Haiku 4.5</span></td><td>Extract hardcoded strings into i18n keys, scaffold AZ/RU/EN files.</td><td>Mechanical. The Azerbaijani copy itself needs a native writer — a model should not be inventing student register.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Sequencing</h3>
+  <div class="ph">
+    <span class="w">Stage 1 · nothing else starts</span>
+    <h4>Contracts</h4>
+    <p>Schema Architect and Identity Architect run first, in that order — the identity model constrains the schema, not the reverse. API Contract Author follows once both land. Token Extractor runs in parallel, since it depends only on the design file.</p>
+    <div class="who"><span class="m m-o">Opus ×3</span><span class="m m-h">Haiku ×1</span></div>
+  </div>
+  <div class="ph">
+    <span class="w">Stage 2 · wide parallel</span>
+    <h4>Implementation</h4>
+    <p>Migration &amp; Seed goes first so everyone has a database. Then Screen Builders and CRUD Engineers run concurrently against the contract, partitioned by module so no two agents edit the same file. Test Engineer follows one step behind each module.</p>
+    <div class="who"><span class="m m-s">Sonnet ×7</span></div>
+  </div>
+  <div class="ph">
+    <span class="w">Stage 3 · gate</span>
+    <h4>Review</h4>
+    <p>Code Reviewer on every branch, Security Auditor on the phase as a whole. Nothing merges without both. Findings go back to the original Sonnet agent to fix — cheaper than having Opus write the patch.</p>
+    <div class="who"><span class="m m-o">Opus ×2</span></div>
+  </div>
+  <div class="ph">
+    <span class="w">Stage 4 · after real data exists</span>
+    <h4>Optimisation</h4>
+    <p>Performance Engineer against a seeded database at realistic row counts. Optimising before there is data is guesswork.</p>
+    <div class="who"><span class="m m-o">Opus ×1</span></div>
+  </div>
+
+  <h3>Two practical rules</h3>
+  <ul>
+    <li><strong>Batch work per agent; don't spawn one per file.</strong> Every agent starts cold and re-derives context, so a Screen Builder should own three or four screens in one run, not one screen per spawn. The context re-derivation is the real cost, not the tokens.</li>
+    <li><strong>The <code>/docs</code> directory is the interface between tiers.</strong> Opus writes <code>schema.sql</code>, <code>identity-spec.md</code>, <code>openapi.yaml</code> and <code>tokens.ts</code>; every Sonnet prompt points at them. A cold cheap agent with a precise written spec outperforms a warm one improvising, and it is the only thing that makes this split safe.</li>
+  </ul>
+</section>
+
+<section>
+  <div class="hd"><span class="n">5</span><h2>Schema, in outline</h2></div>
+  <p>What the Schema Architect produces in stage 1 — shown here so you can object before it is built rather than after.</p>
+  <pre><b>-- Layer 1: sealed. Separate key, access logged, never joined in app queries.</b>
+verified_identity(id, credential_hash, university_id, faculty_id,
+                  entry_year, method, evidence_url, verified_at, expires_at)
+
+<b>-- Layer 2: the pseudonym everything social hangs off.</b>
+app_user(id, handle, handle_changed_at, tier, university_id,
+         karma, trade_rating, created_at)
+handle_history(user_id, old_handle, changed_at)   -- blocks survive renames
+
+<b>-- Layer 3: per-thread, never reversible from an app context.</b>
+thread_alias(thread_id, user_id, ordinal)         -- unique(thread_id, ordinal)
+
+<b>-- Layer 4: real name. No traversable FK to app_user.</b>
+career_profile(id, credential_hash, full_name, cv_url, contact)
+
+<b>-- Academic</b>
+university(id, code, name, city, email_domains[], grading_scale,
+           absence_limit_default, calendar)
+course(id, university_id, code, title, credits)
+section(id, course_id, instructor_id, semester_id, day, start, end, room)
+enrollment(user_id, section_id)
+absence(user_id, section_id, date)                -- 4/12 is derived, not stored
+
+<b>-- Community</b>
+board(id, university_id NULL, slug, name, follower_count)
+post(id, board_id, author_id, display_mode, body, vote_count, comment_count)
+comment(id, post_id, author_id, parent_id, body)
+poll(post_id, options jsonb, closes_at)
+
+<b>-- Reviews: fixed criteria, semester-scoped</b>
+review(id, course_id, instructor_id, semester_id, author_id,
+       quality, fairness, workload, attendance_strictness, tags[], body)
+
+<b>-- Commerce</b>
+listing(id, seller_id, category, title, price, negotiable, condition, campus_id)
+deal(listing_id, buyer_id, state) / trade_rating(deal_id, rater_id, score)
+vacancy(id, employer_id, type, city, deadline, salary, year_requirement)
+application(vacancy_id, career_profile_id)        <b>-- the only Layer-4 join</b>
+</pre>
+  <div class="box">
+    <span class="t">The invariant to enforce in CI</span>
+    <p>No query outside the verification and legal-request services may join <code>verified_identity</code> to <code>app_user</code>, and nothing may ever join <code>career_profile</code> to <code>app_user</code>. This should be a failing test, not a code-review convention — it is exactly the kind of thing that gets quietly broken by a well-meaning agent adding a convenient join six weeks in.</p>
+  </div>
+</section>
+
+<section>
+  <div class="hd"><span class="n">6</span><h2>Build phases</h2></div>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Phase</th><th>Weeks</th><th>Ships</th><th>Agents</th><th>Now</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Contracts</td><td class="mono">1–2</td><td>Schema, identity spec, OpenAPI, tokens, repo and CI skeleton.</td><td><span class="m m-o">Opus ×3</span> <span class="m m-h">Haiku ×1</span></td><td><span class="m s-done">Done</span></td></tr>
+      <tr><td class="k">Spine</td><td class="mono">3–6</td><td>Onboarding and verification end to end, timetable with attendance, the ten screens as real components. First dev build on your phone.</td><td><span class="m m-s">Sonnet ×5</span> <span class="m m-o">Opus ×2</span></td><td><span class="m s-part">~92%</span></td></tr>
+      <tr><td class="k">Community</td><td class="mono">7–10</td><td>Boards, posts, polls, thread aliasing, comments, moderation queue, reviews with the contribution wall.</td><td><span class="m m-s">Sonnet ×4</span> <span class="m m-o">Opus ×2</span></td><td><span class="m s-part">~80%</span></td></tr>
+      <tr><td class="k">Commerce</td><td class="mono">11–14</td><td>Marketplace with deal chat and trade ratings, vacancies, employer console. <em>Career identity dropped — careers is aggregation-only.</em></td><td><span class="m m-s">Sonnet ×4</span> <span class="m m-o">Opus ×2</span></td><td><span class="m s-part">~55%</span></td></tr>
+      <tr><td class="k">Hardening</td><td class="mono">15–16</td><td>Full security audit, performance pass on seeded data, store submission, catalogue loaded for campus one.</td><td><span class="m m-o">Opus ×3</span></td><td><span class="m s-none">—</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>Roughly four months to a launchable single-campus app. The gate on launch is not the code — it is the course catalogue for that campus being loaded and verified, which runs in parallel from week one.</p>
+</section>
+
+<section>
+  <div class="hd"><span class="n">7</span><h2>Decisions taken since</h2></div>
+  <p>All four questions this section originally asked are answered, and several more were
+  settled during the build. Recorded here so they are not relitigated.</p>
+  <ol>
+    <li><strong>The tab-bar conflict → a drawer, not tabs.</strong> Six destinations: Bu gün,
+    Cədvəl, Forum, Bazar, Karyera, Profil. Both Bazar and Karyera get their own slot, which
+    is what the five-slot tab bar could not do. Reviews deliberately get no destination.</li>
+    <li><strong>Both platforms,</strong> from one React Native codebase — as recommended.
+    Azerbaijan's phone market is overwhelmingly Android, so iOS-only would have shipped to
+    a minority of the target students.</li>
+    <li><strong>Supabase,</strong> in Frankfurt. Three deviations from the authored schema
+    were needed to land it on the platform and all three are written down in
+    <code>07-supabase-deviations.md</code> rather than absorbed silently — most consequentially,
+    <code>kiksu_app</code> retired in favour of <code>service_role</code>, because granting
+    BYPASSRLS is a superuser-only privilege that the migration role does not hold.</li>
+    <li><strong>Plan before build, every time.</strong> Assumed then, confirmed repeatedly
+    since; it is now how this project runs.</li>
+  </ol>
+  <p>Also settled since, and equally not up for relitigation: careers is aggregation-only,
+  so no CV, no application and <strong>no real name anywhere in the product</strong>; invite
+  codes were dropped as a verification route, leaving university email and student card;
+  tier-2 LLM moderation is deferred; the campus badge is opt-in per post and only on national
+  boards; dark mode is deferred to the end with the plumbing already in place.</p>
+</section>
+
+<footer>
+  <p>Kiksu build plan · version 1 · revised 18 August 2026<br>
+  Design source: Kiksu Mobile UI Design · 10 screens · palette and type carried from that file<br>
+  13 agents across Opus 5 / Sonnet 5 / Haiku 4.5 · 4 stages · ~16 weeks to single-campus launch</p>
+</footer>
+
+</div>

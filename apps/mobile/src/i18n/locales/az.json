@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "status": "Azərbaycan dili mənbədir. Əksər sətirlər dizayn faylından götürülüb. ISTISNA: reviews blokunun bir hissəsi dizaynda yoxdur və yazılıb — wallTitle, wallBody, wallCta, noReviews, noReviewable, pickCourse, tagsHint, bodyLabel, bodyHint, submit, submitting, failed, ratingRequired, anonymousNote, alreadyWritten, overall. Bunları ana dili azərbaycanca olan redaktor yoxlamalıdır — eyni yoxlama ləqəb siyahısı üçün də gözləyir. Eyni qeyd moderation bloku üçün də keçərlidir — bütün sətirlər yazılıb, dizayn faylında yoxdur."
+    "status": "Azərbaycan dili mənbədir. Əksər sətirlər dizayn faylından götürülüb. ISTISNA: reviews blokunun bir hissəsi dizaynda yoxdur və yazılıb — wallTitle, wallBody, wallCta, noReviews, noReviewable, pickCourse, tagsHint, bodyLabel, bodyHint, submit, submitting, failed, ratingRequired, anonymousNote, alreadyWritten, overall. Bunları ana dili azərbaycanca olan redaktor yoxlamalıdır — eyni yoxlama ləqəb siyahısı üçün də gözləyir. Eyni qeyd moderation bloku üçün də keçərlidir — bütün sətirlər yazılıb, dizayn faylında yoxdur. Eyni vəziyyət search bloku üçün də keçərlidir: bütün sətirlər yenidir, dizayn faylında qlobal axtarış ekranı yoxdur — ana dili azərbaycanca olan redaktor yoxlamalıdır."
   },
   "nav": {
     "today": "Bu gün",
@@ -303,6 +303,34 @@
     "failed": "Rəy göndərilmədi. Yenidən cəhd et.",
     "ratingRequired": "Bütün qiymətləri ver.",
     "anonymousNote": "Rəyin tam anonimdir. Ləqəbin heç yerdə görünmür."
+  },
+  "search": {
+    "title": "Axtarış",
+    "placeholder": "Mövzu, fənn, müəllim, elan axtar…",
+    "hint": "Axtarmaq üçün ən azı iki hərf yazın",
+    "scopeAll": "Hamısı",
+    "scopePosts": "Mövzular",
+    "scopeCourses": "Fənn və müəllim",
+    "scopeListings": "Bazar",
+    "scopeVacancies": "Vakansiya",
+    "recent": "Son axtarışlar",
+    "clearRecent": "Təmizlə",
+    "recentLocalNote": "Son axtarışlar yalnız bu telefonda saxlanılır.",
+    "noResults": "Nəticə tapılmadı",
+    "noResultsHint": "Başqa söz yazın və ya başqa bölmə seçin.",
+    "failed": "Axtarış alınmadı. Yenidən cəhd edin.",
+    "sectionPosts": "Mövzular",
+    "sectionCourses": "Fənlər",
+    "sectionInstructors": "Müəllimlər",
+    "sectionListings": "Elanlar",
+    "sectionVacancies": "Vakansiyalar",
+    "campus": "Kampus",
+    "national": "Ümumi",
+    "reviewCount": "{{count}} rəy",
+    "noRating": "Rəy yoxdur",
+    "noPeopleTitle": "İstifadəçi axtarışı yoxdur",
+    "noPeopleBody": "Ləqəbləri axtarmaq mümkün deyil — yalnız tam ləqəbi bilən onu tapa bilər. Bu, təsadüfi tapılmağın qarşısını alır.",
+    "trendingUnavailable": "Populyar axtarışlar hələ yoxdur."
   },
   "moderation": {
     "title": "Məzmunum",

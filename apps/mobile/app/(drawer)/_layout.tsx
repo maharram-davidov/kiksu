@@ -1,5 +1,6 @@
 import React from 'react';
 import { Drawer } from 'expo-router/drawer';
+import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { typography } from '@kiksu/tokens';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -17,6 +18,7 @@ import { HeaderIcon } from '@/components/HeaderIcon';
 export default function DrawerLayout() {
   const theme = useTheme();
   const { t } = useTranslation();
+  const router = useRouter();
 
   return (
     <Drawer
@@ -58,7 +60,13 @@ export default function DrawerLayout() {
         options={{
           title: t('nav.forum'),
           drawerLabel: t('nav.forum'),
-          headerRight: () => <HeaderIcon name="search" accessibilityLabel={t('header.search')} />,
+          headerRight: () => (
+            <HeaderIcon
+              name="search"
+              accessibilityLabel={t('header.search')}
+              onPress={() => router.push('/search')}
+            />
+          ),
         }}
       />
       <Drawer.Screen
@@ -66,7 +74,13 @@ export default function DrawerLayout() {
         options={{
           title: t('nav.market'),
           drawerLabel: t('nav.market'),
-          headerRight: () => <HeaderIcon name="search" accessibilityLabel={t('header.search')} />,
+          headerRight: () => (
+            <HeaderIcon
+              name="search"
+              accessibilityLabel={t('header.search')}
+              onPress={() => router.push('/search')}
+            />
+          ),
         }}
       />
       <Drawer.Screen
@@ -97,6 +111,15 @@ export default function DrawerLayout() {
       */}
       <Drawer.Screen
         name="reviews"
+        options={{ drawerItemStyle: { display: 'none' }, headerShown: false }}
+      />
+      {/*
+        Search is hidden for the same reason: it is reached from the header
+        icon on Forum and Bazar (docs/03-navigation.md, "Screen header"), not
+        from the drawer, and the six destinations are settled.
+      */}
+      <Drawer.Screen
+        name="search"
         options={{ drawerItemStyle: { display: 'none' }, headerShown: false }}
       />
     </Drawer>

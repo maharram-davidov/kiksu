@@ -18,6 +18,7 @@ import { ForumModule } from "./modules/forum/forum.module";
 import { OnboardingModule } from "./modules/onboarding/onboarding.module";
 import { TodayModule } from "./modules/today/today.module";
 import { CommerceModule } from "./modules/commerce/commerce.module";
+import { SearchModule } from "./modules/search/search.module";
 import { ReviewsModule } from "./modules/reviews/reviews.module";
 import { AdminModule } from "./modules/admin/admin.module";
 import { ReportsModule } from "./modules/reports/reports.module";
@@ -44,6 +45,7 @@ import { ModerationModule } from "./modules/moderation/moderation.module";
     TodayModule,
     CommerceModule,
     ReviewsModule,
+    SearchModule,
     AdminModule,
     ReportsModule,
     MeModule,

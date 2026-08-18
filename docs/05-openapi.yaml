@@ -67,6 +67,10 @@ tags:
     description: Boards, feeds, posts, comments, votes, polls, alias preview.
   - name: reviews
     description: Professor and course profiles, the review list, the contribution wall.
+  - name: search
+    description: |
+      Global search across posts, courses, instructors, listings and vacancies.
+      There is deliberately no people corpus — see the section's own description.
   - name: safety
     description: Reports and blocks.
 
@@ -2915,6 +2919,235 @@ paths:
                   helpful_count: { type: integer }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  # ==================================================================
+  # SEARCH  (HM-03 – HM-06)
+  # ==================================================================
+  #
+  # Five endpoints rather than one aggregate, for a reason worth stating
+  # where someone adding a sixth will read it:
+  #
+  # A single `/search?q=` returning every corpus would put post hits (which
+  # carry a thread alias, Layer 3) and listing hits (which carry the seller's
+  # handle, Layer 2) in one response body. Identity spec assertion 21 asserts
+  # that no client-facing response contains both a thread-alias field and a
+  # handle field, and it is checked mechanically over a fixture database. The
+  # substantive risk is absent — different rows, different corpora — but the
+  # assertion exists because mechanical checks catch what reasoning talks
+  # itself out of. HM-03's "all" tab fans out across these in parallel.
+  #
+  # THERE IS NO PEOPLE CORPUS AND THERE MUST NEVER BE ONE. Identity spec T11:
+  # handle lookup accepts exact full-handle matches only, is opt-in (default
+  # off), is rate-limited, and equalises its response time and body between
+  # "not found" and "found but not searchable" — that is
+  # `/profiles/by-handle/{handle}`, not this. Prefix, substring or fuzzy
+  # matching over `sakit-pərvanə-37` walks the adjective×noun space and
+  # enumerates the user base together with each user's rendered university and
+  # year. Nothing under `/search` reads `app_user` as a corpus.
+  #
+  # Every endpoint here shares the `search.query` bucket (§5.2: 30 / 120 / 120
+  # per hour by tier, age-scaled), so a three-way fan-out spends three of it.
+
+  /search/posts:
+    get:
+      tags: [search]
+      operationId: searchPosts
+      summary: Forum post search (HM-04)
+      description: |
+        Full-text over `post.search_vector`, campus-scoped and gated on the board's
+        `min_tier_to_read` exactly as the board feed is. A card-gated board's contents
+        are not reachable here by an email-tier caller — otherwise search would read
+        what the board list refuses even to name.
+
+        **Language.** Each row's vector was built with that row's own `lang` config
+        (`util.az` is `simple`, since no Azerbaijani stemmer exists; `util.ru` and
+        `util.en` carry real stemmers). The query is evaluated as three constant arms
+        paired to `lang`, so all three languages match and the GIN index still serves
+        the predicate.
+
+        **Folding.** `ə→e ğ→g ı→i ö→o ş→s ü→u ç→c`, plus the combining dot above that
+        `lower('İ')` produces. Applied to the query through `util.tsq()` exactly as it
+        was to the index. Folding one side only does not degrade results, it returns
+        none.
+
+        Results carry an author alias and a coarse tier, never a handle (P12).
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 2, maxLength: 120, examples: ["imtahan"] }
+        - name: scope
+          in: query
+          schema: { type: string, enum: [all, campus, national], default: all }
+          description: Separates the national layer from the caller's campus boards.
+        - name: board
+          in: query
+          schema: { type: string, maxLength: 80 }
+          description: Board slug. Narrows to one board; there is no author filter (P12).
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Matching posts, most relevant first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PostHitPage" }
+        "400": { $ref: "#/components/responses/CursorInvalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /search/courses:
+    get:
+      tags: [search]
+      operationId: searchCourseCatalogue
+      summary: Course search with rating summary (HM-05)
+      description: |
+        Three match paths OR'd together: the full-text vector, a folded code prefix so
+        `cs2` reaches `CS 214`, and a folded substring over the title. A code-prefix hit
+        outranks a body mention — someone typing `CS 214` wants that course, not every
+        course that mentions it.
+
+        Scoped to the caller's university. The rating summary is inline so the result
+        list is useful without a tap.
+
+        **On the two course-search paths.** `/catalogue/courses`, described further up
+        this document, was never implemented at that path; the catalogue search that
+        exists is `GET /v1/timetable/courses`, which returns a different projection
+        (instructor names, no ratings) for the timetable's course picker. This endpoint
+        is the canonical one for search and returns ratings instead.
+
+        They are two queries over one corpus, which is a drift risk worth naming: both
+        apply the same campus scope and the same three fold predicates, so a change to
+        the fold rules has to be made in both `SearchService.searchCourses` and
+        `TimetableService.searchCourses` or Azerbaijani search quietly starts behaving
+        differently depending on which screen the student came from.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 2, maxLength: 120, examples: ["verilenler"] }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Matching courses.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CourseHitPage" }
+              examples:
+                cs214:
+                  value:
+                    items:
+                      - id: "0193f350-a0b1-4c2d-e3f4-5a6b7c8d9e0f"
+                        code: "CS 214"
+                        title: "Verilənlər bazası sistemləri"
+                        credits: 6
+                        department: "İnformatika"
+                        rating_avg: 4.34
+                        review_count: 61
+                    next_cursor: null
+        "400": { $ref: "#/components/responses/CursorInvalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /search/instructors:
+    get:
+      tags: [search]
+      operationId: searchInstructorDirectory
+      summary: Instructor search with rating summary (HM-05)
+      description: |
+        Instructor names are **real and public** — this is a professor-review product,
+        and an instructor is never an `app_user`. This endpoint has no relationship to
+        handle search and none to the k-anonymity floor.
+
+        The trigram index over `name_folded` is what makes `Eliyeva` find `Əliyeva`.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 2, maxLength: 120, examples: ["Eliyeva"] }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Matching instructors.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstructorHitPage" }
+        "400": { $ref: "#/components/responses/CursorInvalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /search/listings:
+    get:
+      tags: [search]
+      operationId: searchListings
+      summary: Marketplace search (HM-06)
+      description: |
+        Campus-scoped like the browse feed. Carries the seller's handle: the marketplace
+        is Layer 2 always, because a seller with no persistent reputation is a scam
+        waiting to happen. That is also why this cannot share a response body with
+        `/search/posts` — see the section note above.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 2, maxLength: 120 }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [relevance, price_asc, price_desc, newest], default: relevance }
+          description: |
+            Bound into the cursor. Changing `sort` while presenting a cursor is
+            `400 cursor_invalid`, not a silently re-keyed page.
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Matching listings.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListingHitPage" }
+        "400": { $ref: "#/components/responses/CursorInvalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /search/vacancies:
+    get:
+      tags: [search]
+      operationId: searchVacancies
+      summary: Vacancy search (HM-06)
+      description: |
+        National unless the employer targeted specific campuses through
+        `target_university_ids`. Vacancies with no `external_url` are excluded: Kiksu
+        hands off rather than taking applications, so a vacancy with no link is one
+        nobody can act on.
+
+        `sort=deadline` orders soonest-first and keeps undated vacancies at the end
+        rather than dropping them.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 2, maxLength: 120 }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [relevance, deadline, newest], default: relevance }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Matching vacancies.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VacancyHitPage" }
+        "400": { $ref: "#/components/responses/CursorInvalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
 components:
 
   securitySchemes:
@@ -2923,8 +3156,14 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: |
-        Supabase-issued access token, RS256, 900 s TTL, refresh-token rotation with reuse
+        Supabase-issued access token, **ES256**, 900 s TTL, refresh-token rotation with reuse
         detection.
+
+        The algorithm was verified against a real token from the live project — the header
+        says ES256 and the JWKS publishes a single EC key. `JwtVerifierService` deliberately
+        pins no algorithm and resolves the key by `kid` from the published set, so a key
+        rotation or curve change on Supabase's side is a non-event rather than every token
+        being rejected at once.
 
         **Trusted claims** (`05-api-conventions.md` §2.2): `sub`, and from `app_metadata`
         only — `app_user_id`, `tier`, `role`, `univ_id`, `epoch`, `sid`.
@@ -3038,6 +3277,28 @@ components:
       schema: { type: string }
 
   responses:
+
+    CursorInvalid:
+      description: |
+        `cursor_invalid`. The cursor was tampered with, expired, or was presented
+        alongside a changed sort or filter. Deliberately undifferentiated between those
+        causes (§3.4): a distinguishable failure reason would help an attacker iterate
+        toward a forged cursor, and a forged cursor is a scan primitive against forum
+        publication times (T9). The client discards it and reloads from the first page.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            invalid:
+              value:
+                error:
+                  code: "cursor_invalid"
+                  message: "Səhifələmə etibarsızdır. Siyahı yenidən yüklənir."
+                  message_key: "err.cursor_invalid"
+                  action: "retry"
+                  action_label: "Yenidən cəhd et"
+                  details: {}
+                  request_id: "01JAV2H7Z5XT2A4EK6D4AU1J3M"
 
     Unauthenticated:
       description: "`unauthenticated`, `token_stale` or `token_invalid`. On `token_stale` the client refreshes and retries once, silently."
@@ -3153,6 +3414,173 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
 
   schemas:
+
+    # ---------------- search (HM-03 – HM-06) ----------------
+    #
+    # No shape below carries both an alias field and a handle field, and no
+    # shape carries an `app_user_id`. `ListingHit.seller.handle` is the only
+    # handle in the search surface and it lives in a response that has no
+    # alias in it — see the SEARCH section note on why that forces five
+    # endpoints instead of one.
+
+    PostHit:
+      type: object
+      required: [id, title, board, scope, author, score, comment_count, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        excerpt:
+          type: string
+          nullable: true
+          description: |
+            First 180 characters of the body — the same excerpt the board feed returns.
+            Deliberately not a `ts_headline` highlight: the vector is built from folded
+            text, so a headline generated from it renders `Verilenler` where the row
+            says `Verilənlər`.
+        board:
+          type: object
+          required: [slug, name]
+          properties:
+            slug: { type: string }
+            name: { type: string }
+        board_university_code:
+          type: string
+          nullable: true
+          description: Null on national boards.
+        scope: { type: string, enum: [campus, national] }
+        author:
+          type: object
+          required: [alias_number, tier]
+          description: An ordinal and a coarse tier. Never a handle, never an id (P12).
+          properties:
+            alias_number: { type: integer, minimum: 1 }
+            tier: { type: string, enum: [unverified, email, card] }
+        author_university_code:
+          type: string
+          nullable: true
+          description: The opt-in campus badge, national boards only.
+        score: { type: integer }
+        comment_count: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    PostHitPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/PostHit" } }
+        next_cursor: { type: string, nullable: true }
+
+    CourseHit:
+      type: object
+      required: [id, code, title, review_count]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string, examples: ["CS 214"] }
+        title: { type: string }
+        credits: { type: number, nullable: true }
+        department: { type: string, nullable: true }
+        rating_avg:
+          type: number
+          nullable: true
+          description: Null until the course has a review. From `course_review_summary`.
+        review_count: { type: integer }
+
+    CourseHitPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/CourseHit" } }
+        next_cursor: { type: string, nullable: true }
+
+    InstructorHit:
+      type: object
+      required: [id, full_name, review_count, course_count]
+      properties:
+        id: { type: string, format: uuid }
+        full_name: { type: string, examples: ["Nigar Əliyeva"] }
+        title_prefix: { type: string, nullable: true, examples: ["dos."] }
+        department: { type: string, nullable: true }
+        rating_avg: { type: number, nullable: true }
+        review_count: { type: integer }
+        course_count: { type: integer }
+
+    InstructorHitPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/InstructorHit" } }
+        next_cursor: { type: string, nullable: true }
+
+    ListingHit:
+      type: object
+      required: [id, title, category_key, category_name, price_minor, currency, is_negotiable, condition, published_at]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        excerpt: { type: string, nullable: true }
+        category_key: { type: string }
+        category_name: { type: string }
+        price_minor:
+          type: integer
+          description: Integer minor units (qəpik). 25 ₼ is `2500`. Converted once, at render.
+        currency: { type: string, examples: ["AZN"] }
+        is_negotiable: { type: boolean }
+        condition: { type: string }
+        related_course_code: { type: string, nullable: true }
+        seller:
+          type: object
+          nullable: true
+          required: [handle, avatar_id]
+          description: |
+            Layer 2. The marketplace is handle-attributed by product necessity — a seller
+            with no persistent reputation is a scam waiting to happen. Karma is never
+            here; `contributor_level` is the coarse, batch-refreshed substitute (T5).
+          properties:
+            handle: { type: string, examples: ["quru-püstə-19"] }
+            avatar_id: { type: integer }
+            contributor_level: { type: integer, nullable: true }
+        published_at: { type: string, format: date-time }
+
+    ListingHitPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ListingHit" } }
+        next_cursor: { type: string, nullable: true }
+
+    VacancyHit:
+      type: object
+      required: [id, title, kind, work_mode, is_paid, currency, employer]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        excerpt: { type: string, nullable: true }
+        kind: { type: string }
+        work_mode: { type: string }
+        city: { type: string, nullable: true }
+        is_paid: { type: boolean }
+        stipend_minor: { type: integer, nullable: true }
+        currency: { type: string }
+        apply_deadline: { type: string, format: date, nullable: true }
+        days_left:
+          type: integer
+          nullable: true
+          description: Powers the "3 GÜN" countdown chip. Null when there is no deadline.
+        employer:
+          type: object
+          required: [slug, name]
+          properties:
+            slug: { type: string }
+            name: { type: string }
+            logo_initials: { type: string, nullable: true }
+            brand_color: { type: string, nullable: true }
+
+    VacancyHitPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/VacancyHit" } }
+        next_cursor: { type: string, nullable: true }
 
     # ---------- primitives ----------
 

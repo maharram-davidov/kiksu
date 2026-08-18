@@ -100,7 +100,12 @@ export class KiksuExceptionFilter implements ExceptionFilter {
     // fault, not the server) and noisy (it pages on client mistakes).
     if (isZodError(exception)) {
       return {
-        status: 400,
+        // From the code table, not a literal. This branch used to hardcode 400
+        // while `HTTP_STATUS_BY_CODE.validation_failed` and
+        // `05-api-conventions.md` §3 both say 422 — so the same error code came
+        // back with two different statuses depending on whether a controller
+        // threw `AppError("validation_failed")` or let a `schema.parse()` throw.
+        status: HTTP_STATUS_BY_CODE.validation_failed,
         code: "validation_failed",
         // Nothing for the app to retry or refresh: the request itself was wrong.
         action: "none",

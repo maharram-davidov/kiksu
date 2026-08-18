@@ -10,7 +10,18 @@ cleanup(){ "$PGBIN/pg_ctl" -D "$RUN/data" stop -m immediate >/dev/null 2>&1 || t
 trap cleanup EXIT
 
 mkdir -p "$RUN/data"
-"$PGBIN/initdb" -D "$RUN/data" -U postgres --no-sync -A trust --locale=C --encoding=UTF8 >/dev/null
+# LC_COLLATE stays C so ordering is byte-deterministic and test assertions on
+# sort order do not depend on the developer's machine. LC_CTYPE must NOT be C:
+# under C ctype, lower() only touches ASCII, so lower('Ə') is 'Ə' and lower('İ')
+# is 'İ'. util.fold_text() translates the LOWERCASE forms 'əğıöşüçё', so with C
+# ctype every uppercase Azerbaijani letter survives folding unfolded — the
+# stored name_folded for 'Nigar Əliyeva' comes out as 'nigar Əliyeva', and a
+# search for 'Eliyeva' silently returns nothing. That is a property of the test
+# harness, not of the schema: Supabase runs a UTF-8 ctype and folds correctly.
+# Running the suite under C ctype meant the folding rules the whole Azerbaijani
+# search story rests on were never actually exercised.
+"$PGBIN/initdb" -D "$RUN/data" -U postgres --no-sync -A trust \
+  --lc-collate=C --lc-ctype=C.UTF-8 --encoding=UTF8 >/dev/null
 # listen on TCP as well as the socket, since node connects over TCP
 "$PGBIN/pg_ctl" -D "$RUN/data" -o "-p $PORT -k $RUN -h 127.0.0.1" -l "$RUN/pg.log" start >/dev/null
 for _ in $(seq 1 20); do "$PGBIN/pg_isready" -h 127.0.0.1 -p "$PORT" >/dev/null 2>&1 && break; sleep 0.5; done

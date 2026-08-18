@@ -11,7 +11,12 @@ cleanup(){ "$PGBIN/pg_ctl" -D "$RUN/data" stop -m immediate >/dev/null 2>&1 || t
 trap cleanup EXIT
 
 mkdir -p "$RUN/data"
-"$PGBIN/initdb" -D "$RUN/data" -U postgres --no-sync -A trust --locale=C --encoding=UTF8 >/dev/null
+# LC_COLLATE=C for deterministic ordering; LC_CTYPE must be UTF-8 or lower()
+# only touches ASCII and util.fold_text() leaves every uppercase Azerbaijani
+# letter unfolded ('Nigar Əliyeva' -> 'nigar Əliyeva'), which makes search
+# silently miss. See scripts/test-integration.sh for the full explanation.
+"$PGBIN/initdb" -D "$RUN/data" -U postgres --no-sync -A trust \
+  --lc-collate=C --lc-ctype=C.UTF-8 --encoding=UTF8 >/dev/null
 "$PGBIN/pg_ctl" -D "$RUN/data" -o "-p $PORT -k $RUN" -l "$RUN/pg.log" start >/dev/null
 for _ in $(seq 1 20); do "$PGBIN/pg_isready" -h "$RUN" -p "$PORT" >/dev/null 2>&1 && break; sleep 0.5; done
 PSQL=("$PGBIN/psql" -h "$RUN" -p "$PORT" -U postgres -d postgres -v ON_ERROR_STOP=1 -q)
