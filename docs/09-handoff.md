@@ -136,15 +136,19 @@ screens render real data.
   work; the app signs in anonymously, keeps the session in a chunked
   Keychain store, and refreshes once on a 401 before retrying. Three things
   stand between that and a working sign-in, and none of them is code:
-    1. **The hook is not registered** in the Supabase project's auth
-       settings. That is a dashboard action. The function now EXISTS in
-       Frankfurt and has been exercised there (a smuggled `tier: card` came
-       back stripped), but until it is registered it never runs, so every
-       token is claimless and every authenticated request answers
-       `token_invalid`. No query can detect this state.
-    2. **Anonymous sign-in is not enabled** on the project, and has no
-       captcha — which leaves unlimited auth-user creation as an open abuse
-       surface once it is.
+    1. **The hook IS registered** (18 Aug) and its grants are correct:
+       `supabase_auth_admin` has USAGE on `auth_hooks` and EXECUTE on the
+       function, while `anon` and `authenticated` have neither. It has still
+       never run — see the next point — so it remains unproven end to end.
+    2. **Anonymous sign-in is DISABLED**, confirmed empirically: a signup
+       request against the live project answers
+       `422 anonymous_provider_disabled`. This is the blocker now. The mobile
+       app's only sign-in path is `supabase.auth.signInAnonymously()`
+       (`session.ts`), so **no token can be minted at all** — which means the
+       app cannot authenticate, and the access-token hook cannot be tested,
+       because there is nothing for it to run on. Enabling it is a dashboard
+       setting. It also needs a captcha decision: anonymous sign-in with none
+       is unlimited auth-user creation.
     3. **No `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY`**
        is set, so every build still takes the development-bypass branch.
        That is the intended default for `dev-api.sh`, which has no GoTrue.
