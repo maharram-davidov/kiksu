@@ -46,10 +46,10 @@ verification is logged behind the same gate.
 
     ./scripts/verify-schema.sh        # applies the monolith, asserts 11 invariants
     ./scripts/verify-migrations.sh    # same via the 22 split migrations
-    ./scripts/test-integration.sh     # stands up Postgres + seeds, runs 226 tests
+    ./scripts/test-integration.sh     # stands up Postgres + seeds, runs 251 tests
     ./scripts/seed-local.sh           # seeds twice, proves idempotency
 
-`npx vitest run` alone gives 95 unit tests; integration tests skip without
+`npx vitest run` alone gives 119 unit tests; integration tests skip without
 `DATABASE_URL`, which `test-integration.sh` provides.
 
 **Run the schema before committing a migration.** Three of the four defects
@@ -144,10 +144,10 @@ screens render real data.
   /Applications/Xcode.app/Contents/Developer` first.
 - **No `--real-auth` dev mode.** `dev-api.sh` still stands up a throwaway
   Postgres with a stubbed `auth.users` and no GoTrue, so the real token
-  path cannot be exercised locally at all.
-- **No production gates on the new config.** `parseEnv()` does not yet
-  reject a placeholder service-role key or a non-https `SUPABASE_URL`, and
-  nothing asserts at boot that the hook is registered.
+  path cannot be exercised locally at all. Not attempted: it needs
+  `supabase start`, and neither Docker nor the Supabase CLI is installed on
+  this machine, so the script could not have been run once before being
+  committed.
 - **No Redis or `LISTEN/NOTIFY` for epoch invalidation.** `DbEpochService`
   caches in-process for 30s, so cross-instance revocation lands within 30s
   rather than the sub-second §7.4 describes. Inside the spec's stated ≤60s

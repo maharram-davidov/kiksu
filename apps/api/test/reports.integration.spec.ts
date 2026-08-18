@@ -62,15 +62,21 @@ suite("report flow (integration)", () => {
 
   it("opens a moderation case, which is what makes the queue real", async () => {
     const postId = await mkPost("Şikayət testi 1");
-    const before = await admin.moderationQueue(null);
+    // Scoped to THIS post rather than to the queue's total length. moderationQueue(null)
+    // is deliberately unscoped — it is the platform-wide staff view — and vitest runs
+    // test files in parallel against one database, so three other files opening cases
+    // concurrently made a `before.length + 1` assertion fail roughly one run in six.
+    // The claim worth testing was never "the queue grew by one" anyway; it is "a case
+    // now exists for this post, and it says what it should", which is what follows.
+    expect((await admin.moderationQueue(null)).find((x) => x.subject_id === postId)).toBeUndefined();
 
     await reports.fileReport(users[0]!, {
       targetType: "post", targetId: postId, reasonKey: "spam",
     });
 
     const after = await admin.moderationQueue(null);
-    expect(after.length).toBe(before.length + 1);
     const c = after.find((x) => x.subject_id === postId);
+    expect(c, "a moderation case should exist for the reported post").toBeDefined();
     expect(c!.report_count).toBe(1);
     expect(c!.reasons).toContain("spam");
     expect(c!.excerpt).toContain("Şikayət testi 1");

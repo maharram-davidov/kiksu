@@ -89,6 +89,15 @@ export const envSchema = z.object({
 export type Env = z.infer<typeof envSchema>;
 
 /**
+ * Values `scripts/dev-api.sh` writes into `apps/api/.env`. They are recognisable
+ * on sight here so that a production boot with one of them fails with a sentence
+ * naming the problem, rather than with a wall of 401s that looks like an outage.
+ */
+const DEV_PLACEHOLDER_SERVICE_ROLE_KEYS = new Set([
+  "dev-placeholder-service-role-key",
+]);
+
+/**
  * Parses and validates `process.env`. Throws a readable, aggregated error on failure —
  * called once at boot (see `main.ts`) so a missing/malformed variable is a startup crash,
  * never a runtime surprise on the first request that happens to need it.
@@ -112,6 +121,40 @@ export function parseEnv(raw: NodeJS.ProcessEnv): Env {
       "DEV_AUTH_APP_USER_ID is set while NODE_ENV=production. Refusing to " +
         "boot: this bypass accepts every request as a real user without a token.",
     );
+  }
+
+  // The rest of these guard the Supabase configuration that token verification
+  // now actually depends on. Before the access-token hook existed none of it
+  // was load-bearing: the bypass answered every request and a wrong SUPABASE_URL
+  // cost nothing. Now a misconfigured project means every token fails to verify,
+  // which presents as a total outage with a 401 on every route — and the one
+  // thing worse than that is the version where it silently half-works.
+  if (result.data.NODE_ENV === "production") {
+    // dev-api.sh writes this literal into apps/api/.env on every run. Inheriting
+    // that file, or copying it as a starting point for a real deployment, is the
+    // realistic way a placeholder reaches production.
+    if (DEV_PLACEHOLDER_SERVICE_ROLE_KEYS.has(result.data.SUPABASE_SERVICE_ROLE_KEY)) {
+      throw new Error(
+        "SUPABASE_SERVICE_ROLE_KEY is still a development placeholder while " +
+          "NODE_ENV=production. Refusing to boot: no request could be authorised, " +
+          "and the value looks real enough to be mistaken for a working config.",
+      );
+    }
+
+    // The issuer check inside JwtVerifierService is derived from SUPABASE_URL,
+    // so a plaintext or loopback value is not merely insecure — it means tokens
+    // are verified against an issuer no real token will ever carry.
+    if (!result.data.SUPABASE_URL.startsWith("https://")) {
+      throw new Error(
+        `SUPABASE_URL must be https in production (got ${result.data.SUPABASE_URL}). ` +
+          "Refusing to boot: the JWT issuer check is derived from this value.",
+      );
+    }
+    if (/^https:\/\/(localhost|127\.0\.0\.1|\[::1\])/.test(result.data.SUPABASE_URL)) {
+      throw new Error(
+        "SUPABASE_URL points at localhost while NODE_ENV=production. Refusing to boot.",
+      );
+    }
   }
 
   return result.data;
