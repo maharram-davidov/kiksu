@@ -162,11 +162,21 @@ screens render real data.
   is the real unknown and is an empirical question, which is why this is a URL
   rather than a vendor SDK.
 
-  **Resend is connected** and a `kiksu.az` sending domain exists (eu-west-1,
+  **Resend is connected** and a `kiksu.site` sending domain exists (eu-west-1,
   open and click tracking OFF — the code template deliberately carries no
   tracking pixel and no link, and leaving tracking on would have Resend inject
   both). Resend speaks plain SMTP, so `SMTP_URL=smtp://resend:<api-key>@smtp.resend.com:587`
   works against the existing mailer with no code change.
+
+  The domain changed from `kiksu.az` to **`kiksu.site`** by product decision.
+  That renamed more than the sender: `docs/05-api-conventions.md` documents the
+  API base URL and the deprecation-link host, and the scraper's User-Agent
+  advertises `+https://kiksu.site/bot` and `contact@kiksu.site` to work.az.
+  **That bot page does not exist yet** — a crawler identifying itself with a
+  URL that 404s is exactly what gets a scraper blocked, so it needs to be real
+  before the scraper runs against work.az again. The synthetic auth address
+  `<uuid>@users.kiksu.invalid` is deliberately unchanged: `.invalid` is a
+  reserved, unroutable TLD, and that is the point of it.
 
   **The domain is UNVERIFIED and no mail has been sent.** It needs the DKIM
   and SPF records added to DNS; until then the only possible sender is

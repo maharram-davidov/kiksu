@@ -23,7 +23,7 @@ function baseEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
     SUPABASE_URL: "https://houicgsdduzzcarxkuuo.supabase.co",
     SUPABASE_SERVICE_ROLE_KEY: "a-real-looking-service-role-key-value",
     SMTP_URL: "smtps://user:pass@smtp.example.com:587",
-    MAIL_FROM: "Kiksu <noreply@kiksu.az>",
+    MAIL_FROM: "Kiksu <noreply@kiksu.site>",
     IOS_STORE_URL: "https://apps.apple.com/az/app/kiksu/id000000000",
     ANDROID_STORE_URL: "https://play.google.com/store/apps/details?id=az.kiksu.mobile",
     ...overrides,

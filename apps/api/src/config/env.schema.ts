@@ -101,7 +101,7 @@ export const envSchema = z.object({
    * refuses to boot without it.
    */
   SMTP_URL: z.string().optional(),
-  /** Envelope sender, e.g. `Kiksu <noreply@kiksu.az>`. */
+  /** Envelope sender, e.g. `Kiksu <noreply@kiksu.site>`. */
   MAIL_FROM: z.string().optional(),
 
   // --- Rate limiting (05-api-conventions.md §5) ---

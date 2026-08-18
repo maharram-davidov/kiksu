@@ -14,7 +14,7 @@ import { LISTING_PATH, WORK_AZ_ORIGIN, parseDetail, parseListing, type ScrapedVa
  */
 
 const UA =
-  "KiksuBot/0.1 (+https://kiksu.az/bot; student vacancy aggregation; contact@kiksu.az)";
+  "KiksuBot/0.1 (+https://kiksu.site/bot; student vacancy aggregation; contact@kiksu.site)";
 /** No Crawl-delay is published, so we choose a conservative one ourselves. */
 const DEFAULT_DELAY_MS = 1500;
 

@@ -38,7 +38,7 @@ Two consequences that shape everything below:
 ### 1.1 Base URL
 
 ```
-https://api.kiksu.az/v1
+https://api.kiksu.site/v1
 ```
 
 Region `eu-central-1`, per `04-infrastructure.md`. The Supabase project ref is an implementation
@@ -113,7 +113,7 @@ is the reason this list exists in the contract rather than in a wiki.
    ```
    Deprecation: @1767225600
    Sunset: Sat, 20 Jun 2026 00:00:00 GMT
-   Link: <https://docs.kiksu.az/api/v1-sunset>; rel="deprecation"; type="text/html"
+   Link: <https://docs.kiksu.site/api/v1-sunset>; rel="deprecation"; type="text/html"
    ```
    (`Deprecation` per RFC 9745, `Sunset` per RFC 8594.)
 4. **The 180 days is a floor, not a trigger.** `/v1` is not actually retired until telemetry shows
