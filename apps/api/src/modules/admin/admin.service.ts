@@ -37,6 +37,51 @@ export interface ModerationCaseDto {
  * behind a human until there is evidence about what the queue actually looks
  * like in practice.
  */
+/** The kinds that change what an account may do, as opposed to what it said. */
+const SANCTION_KINDS = new Set(["mute", "suspend", "ban", "shadowban", "unban"]);
+
+/** Defaults, used when a moderator does not state a duration. */
+const DEFAULT_MUTE_HOURS = 24;
+const DEFAULT_SUSPEND_HOURS = 24 * 7;
+
+/**
+ * Maps a decision onto account state.
+ *
+ * `ban` uses the `suspended` status with NO expiry rather than inventing a
+ * value: public.app_user_status has no 'banned', and adding one would be a
+ * migration for a distinction "is suspended_until null" already expresses.
+ * SanctionsService reads exactly that difference to tell a student whether
+ * their sanction ends on a date.
+ */
+function sanctionFor(kind: string, durationHours?: number): {
+  status: string; until: Date | null; interval: string | null;
+  epochReason: "suspension" | "ban" | "unban";
+} {
+  const hours = (fallback: number) => durationHours ?? fallback;
+  const until = (h: number) => new Date(Date.now() + h * 3_600_000);
+
+  switch (kind) {
+    case "mute": {
+      const h = hours(DEFAULT_MUTE_HOURS);
+      return { status: "muted", until: until(h), interval: `${h} hours`, epochReason: "suspension" };
+    }
+    case "suspend": {
+      const h = hours(DEFAULT_SUSPEND_HOURS);
+      return { status: "suspended", until: until(h), interval: `${h} hours`, epochReason: "suspension" };
+    }
+    case "ban":
+      return { status: "suspended", until: null, interval: null, epochReason: "ban" };
+    case "shadowban":
+      // Not blocked from writing — being told would defeat the sanction. What
+      // changes is the moderation_state their new content lands in.
+      return { status: "shadowbanned", until: null, interval: null, epochReason: "suspension" };
+    case "unban":
+      return { status: "active", until: null, interval: null, epochReason: "unban" };
+    default:
+      throw new Error(`sanctionFor called with a non-sanction kind: ${kind}`);
+  }
+}
+
 @Injectable()
 export class AdminService {
   constructor(
@@ -213,12 +258,34 @@ export class AdminService {
    */
   async decideModeration(
     caseId: string, staffId: string, kind: string, note?: string,
-  ): Promise<{ state: string }> {
-    return this.db.transaction(async (tx) => {
+    durationHours?: number,
+  ): Promise<{ state: string; sanction_applied: boolean }> {
+    // Applied AFTER the transaction commits, because bumping the revocation
+    // epoch is a separate connection's concern and must not hold this one
+    // open. Captured here so the branch inside the transaction can name it.
+    let sanctionedUser: string | null = null;
+    let epochReason: "suspension" | "ban" | "unban" | null = null;
+
+    const outcome = await this.db.transaction(async (tx) => {
       const [c] = await tx<Array<{ id: string; subject_type: string; subject_id: string }>>`
         select id, subject_type::text as subject_type, subject_id
           from moderation.mod_case
-         where id = ${caseId} and state in ('open', 'triage')
+         where id = ${caseId}
+           and (
+             state in ('open', 'triage')
+             -- Reversals are reachable on an ALREADY-ACTIONED case, which the
+             -- original filter made impossible: a suspension could be imposed
+             -- and never lifted, because deciding it moved the case to
+             -- 'actioned' and nothing would accept it again.
+             --
+             -- They are applied through the case that imposed the sanction
+             -- rather than through a "unban this user" endpoint, and that is
+             -- deliberate: such an endpoint would have to take an app_user_id,
+             -- which is precisely the value T4(e) says a moderator must never
+             -- be handed. Working in case-space keeps the durable id on the
+             -- server where it belongs.
+             or (state = 'actioned' and ${kind} in ('unban', 'restore_content'))
+           )
          for update`;
       if (!c) throw new NotFoundException("case_not_found");
 
@@ -237,7 +304,61 @@ export class AdminService {
         }
       }
 
-      const nextState = kind === "no_action" ? "dismissed" : "actioned";
+      // ---- account sanctions ----
+      //
+      // These wrote an audit row and nothing else until now: app_user.status
+      // was never read by anything in the product, so a ban left the student
+      // posting freely. Applying the status is only half of it; the other half
+      // is SanctionsService, which every write path now consults.
+      if (SANCTION_KINDS.has(kind)) {
+        // The author, resolved server-side from the authorship tables —
+        // public.post carries no author column, that is invariant 8. The
+        // moderator never sees this value; it is needed to act, not to show.
+        const [author] = await tx<Array<{ app_user_id: string }>>`
+          select coalesce(pa.app_user_id, ca.app_user_id, ra.app_user_id) as app_user_id
+            from (select 1) _
+            left join internal.post_author    pa on pa.post_id    = ${c.subject_id}
+            left join internal.comment_author ca on ca.comment_id = ${c.subject_id}
+            left join internal.review_author  ra on ra.review_id  = ${c.subject_id}
+           where coalesce(pa.app_user_id, ca.app_user_id, ra.app_user_id) is not null
+        `;
+
+        if (author) {
+          const s = sanctionFor(kind, durationHours);
+          await tx`
+            update public.app_user
+               set status = ${s.status}::public.app_user_status,
+                   suspended_until = ${s.until},
+                   updated_at = now()
+             where id = ${author.app_user_id}
+          `;
+          sanctionedUser = author.app_user_id;
+          epochReason = s.epochReason;
+
+          // The DURATION goes on the action row, which is what makes the trail
+          // say "suspended for 7 days" rather than just "suspended".
+          //
+          // target_app_user_id stays NULL, deliberately. The column exists,
+          // but T4(d) is that audit rows persist only a case-scoped label and
+          // never the durable id — the sanction needs to know who at the
+          // moment of acting, the record does not need to keep it. State lives
+          // on app_user; the trail records the case and the decision.
+          await tx`
+            update moderation.action
+               set duration = ${s.interval}
+             where case_id = ${caseId} and actor_staff_id = ${staffId}
+               and created_at = (select max(created_at) from moderation.action
+                                  where case_id = ${caseId})
+          `;
+        }
+      }
+
+      // A reversal resolves the case rather than actioning it again — the
+      // outcome is "this should not have stood", which is dismissal.
+      const nextState =
+        kind === "no_action" || kind === "unban" || kind === "restore_content"
+          ? "dismissed"
+          : "actioned";
       await tx`
         update moderation.mod_case
            set state = ${nextState}::moderation.mod_case_state,
@@ -247,5 +368,15 @@ export class AdminService {
 
       return { state: nextState };
     });
+
+    // A sanction that does not revoke is a sanction the student keeps using
+    // for up to a full token TTL. Outside the transaction: the epoch service
+    // owns its own writes and its own cache, and holding the moderation
+    // transaction open across that would couple two unrelated failure modes.
+    if (sanctionedUser && epochReason) {
+      await this.epochs.bump(sanctionedUser, epochReason);
+    }
+
+    return { ...outcome, sanction_applied: sanctionedUser !== null };
   }
 }

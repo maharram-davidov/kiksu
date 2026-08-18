@@ -4,6 +4,7 @@ import { ForumService } from "../src/modules/forum/forum.service";
 import { CursorService } from "../src/common/pagination/cursor.service";
 import { ModerationService } from "../src/modules/moderation/moderation.service";
 import type { KiksuRequestContext } from "../src/common/auth/request-context";
+import { SanctionsService } from "../src/common/sanctions/sanctions.service";
 
 /**
  * Run via `scripts/test-integration.sh`, which applies migrations + both seeds.
@@ -42,7 +43,7 @@ suite("forum service (integration)", () => {
       transaction: <T,>(fn: (tx: postgres.TransactionSql) => Promise<T>) =>
         sql.begin(fn) as Promise<T>,
     };
-    service = new ForumService(db as never, cursors, new ModerationService());
+    service = new ForumService(db as never, cursors, new ModerationService(), new SanctionsService(db as never));
 
     const [uni] = await sql`select id from ref.university where code = 'BDU'`;
     if (!uni) throw new Error("seed missing: BDU");

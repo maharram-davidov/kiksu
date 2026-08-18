@@ -4,6 +4,7 @@ import { ConfigModule } from "./config/config.module";
 import { DbModule } from "./common/db/db.module";
 import { AuthModule } from "./common/auth/auth.module";
 import { MailModule } from "./common/mail/mail.module";
+import { SanctionsModule } from "./common/sanctions/sanctions.module";
 import { AuthGuard } from "./common/auth/auth.guard";
 import { KiksuExceptionFilter } from "./common/errors/http-exception.filter";
 import { PaginationModule } from "./common/pagination/pagination.module";
@@ -30,6 +31,7 @@ import { ModerationModule } from "./modules/moderation/moderation.module";
     ConfigModule,
     DbModule,
     MailModule,
+    SanctionsModule,
     AuthModule,
     PaginationModule,
     RateLimitModule,

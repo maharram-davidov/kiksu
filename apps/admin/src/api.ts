@@ -174,9 +174,9 @@ export const adminApi = {
       { outcome, ...(note ? { note } : {}) },
     ),
   moderationQueue: () => api.get<ModerationCase[]>("/admin/moderation/queue"),
-  decideModeration: (caseId: string, kind: string, note?: string) =>
-    api.post<{ state: string }>(`/admin/moderation/${caseId}/decide`, {
-      kind,
-      ...(note ? { note } : {}),
-    }),
+  decideModeration: (caseId: string, kind: string, note?: string, durationHours?: number) =>
+    api.post<{ state: string; sanction_applied: boolean }>(
+      `/admin/moderation/${caseId}/decide`,
+      { kind, ...(note ? { note } : {}), ...(durationHours ? { duration_hours: durationHours } : {}) },
+    ),
 };

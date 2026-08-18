@@ -3,6 +3,7 @@ import { SqlProvider } from "../../common/db/sql.provider";
 import { CursorService } from "../../common/pagination/cursor.service";
 import { ModerationService } from "../moderation/moderation.service";
 import type { KiksuRequestContext } from "../../common/auth/request-context";
+import { SanctionsService } from "../../common/sanctions/sanctions.service";
 import type {
   BoardDto, CommentDto, CreateCommentInput, CreatePostInput,
   PostDetailDto, PostPageDto, PostSummaryDto,
@@ -64,6 +65,7 @@ export class ForumService {
     private readonly db: SqlProvider,
     private readonly cursors: CursorService,
     private readonly moderation: ModerationService,
+    private readonly sanctions: SanctionsService,
   ) {}
 
   async listBoards(user: KiksuRequestContext): Promise<BoardDto[]> {
@@ -299,6 +301,10 @@ export class ForumService {
    * thought better of it" (P3), which is precisely what the scheme hides.
    */
   async createPost(user: KiksuRequestContext, input: CreatePostInput): Promise<PostDetailDto> {
+    // A suspended or muted student may read, but not write. Checked before
+    // anything else so a refusal costs one query and leaves no partial state.
+    await this.sanctions.assertMayWrite(user);
+
     const postId = await this.db.transaction(async (tx) => {
       const [board] = await tx<Array<{ id: string; scope: string; university_id: string | null }>>`
         select b.id, b.scope::text, b.university_id
@@ -337,6 +343,7 @@ export class ForumService {
         targetType: "post", targetId: row.id,
         universityId: board.university_id ?? user.univId,
         title: input.title, body: input.body ?? null,
+        authorAppUserId: user.appUserId,
       });
       if (state !== "visible") {
         await tx`update public.post set moderation_state = ${state}::public.moderation_state
@@ -370,6 +377,10 @@ export class ForumService {
   async createComment(
     user: KiksuRequestContext, postId: string, input: CreateCommentInput,
   ): Promise<CommentDto> {
+    // A suspended or muted student may read, but not write. Checked before
+    // anything else so a refusal costs one query and leaves no partial state.
+    await this.sanctions.assertMayWrite(user);
+
     return this.db.transaction(async (tx) => {
       const [post] = await tx<Array<{ id: string }>>`
         select p.id from public.post p
@@ -418,6 +429,7 @@ export class ForumService {
       const state = await this.moderation.classifyOnWrite(tx, {
         targetType: "comment", targetId: row.id as string,
         universityId: user.univId, body: input.body,
+        authorAppUserId: user.appUserId,
       });
       if (state !== "visible") {
         await tx`update public.post_comment
@@ -453,6 +465,11 @@ export class ForumService {
   async votePost(
     user: KiksuRequestContext, postId: string, value: -1 | 0 | 1,
   ): Promise<{ score: number; your_vote: -1 | 0 | 1 }> {
+    // A vote is a write. It is also the cheapest possible interaction, which
+    // is exactly why a muted account has to be stopped from it — otherwise
+    // the sanction leaves the loudest signal a person can still send.
+    await this.sanctions.assertMayWrite(user);
+
     const { sql } = this.db;
 
     const [visible] = await sql<Array<{ id: string }>>`

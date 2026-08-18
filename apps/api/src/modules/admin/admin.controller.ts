@@ -19,9 +19,17 @@ const decideAppeal = z.object({
 const decideModeration = z.object({
   kind: z.enum([
     "no_action", "remove_content", "restore_content",
-    "warn", "mute", "suspend", "ban", "shadowban", "escalate_legal",
+    // `unban` has been in the action_kind enum from the start and was never
+    // offered — so a suspension could be applied and never lifted.
+    "warn", "mute", "suspend", "ban", "shadowban", "unban", "escalate_legal",
   ]),
   note: z.string().max(1000).optional(),
+  /**
+   * Hours, for mute and suspend. Omitted means the default (24h / 7d).
+   * Capped at a year: a "temporary" sanction longer than that is a ban and
+   * should be recorded as one, so the student is told which it is.
+   */
+  duration_hours: z.coerce.number().int().positive().max(24 * 365).optional(),
 });
 
 /**
@@ -77,9 +85,9 @@ export class AdminController {
     @Req() req: Request,
     @Param("id") id: string,
     @Body() body: unknown,
-  ): Promise<{ state: string }> {
+  ): Promise<{ state: string; sanction_applied: boolean }> {
     const b = decideModeration.parse(body);
-    return this.admin.decideModeration(id, req.kiksuStaff!.id, b.kind, b.note);
+    return this.admin.decideModeration(id, req.kiksuStaff!.id, b.kind, b.note, b.duration_hours);
   }
 
   /**

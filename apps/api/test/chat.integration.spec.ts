@@ -4,6 +4,7 @@ import { ChatService } from "../src/modules/chat/chat.service";
 import { CommerceService } from "../src/modules/commerce/commerce.service";
 import { ModerationService } from "../src/modules/moderation/moderation.service";
 import type { KiksuRequestContext } from "../src/common/auth/request-context";
+import { SanctionsService } from "../src/common/sanctions/sanctions.service";
 
 const url = process.env.DATABASE_URL;
 const suite = url ? describe : describe.skip;
@@ -23,8 +24,8 @@ suite("deal chat (integration)", () => {
       sql,
       transaction: <T,>(fn: (tx: postgres.TransactionSql) => Promise<T>) => sql.begin(fn) as Promise<T>,
     };
-    chat = new ChatService(db as never, new ModerationService());
-    commerce = new CommerceService(db as never);
+    chat = new ChatService(db as never, new ModerationService(), new SanctionsService(db as never));
+    commerce = new CommerceService(db as never, new SanctionsService(db as never));
 
     const [uni] = await sql`select id from ref.university where code = 'BDU'`;
     const mk = async (handle: string): Promise<KiksuRequestContext> => {

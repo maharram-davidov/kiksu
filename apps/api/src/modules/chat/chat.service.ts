@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { SqlProvider } from "../../common/db/sql.provider";
 import type { KiksuRequestContext } from "../../common/auth/request-context";
 import { ModerationService } from "../moderation/moderation.service";
+import { SanctionsService } from "../../common/sanctions/sanctions.service";
 import type {
   ChatMessageDto, ChatParticipantDto, ConversationDto, ConversationSummaryDto,
 } from "./chat.types";
@@ -23,6 +24,7 @@ export class ChatService {
   constructor(
     private readonly db: SqlProvider,
     private readonly moderation: ModerationService,
+    private readonly sanctions: SanctionsService,
   ) {}
 
   /**
@@ -209,6 +211,10 @@ export class ChatService {
     conversationId: string,
     input: { body?: string; offerPriceMinor?: number },
   ): Promise<ChatMessageDto> {
+    // A suspended or muted student may read, but not write. Checked before
+    // anything else so a refusal costs one query and leaves no partial state.
+    await this.sanctions.assertMayWrite(user);
+
     return this.db.transaction(async (tx) => {
       const [participant] = await tx<Array<{ id: string }>>`
         select c.id from public.conversation c
@@ -239,6 +245,7 @@ export class ChatService {
       const hits = await this.moderation.classifyOnWrite(tx, {
         targetType: "post", targetId: row.id as string,
         universityId: user.univId, body: input.body ?? null,
+        authorAppUserId: user.appUserId,
       });
       const limited = hits !== "visible";
       if (limited) {

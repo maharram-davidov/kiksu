@@ -226,13 +226,15 @@ screens render real data.
 - **`graduate` and `expired` tiers are unreachable.** No graduation
   transition and no credential-expiry job exist, so no row can produce them.
   Deliberately not faked from `status` — suspension is not expiry.
-- **Account sanctions do nothing.** `decideModeration` accepts `mute`,
-  `suspend`, `ban` and `shadowban`, writes an audit row, and never touches
-  `app_user.status`. A banned student keeps posting. The console offers these
-  actions because the API accepts them, in a box that says so. Appeals do not
-  depend on this: an action is recorded either way, so it is contestable
-  either way, and when sanctions become real they inherit a working appeal
-  path.
+- **Shadowban hides less than the name implies.** The other sanctions are
+  real now: mute, suspend, ban and unban write `app_user.status` and every
+  write path checks it via `SanctionsService`. Shadowban writes the status and
+  limits the author's new content at write time, which avoids putting
+  `internal.post_author` into every feed query — that join is what invariant 8
+  exists to prevent. But `limited` content still appears in the forum feed
+  (`moderation_state in ('visible','limited')`), so a shadowbanned student is
+  currently hidden only where `limited` is actually hidden, which is chat.
+  Tightening that is a read-path decision nobody has taken yet.
 - **Appeals cover CONTENT decisions only in practice.** The path itself is
   kind-agnostic, but the only decisions that currently change what a student
   sees are `limit` (automod) and `remove_content`. There is no notification

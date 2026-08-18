@@ -3,6 +3,7 @@ import postgres from "postgres";
 import { IngestService } from "../src/modules/ingest/ingest.service";
 import { CommerceService } from "../src/modules/commerce/commerce.service";
 import type { KiksuRequestContext } from "../src/common/auth/request-context";
+import { SanctionsService } from "../src/common/sanctions/sanctions.service";
 
 const url = process.env.DATABASE_URL;
 const suite = url ? describe : describe.skip;
@@ -30,7 +31,7 @@ suite("vacancy ingestion (integration)", () => {
       transaction: <T,>(fn: (tx: postgres.TransactionSql) => Promise<T>) => sql.begin(fn) as Promise<T>,
     };
     ingest = new IngestService(db as never);
-    commerce = new CommerceService(db as never);
+    commerce = new CommerceService(db as never, new SanctionsService(db as never));
     const [uni] = await sql`select id from ref.university where code = 'BDU'`;
     user = {
       authUserId: "a", appUserId: "b", tier: "email",

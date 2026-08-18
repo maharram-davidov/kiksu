@@ -1,19 +1,8 @@
 import React from "react";
 import { ApiError, adminApi, type ModerationCase } from "./api";
 
-/**
- * The nine decisions the API accepts, split by whether they currently DO
- * anything.
- *
- * `decideModeration` writes a row to `moderation.action` and, for
- * `remove_content`, sets `moderation_state` on the content. It never touches
- * `public.app_user.status` — so mute, suspend, ban and shadowban are recorded
- * and have no effect: the student keeps posting. The API accepts them, so the
- * console offers them, but it says which is which. A ban button that silently
- * does nothing is worse than no ban button, because a moderator walks away
- * believing the case is handled.
- */
-const EFFECTIVE = [
+/** Decisions about the CONTENT. */
+const CONTENT_ACTIONS = [
   { kind: "no_action", label: "Tədbir yoxdur" },
   { kind: "remove_content", label: "Məzmunu sil" },
   { kind: "restore_content", label: "Bərpa et" },
@@ -21,11 +10,22 @@ const EFFECTIVE = [
   { kind: "escalate_legal", label: "Hüquqa ötür" },
 ] as const;
 
-const RECORDED_ONLY = [
-  { kind: "mute", label: "Səssiz" },
-  { kind: "suspend", label: "Dayandır" },
-  { kind: "ban", label: "Ban" },
-  { kind: "shadowban", label: "Kölgə ban" },
+/**
+ * Decisions about the ACCOUNT. These are real now.
+ *
+ * They used to write an audit row and nothing else — `app_user.status` was
+ * read by nothing in the product, so a ban left the student posting freely,
+ * and this console said so in a warning box. Both halves exist now: the
+ * status is written and every write path checks it.
+ *
+ * `takesDuration` marks the two that are temporary. Omitting it means the
+ * server default — 24h for a mute, 7 days for a suspension.
+ */
+const ACCOUNT_ACTIONS = [
+  { kind: "mute", label: "Səssiz", takesDuration: true },
+  { kind: "suspend", label: "Dayandır", takesDuration: true },
+  { kind: "ban", label: "Ban", takesDuration: false },
+  { kind: "shadowban", label: "Kölgə ban", takesDuration: false },
 ] as const;
 
 /**
@@ -52,6 +52,8 @@ export function ModerationQueue() {
   const [cases, setCases] = React.useState<ModerationCase[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
+  /** Per-case duration in hours, for the two temporary sanctions. */
+  const [hours, setHours] = React.useState<Record<string, string>>({});
 
   const load = React.useCallback(() => {
     adminApi
@@ -62,10 +64,10 @@ export function ModerationQueue() {
 
   React.useEffect(load, [load]);
 
-  const decide = async (caseId: string, kind: string) => {
+  const decide = async (caseId: string, kind: string, durationHours?: number) => {
     setBusy(caseId);
     try {
-      await adminApi.decideModeration(caseId, kind);
+      await adminApi.decideModeration(caseId, kind, undefined, durationHours);
       load();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
@@ -83,6 +85,8 @@ export function ModerationQueue() {
       <div className="note">
         Müəllif göstərilmir və göstərilməməlidir. Moderator məzmuna və şikayət
         sayına baxır — ləqəb, karma və digər işlər görünmür (identity spec T4).
+        Hesab tədbirləri müəllifə serverdə tətbiq olunur; kimin olduğu burada
+        görünmür.
       </div>
 
       {cases.map((c) => (
@@ -106,7 +110,7 @@ export function ModerationQueue() {
           <p className="excerpt">{c.excerpt ?? <em>məzmun mövcud deyil</em>}</p>
 
           <div className="actions">
-            {EFFECTIVE.map((a) => (
+            {CONTENT_ACTIONS.map((a) => (
               <button
                 key={a.kind}
                 className={a.kind === "remove_content" ? "danger" : ""}
@@ -118,21 +122,41 @@ export function ModerationQueue() {
             ))}
           </div>
 
-          <div className="note warn" style={{ marginBottom: 0 }}>
-            Aşağıdakılar yalnız qeydə alınır — hesabın statusu dəyişmir, istifadəçi
-            yazmağa davam edir. Sanksiyalar hələ tətbiq olunmur.
-            <div className="actions">
-              {RECORDED_ONLY.map((a) => (
-                <button
-                  key={a.kind}
-                  className="inert"
-                  disabled={busy === c.case_id}
-                  onClick={() => void decide(c.case_id, a.kind)}
-                >
-                  {a.label}
-                </button>
-              ))}
-            </div>
+          <div className="actions" style={{ marginTop: 6 }}>
+            <input
+              className="notefield"
+              style={{ width: 130, marginTop: 0 }}
+              type="number"
+              min={1}
+              placeholder="saat (istəyə bağlı)"
+              value={hours[c.case_id] ?? ""}
+              onChange={(e) => setHours((h) => ({ ...h, [c.case_id]: e.target.value }))}
+            />
+            {ACCOUNT_ACTIONS.map((a) => (
+              <button
+                key={a.kind}
+                className="danger"
+                disabled={busy === c.case_id}
+                onClick={() =>
+                  void decide(
+                    c.case_id, a.kind,
+                    a.takesDuration ? Number(hours[c.case_id]) || undefined : undefined,
+                  )
+                }
+              >
+                {a.label}
+              </button>
+            ))}
+            <button disabled={busy === c.case_id} onClick={() => void decide(c.case_id, "unban")}>
+              Tədbiri götür
+            </button>
+          </div>
+
+          <div className="note" style={{ marginBottom: 0 }}>
+            Səssiz və Dayandır müvəqqətidir — saat yazmasan, 24 saat və 7 gün.
+            Ban müddətsizdir. <strong>Kölgə ban</strong> istifadəçini bloklamır:
+            yazmağa davam edir və özü görür, amma yeni məzmunu başqalarına
+            göstərilmir — bunu bilməməlidir.
           </div>
         </div>
       ))}

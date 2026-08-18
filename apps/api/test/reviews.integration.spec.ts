@@ -3,6 +3,7 @@ import postgres from "postgres";
 import { ReviewsService } from "../src/modules/reviews/reviews.service";
 import { ModerationService } from "../src/modules/moderation/moderation.service";
 import type { KiksuRequestContext } from "../src/common/auth/request-context";
+import { SanctionsService } from "../src/common/sanctions/sanctions.service";
 
 const url = process.env.DATABASE_URL;
 const suite = url ? describe : describe.skip;
@@ -20,7 +21,7 @@ suite("reviews service (integration)", () => {
       sql,
       transaction: <T,>(fn: (tx: postgres.TransactionSql) => Promise<T>) => sql.begin(fn) as Promise<T>,
     };
-    service = new ReviewsService(db as never, new ModerationService());
+    service = new ReviewsService(db as never, new ModerationService(), new SanctionsService(db as never));
 
     const [uni] = await sql`select id from ref.university where code = 'BDU'`;
     const [i] = await sql`select id from ref.instructor where slug = 'nigar-eliyeva'`;
@@ -183,7 +184,7 @@ suite("review composer inputs (integration)", () => {
       sql,
       transaction: <T,>(fn: (tx: postgres.TransactionSql) => Promise<T>) => sql.begin(fn) as Promise<T>,
     };
-    service = new ReviewsService(db as never, new ModerationService());
+    service = new ReviewsService(db as never, new ModerationService(), new SanctionsService(db as never));
     const [uni] = await sql`select id from ref.university where code = 'BDU'`;
     uniId = uni!.id as string;
   });

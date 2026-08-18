@@ -39,8 +39,25 @@ export class ModerationService {
       universityId: string;
       title?: string | null;
       body?: string | null;
+      /** The writer, when the caller knows it — used for the shadowban check. */
+      authorAppUserId?: string;
     },
   ): Promise<"visible" | "limited"> {
+    // A shadowbanned author's content is limited on the way in.
+    //
+    // Done HERE, at write, because the author is already known at this point.
+    // The alternative — filtering shadowbanned authors out of feeds — would
+    // put internal.post_author into every read query in the forum, which is
+    // exactly the join invariant 8 exists to prevent, for the sake of a
+    // sanction that is rarely used.
+    //
+    // No case is opened and nothing is logged against the post: the whole
+    // point of a shadowban is that the person cannot tell it happened, and a
+    // moderation case they could later see in /me/moderation would tell them.
+    if (input.authorAppUserId && (await this.isShadowbanned(tx, input.authorAppUserId))) {
+      return "limited";
+    }
+
     const hits = runRules([input.title, input.body].filter(Boolean).join("\n"));
     if (hits.length === 0) return "visible";
 
@@ -82,6 +99,17 @@ export class ModerationService {
       );
     }
     return limit ? "limited" : "visible";
+  }
+
+  private async isShadowbanned(
+    tx: postgres.TransactionSql,
+    appUserId: string,
+  ): Promise<boolean> {
+    const [row] = await tx<Array<{ shadowbanned: boolean }>>`
+      select status = 'shadowbanned' as shadowbanned
+        from public.app_user where id = ${appUserId}
+    `;
+    return row?.shadowbanned ?? false;
   }
 
   private async openCase(

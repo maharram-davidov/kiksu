@@ -3,6 +3,7 @@ import { SqlProvider } from "../../common/db/sql.provider";
 import { ModerationService } from "../moderation/moderation.service";
 import type { KiksuRequestContext } from "../../common/auth/request-context";
 import type { Locale } from "../../common/locale/locale";
+import { SanctionsService } from "../../common/sanctions/sanctions.service";
 import type {
   InstructorProfileDto, ReviewAccessDto, ReviewDto, ReviewPageDto,
   ReviewableDto, ReviewTagDto,
@@ -30,6 +31,7 @@ export class ReviewsService {
   constructor(
     private readonly db: SqlProvider,
     private readonly moderation: ModerationService,
+    private readonly sanctions: SanctionsService,
   ) {}
 
   /**
@@ -203,6 +205,10 @@ export class ReviewsService {
       tags: string[]; body?: string;
     },
   ): Promise<{ id: string; access: ReviewAccessDto }> {
+    // A suspended or muted student may read, but not write. Checked before
+    // anything else so a refusal costs one query and leaves no partial state.
+    await this.sanctions.assertMayWrite(user);
+
     const id = await this.db.transaction(async (tx) => {
       const [term] = await tx<Array<{ id: string }>>`
         select id from ref.term where university_id = ${user.univId} and is_current`;
@@ -259,6 +265,7 @@ export class ReviewsService {
       const state = await this.moderation.classifyOnWrite(tx, {
         targetType: "review", targetId: row.id,
         universityId: user.univId, body: input.body ?? null,
+        authorAppUserId: user.appUserId,
       });
       if (state !== "visible") {
         await tx`update public.review set moderation_state = ${state}::public.moderation_state

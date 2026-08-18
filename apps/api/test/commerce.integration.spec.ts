@@ -2,6 +2,7 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import postgres from "postgres";
 import { CommerceService } from "../src/modules/commerce/commerce.service";
 import type { KiksuRequestContext } from "../src/common/auth/request-context";
+import { SanctionsService } from "../src/common/sanctions/sanctions.service";
 
 const url = process.env.DATABASE_URL;
 const suite = url ? describe : describe.skip;
@@ -18,7 +19,7 @@ suite("commerce service (integration)", () => {
       sql,
       transaction: <T,>(fn: (tx: postgres.TransactionSql) => Promise<T>) => sql.begin(fn) as Promise<T>,
     };
-    service = new CommerceService(db as never);
+    service = new CommerceService(db as never, new SanctionsService(db as never));
     const [uni] = await sql`select id from ref.university where code = 'BDU'`;
     if (!uni) throw new Error("seed missing: BDU");
     user = {

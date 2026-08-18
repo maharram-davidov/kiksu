@@ -3,6 +3,7 @@ import { SqlProvider } from "../../common/db/sql.provider";
 import type { KiksuRequestContext } from "../../common/auth/request-context";
 import { runRules, worstSeverity } from "../moderation/rules";
 import type { CategoryDto, CreateListingInput, ListingDto, VacancyDto } from "./commerce.types";
+import { SanctionsService } from "../../common/sanctions/sanctions.service";
 
 /**
  * Marketplace and vacancy reads.
@@ -14,7 +15,10 @@ import type { CategoryDto, CreateListingInput, ListingDto, VacancyDto } from "./
  */
 @Injectable()
 export class CommerceService {
-  constructor(private readonly db: SqlProvider) {}
+  constructor(
+    private readonly db: SqlProvider,
+    private readonly sanctions: SanctionsService,
+  ) {}
 
   /**
    * The columns both the list and the detail select.
@@ -113,6 +117,10 @@ export class CommerceService {
   async createListing(
     user: KiksuRequestContext, input: CreateListingInput,
   ): Promise<ListingDto> {
+    // A suspended or muted student may read, but not write. Checked before
+    // anything else so a refusal costs one query and leaves no partial state.
+    await this.sanctions.assertMayWrite(user);
+
     const id = await this.db.transaction(async (tx) => {
       const [cat] = await tx<Array<{ id: string }>>`
         select id from ref.marketplace_category where key = ${input.categoryKey} and is_active`;
