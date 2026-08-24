@@ -274,10 +274,40 @@ privileged identity hides tier-gating bugs. The script also now picks a **named*
 student rather than whichever handle sorts first, which silently moved
 development onto a different account whenever a seed handle was added.
 
-**Still not verified:** nobody has tapped through add/drop/recolour in the
-simulator. Both screens were confirmed to render with live data and the
-endpoints were exercised over HTTP, but the button-to-endpoint path is proven
-only by the integration suite, not by touch.
+**Still not verified, and closed by decision rather than left open:** nobody has
+tapped through add/drop/recolour in the simulator. Both screens were confirmed
+rendering with live data, every endpoint was exercised over HTTP, and sixteen
+integration tests cover add, drop, recolour, soft-drop semantics, absence
+survival and own-row isolation. The gap is narrow and specific — *that the
+button handlers are wired to the right mutations* — not the behaviour beneath
+them. The product owner judged the existing evidence sufficient and stopped the
+work; this is a taken decision, not an oversight to be quietly reopened.
+
+### The simulator control panel cannot attach on this machine
+
+Worth writing down because it cost three rounds of investigation and would cost
+them again. The Claude Code iOS Simulator panel refuses with *"Xcode is
+installed but not selected. Run `sudo xcode-select -s
+/Applications/Xcode.app/Contents/Developer`"*. That message is misleading here:
+
+- `xcode-select -p` returns the correct Xcode path, and so does a clean
+  environment with `DEVELOPER_DIR` unset.
+- `xcodebuild -version` reports Xcode 26.6 and `-checkFirstLaunchStatus` exits 0.
+- The iPhoneSimulator platform, its SDK, and `CoreSimulator.framework` are all
+  present, and `xcrun simctl` works fine.
+- **There is no `/var/db/xcode_select_link` at all**, so `xcode-select -p` is
+  answering from a fallback default rather than a persisted selection. Running
+  the suggested `sudo xcode-select -s ...` did not create it.
+- **`DevToolsSecurity -status` reports developer mode disabled**, which is the
+  one setting on the machine that is genuinely not configured
+  (`sudo DevToolsSecurity -enable`). Whether that is what the panel actually
+  checks was never established.
+
+There is no fallback: `simctl` cannot synthesise touches, and no `idb`,
+`idb_companion` or Appium is installed. So **simulator verification on this
+machine is limited to deep links and screenshots** — which is enough to confirm
+a screen renders and to catch layout bugs (it caught two), but cannot press a
+button. Plan verification accordingly rather than assuming a tap is available.
 
 ## Defects found by execution this session
 
