@@ -169,7 +169,7 @@
     <span>Build plan <b style="color:var(--teal)">v1</b> · revised 18 Aug</span>
     <span>Design import: Kiksu Mobile UI Design · 10 screens</span>
     <span>13 agents · 3 model tiers</span>
-    <span>Status <b style="color:var(--bronze)">Spine feature-complete · global search shipped; the dev build is the last item, the wordlist the last blocker</b></span>
+    <span>Status <b style="color:var(--bronze)">Spine done bar a phone · dev build runs on the Simulator, creation flows are real, the wordlist is the last blocker</b></span>
   </p>
   <h1>Kiksu build plan</h1>
   <p class="sub">Stack, phone-preview workflow, and the agent orchestration — who builds what, on which model, and why the cheap tier is safe to use where it is.</p>
@@ -186,10 +186,15 @@
   <p>Both switches §0.2 used to warn about have been flipped, and neither was flipped on
   trust. The access-token hook is registered and was proven end to end against the live
   project; a real verification code was delivered to a real Azerbaijani university mailbox
-  and landed in the inbox. Account sanctions are real rather than recorded-only.
-  <strong>Global search shipped since, which was the last Spine feature</strong> — so what
-  remains in Spine is not a feature at all, it is the development build that was scheduled
-  for week three.</p>
+  and landed in the inbox. Account sanctions are real rather than recorded-only. Global
+  search shipped, the <strong>development build now compiles and runs</strong>, and the
+  creation flows a student actually needs — start a thread, edit a timetable — exist for
+  the first time.</p>
+
+  <p><strong>Spine is done except for one word in its own definition: "phone".</strong> The
+  dev build runs on the iOS Simulator, which unblocks native modules but cannot receive
+  remote push and is not a device. Getting it onto a phone needs an Expo login and Apple
+  signing credentials, which are the owner's to enter. That is the whole of what is left.</p>
 
   <p><strong>The top risk is no longer a switch, and it is still not code.</strong>
   Frankfurt is current, all 11 invariants pass against it, auth mints correct claims and
@@ -199,10 +204,10 @@
   amount of engineering retires.</p>
 
   <dl class="statgrid">
-    <div><dt>Commits</dt><dd>69</dd></div>
-    <div><dt>Tests</dt><dd>355</dd></div>
+    <div><dt>Commits</dt><dd>72</dd></div>
+    <div><dt>Tests</dt><dd>371</dd></div>
     <div><dt>API modules</dt><dd>15</dd></div>
-    <div><dt>Mobile screens</dt><dd>23</dd></div>
+    <div><dt>Mobile screens</dt><dd>25</dd></div>
     <div><dt>Console screens</dt><dd>3</dd></div>
     <div><dt>Schema invariants</dt><dd>11</dd></div>
     <div><dt>Tables</dt><dd>97</dd></div>
@@ -221,9 +226,9 @@
       </tr>
       <tr>
         <td class="k">Spine</td><td class="mono">3–6</td>
-        <td><span class="bar part"><i style="width:97%"></i></span></td>
-        <td><span class="m s-part">~97%</span></td>
-        <td><strong>Feature-complete.</strong> Reviews, the admin console, class detail, the profile and now global search across five corpora, paginated to the end. The attendance gap listed here in earlier revisions was wrong twice over: attendance is self-reported, <code>ClassDetailSheet</code> already renders it against the exclusion limit, and the standalone screen was dropped by product decision rather than left undone. <strong>Left: the dev build only</strong> — still on Expo Go with no <code>eas.json</code>, so push, the widget, MMKV and on-device OCR remain untestable. That is tooling, not product, which is why this row is at 97 rather than 100.</td>
+        <td><span class="bar part"><i style="width:98%"></i></span></td>
+        <td><span class="m s-part">~98%</span></td>
+        <td><strong>Feature-complete, and the dev build exists.</strong> Reviews, the admin console, class detail, the profile, global search across five corpora, and the creation flows: a forum composer, a timetable editor with add/drop and a colour picker, and <code>dev-api.sh --card</code> for testing card-gated surfaces. <code>eas.json</code> lands with four profiles and a local Simulator build compiles clean. <strong>Left: a build on an actual phone</strong>, which needs an Expo login and Apple signing credentials rather than a commit. Not 100 because Spine's own wording is "first dev build on your phone", and a Simulator is not one — nor can it ever prove push.</td>
       </tr>
       <tr>
         <td class="k">Community</td><td class="mono">7–10</td>
@@ -241,7 +246,7 @@
         <td class="k">Hardening</td><td class="mono">15–16</td>
         <td><span class="bar"><i style="width:0%"></i></span></td>
         <td><span class="m s-none">Not started</span></td>
-        <td>Everything. The gate has grown to 355 tests and 11 invariants and runs on every change, which is still not the same as an audit. The invariants have now been run against the live project; the test suite still has not.</td>
+        <td>Everything. The gate has grown to 371 tests and 11 invariants and runs on every change, which is still not the same as an audit. The invariants have now been run against the live project; the test suite still has not.</td>
       </tr>
     </tbody>
   </table>
@@ -290,20 +295,21 @@
     <li><strong>Onboarding</strong> — university picker, email OTP <em>delivered</em>, student card submission. Sends are capped at 1/60s, 3/hour, 10/day, keyed on the credential HMAC so no address reaches the limiter.</li>
     <li><strong>Reviews</strong> — professor profile, review list, composer and contribution wall. 4 of the 11 RV screens; the other 7 need endpoints that do not exist.</li>
     <li><strong>Global search</strong> — five endpoints over posts, courses, instructors, listings and vacancies, paginated to the end, with the mobile screen behind the header search icons that were inert placeholders until now. Five endpoints rather than one aggregate because a combined response would carry a thread alias and a seller handle in one body, which assertion 21 forbids and CI checks mechanically. <strong>No people corpus, and there must never be one</strong> — T11: fuzzy handle matching enumerates the user base along with each student's university and year.</li>
+    <li><strong>Creation flows</strong> — the things a student does rather than reads: a forum composer with the national-boards-only campus badge, a timetable editor with add, drop, and a per-course colour, and <code>dev-api.sh --card</code> for exercising card-gated surfaces. Dropping a course is a <em>state change, not a delete</em>: absence rows hang off the enrollment, so a hard delete would let a student drop and re-add to launder an absence counter back under the exam-exclusion limit.</li>
+    <li><strong>Dev build</strong> — <code>eas.json</code> with four profiles, and a local iOS Simulator build that compiles clean and runs against Metro with live data. Native modules link, so MMKV is unblocked. Push is not, and cannot be here: a Simulator cannot receive remote push.</li>
     <li><strong>Internal console</strong> — a fourth workspace. Verification queue with signed-URL card viewing (logged to <code>identity.access_log</code> before the URL is minted), moderation queue, appeals queue.</li>
     <li><strong>Forum, Today, Bazar, Karyera</strong> — boards through to thread with per-thread aliasing; the landing screen in one round trip; listings, deal chat and offers writable; vacancies scraped from work.az.</li>
   </ul>
 
   <h3>0.4 What I would do next, in order</h3>
-  <p>Global search has come off this list since the last revision, and nothing has replaced
-  it. Every remaining item is either tooling or a person — there is no outstanding product
-  feature in Spine.</p>
+  <p>The dev build has come off this list too. What is left is one thing only the owner can
+  do, one thing only a native speaker can do, and one decision nobody has taken.</p>
   <ol>
-    <li><strong>Take the dev build.</strong> Now the oldest thing on the page: scheduled for
-    week 3 and four phases overdue. It blocks push notifications, the home-screen widget,
-    MMKV and on-device OCR, and every week it slips is another week those four stay entirely
-    unproven rather than merely unfinished. It is also the only Spine item left, which makes
-    it the thing standing between this phase and done.</li>
+    <li><strong>Put a build on a real phone.</strong> The Simulator build proves the native
+    toolchain; it cannot prove push, and it is not a device. This needs an Expo login and
+    Apple signing credentials — <em>credentials are the owner's to enter, not an
+    engineer's</em>, which is precisely why this has not been done for you. Everything up to
+    the two commands is in place.</li>
     <li><strong>Get the handle wordlist reviewed by a native speaker.</strong> Second by
     order, first by consequence: it is the only item anywhere on this page that blocks launch
     outright, and no amount of engineering retires it.</li>
@@ -341,6 +347,27 @@
     Applied to all four scripts including <code>dev-api.sh</code>, where a developer
     searching the local app and getting nothing would have concluded search was broken.</p>
   </div>
+  <div class="box">
+    <span class="t">0.5b Expo Go was hiding two broken native dependencies</span>
+    <p>Taking the dev build paid for itself in two minutes. Expo Go ships its own bundled
+    native modules and the JS calls <em>those</em>, so a wrong version in
+    <code>package.json</code> is invisible; a dev build compiles what is actually installed.
+    <strong><code>expo-secure-store</code> was at 57.0.1 where SDK 54 wants ~15.0.8</strong>
+    — a different major from a future SDK train, in the module that holds the auth session.
+    Its eleven tests never caught it because the chunked store deliberately imports nothing
+    from Expo and runs against a fake backend, which is good design and, here, precisely the
+    blind spot. <code>expo-font</code> was not a direct dependency at all and never
+    autolinked, so the first build died on <code>Cannot find native module
+    'ExpoFontLoader'</code>.</p>
+    <p><strong>And the seeded academic term had rotted into the past.</strong>
+    <code>ref.term</code> hardcoded 2025/26 Payız — ended January, add/drop closed the
+    previous October — while still flagged <code>is_current</code>. Every attempt to add a
+    course would have failed <code>term_closed</code> even with a finished editor, and "no
+    classes today" was simply true. Dates now derive from <code>current_date</code>. Nothing
+    was broken; the fixture was months in the past, which is far harder to notice than a
+    failure.</p>
+  </div>
+
   <p>The other three, each found by running rather than reading: every date and price sort
   raised <code>numeric field overflow</code>, because the keyset projected sorts into a
   <code>numeric(12,8)</code> that holds four integer digits where an epoch needs twelve —
@@ -585,7 +612,7 @@ application(vacancy_id, career_profile_id)        <b>-- the only Layer-4 join</b
     <thead><tr><th>Phase</th><th>Weeks</th><th>Ships</th><th>Agents</th><th>Now</th></tr></thead>
     <tbody>
       <tr><td class="k">Contracts</td><td class="mono">1–2</td><td>Schema, identity spec, OpenAPI, tokens, repo and CI skeleton.</td><td><span class="m m-o">Opus ×3</span> <span class="m m-h">Haiku ×1</span></td><td><span class="m s-done">Done</span></td></tr>
-      <tr><td class="k">Spine</td><td class="mono">3–6</td><td>Onboarding and verification end to end, timetable with attendance, the ten screens as real components. First dev build on your phone.</td><td><span class="m m-s">Sonnet ×5</span> <span class="m m-o">Opus ×2</span></td><td><span class="m s-part">~97%</span></td></tr>
+      <tr><td class="k">Spine</td><td class="mono">3–6</td><td>Onboarding and verification end to end, timetable with attendance, the ten screens as real components. First dev build on your phone.</td><td><span class="m m-s">Sonnet ×5</span> <span class="m m-o">Opus ×2</span></td><td><span class="m s-part">~98%</span></td></tr>
       <tr><td class="k">Community</td><td class="mono">7–10</td><td>Boards, posts, polls, thread aliasing, comments, moderation queue, reviews with the contribution wall.</td><td><span class="m m-s">Sonnet ×4</span> <span class="m m-o">Opus ×2</span></td><td><span class="m s-part">~80%</span></td></tr>
       <tr><td class="k">Commerce</td><td class="mono">11–14</td><td>Marketplace with deal chat and trade ratings, vacancies, employer console. <em>Career identity dropped — careers is aggregation-only.</em></td><td><span class="m m-s">Sonnet ×4</span> <span class="m m-o">Opus ×2</span></td><td><span class="m s-part">~55%</span></td></tr>
       <tr><td class="k">Hardening</td><td class="mono">15–16</td><td>Full security audit, performance pass on seeded data, store submission, catalogue loaded for campus one.</td><td><span class="m m-o">Opus ×3</span></td><td><span class="m s-none">—</span></td></tr>
