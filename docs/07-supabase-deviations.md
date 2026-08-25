@@ -277,7 +277,7 @@ actually running on the platform's own linter.
 | ERROR | 1 | `public.public_profiles` is a `SECURITY DEFINER`-equivalent view (`security_invoker = off`) | **Intentional, documented.** This is the entire point of the view — it is the one sanctioned cross-user read, and `docs/01-schema-notes.md` ("Public profile projection") explains exactly why `security_invoker` must be off here: the view has to read across users, which `app_user`'s own-row RLS forbids. Safety comes from the six-column allowlist (enforced by invariant 7), not from RLS. Not a regression; a reviewed trade-off the linter cannot distinguish from a mistake. |
 | WARN | 24 | `function_search_path_mutable` — most `util.*` functions and most trigger functions (`tg_*`) do not `SET search_path` | **Pre-existing gap in `docs/01-schema.sql`, not introduced by the split.** The source is inconsistent: `SECURITY DEFINER` functions almost all set `search_path` explicitly (e.g. `public.current_app_user_id`, `identity.unseal`), but plain `LANGUAGE SQL`/`plpgsql` helpers and trigger functions (`util.fold_text`, `util.uuid_v7`, `public.tg_post_vote_counts`, etc.) do not. Worth a follow-up migration; out of scope for a mechanical split. |
 | WARN | 12 | `anon_security_definer_function_executable` / `authenticated_security_definer_function_executable` on the six RLS-helper functions (`can_read_board`, `current_app_user_id`, `current_tier`, `current_university_id`, `is_conversation_participant`, `is_enrolled_in_section`) | **Intentional** — these are explicitly granted `EXECUTE` to `authenticated` (and now `service_role`) in section 19/migration `0016`, precisely so they can be called both inside RLS policies and directly. All are read-only boolean/id checks; none return sensitive data beyond what RLS already permits the caller to see. |
-| WARN | 12 | Same two lint rules on six maintenance/recompute functions (`fold_karma_ledger`, `refresh_view_counts`, `refresh_complaint_counts`, `refresh_absence_limits`, `refresh_contributor_levels`, `recompute_seller_stats`) — callable by **anon**, not just `authenticated` | **Real pre-existing gap, flagged here, not fixed.** These are `SECURITY DEFINER` and were never given an explicit grant to anyone in the source — but Postgres grants `EXECUTE` on newly created functions to `PUBLIC` by default, and `docs/01-schema.sql` only ever `revoke`s that default for the three truly dangerous identity-unsealing functions (`identity.unseal`, `identity.resolve_app_user`, `identity.resolve_subject` — see lines 313, 338, 358 of the source). It never runs the equivalent `revoke execute ... from public;` for these six. None of them leak identity data (they return row counts / do idempotent recomputation), so this is a hardening gap, not a Layer 1–4 breach — but it means an unauthenticated caller can currently trigger `fold_karma_ledger()` etc. via `/rest/v1/rpc/...`. Recommended follow-up: `revoke execute on function public.fold_karma_ledger(integer), public.refresh_view_counts(), public.refresh_complaint_counts(), public.refresh_absence_limits(), public.refresh_contributor_levels(), public.recompute_seller_stats(interval) from public, anon;` |
+| WARN | 12 | Same two lint rules on six maintenance/recompute functions (`fold_karma_ledger`, `refresh_view_counts`, `refresh_complaint_counts`, `refresh_absence_limits`, `refresh_contributor_levels`, `recompute_seller_stats`) — callable by **anon**, not just `authenticated` | **FIXED by migration `0017_lock_down_function_execute.sql`. This row describes the state in August 2026 and is kept for the record, not as an open item.** It was a real gap: Postgres grants `EXECUTE` to `PUBLIC` on new functions, and `docs/01-schema.sql` originally revoked that only for the three identity-unsealing functions, leaving these six reachable through `/rest/v1/rpc/...`. `refresh_contributor_levels` was the serious one — the karma-delta mitigation depends on the badge refreshing on a *delay*, and a caller who can trigger the refresh chooses when the badge moves. 0017 default-denies (`revoke execute on all functions in schema public from public, anon, authenticated`), grants back only the six RLS helpers and `service_role`, and sets `alter default privileges ... revoke execute on functions from public` so the next function created here does not reopen it. Verified by measurement, not by reading: with every migration applied, `has_function_privilege('anon', …)` is false for all six and their ACL is `{postgres=X/postgres,service_role=X/postgres}`. Invariant 10 covers it going forward. |
 
 ### Performance (`type: performance`)
 
@@ -297,12 +297,22 @@ actually running on the platform's own linter.
   `docs/04-infrastructure.md` says to delete it once satisfied nothing
   references it; left untouched here since that is a destructive,
   irreversible action outside this task's scope.
-- **The two security-advisor gaps flagged WARN above** (missing
-  `search_path` on ~24 functions; missing `revoke ... from public` on 6
-  maintenance functions) — recorded, not patched, per "do not change any
-  SQL semantics while splitting." Both are pre-existing properties of
-  `docs/01-schema.sql`, not things Supabase rejected or that this
-  adaptation introduced.
+- **Missing `search_path` on ~24 functions** — still open. Recorded, not
+  patched, per "do not change any SQL semantics while splitting"; a
+  pre-existing property of `docs/01-schema.sql` rather than something
+  Supabase rejected.
+- ~~Missing `revoke ... from public` on 6 maintenance functions~~ —
+  **closed by `0017_lock_down_function_execute.sql`.** This entry stayed in
+  the "not done" list long after the migration that did it, and the WARN
+  row above still read "flagged here, not fixed". That cost a later session
+  a wasted round: it read the doc, grepped for a *per-function*
+  `revoke execute on function public.<name>` (finding none, because 0017
+  uses the blanket `on all functions in schema public` form), concluded the
+  gap was live, and started writing a migration that already existed. The
+  lesson is the project's own: **measure the database, do not read the
+  note about the database.** One
+  `select has_function_privilege('anon', oid, 'execute')` would have
+  settled it in seconds.
 
 
 ## Deviation 3 — 0021 and 0022 were applied through the MCP tool, reformatted
